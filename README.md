@@ -77,9 +77,7 @@ If the world goes offline, your data should still be safe.
 > "_The mystery of life isn't a problem to solve, but a reality to experience._"  
 > — Frank Herbert, *Dune*
 
-```
 
-> (Coming soon — build instructions, binaries, and releases will be provided)
 
 
 
