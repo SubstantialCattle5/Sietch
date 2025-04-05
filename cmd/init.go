@@ -14,6 +14,10 @@ import (
 var (
 	vaultName string
 	vaultPath string
+
+	// Metadata
+	author string
+	tags   []string
 )
 
 var initCmd = &cobra.Command{Use: "init",
@@ -42,6 +46,8 @@ func init() {
 	// Add flags with smart defaults
 	initCmd.Flags().StringVar(&vaultName, "name", "my-sietch", "Name of the vault")
 	initCmd.Flags().StringVar(&vaultPath, "path", ".", "Path to create the vault")
+	initCmd.Flags().StringVar(&author, "author", "nilay@dune.net", "Author metadata")
+	initCmd.Flags().StringSliceVar(&tags, "tags", []string{"research", "desert", "offline"}, "Tags for vault")
 
 }
 
@@ -58,7 +64,7 @@ func runInit() error {
 		return err
 	}
 
-	configuration := config.BuildVaultConfig(vaultID, vaultName, absVaultPath)
+	configuration := config.BuildVaultConfig(vaultID, vaultName, author, absVaultPath, tags)
 
 	if err := manifest.WriteManifest(absVaultPath, configuration); err != nil {
 		return err

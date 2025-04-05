@@ -1,0 +1,43 @@
+# Binaries for programs and plugins
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+
+# Output of the go build command
+/build/
+bin/
+*.out
+
+# Go workspace file
+go.work
+go.work.sum
+
+# Vendor directory (if you're not using vendoring, you can remove this)
+vendor/
+
+# Go modules
+go.sum
+
+# IDE/editor configs
+.idea/
+.vscode/
+*.swp
+
+# Dependency directories (if you're using tools like dep or others)
+Gopkg.lock
+Gopkg.toml
+
+# Cobra CLI auto-generated files (if any)
+docs/
+
+# Logs
+*.log
+
+# OS-specific
+.DS_Store
+Thumbs.db
+
+# cli code
+sietch
