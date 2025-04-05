@@ -1,6 +1,6 @@
 # 🏜️ Sietch
 
-**Sietch** is a decentralized, encrypted, portable file system optimized for minimal connectivity 
+**Sietch** is a decentralized, encrypted, portable file system optimized for minimal connectivity
 
 ---
 
@@ -41,7 +41,7 @@ Sietch enables secure, peer-to-peer file syncing and storage across unreliable o
 
 ## 📦 Installation
 
-```bash 
+```bash
 
 > sietch status
 🟢 Local node: Arrakis
@@ -56,7 +56,6 @@ Sietch enables secure, peer-to-peer file syncing and storage across unreliable o
 
 
 ```
-
 
 ---
 
@@ -75,9 +74,4 @@ If the world goes offline, your data should still be safe.
 ---
 
 > "_The mystery of life isn't a problem to solve, but a reality to experience._"  
-> — Frank Herbert, *Dune*
-
-
-
-
-
+> — Frank Herbert, _Dune_
