@@ -10,6 +10,7 @@ import (
 	"github.com/substantialcattle5/sietch/internal/encryption"
 	"github.com/substantialcattle5/sietch/internal/fs"
 	"github.com/substantialcattle5/sietch/internal/manifest"
+	"github.com/substantialcattle5/sietch/internal/ui"
 )
 
 var (
@@ -92,9 +93,19 @@ func init() {
 func runInit() error {
 	// If interactive mode is enabled, prompt for inputs
 	if interactiveMode {
-		if err := promptForInputs(); err != nil {
+		vaultConfig, err := ui.PromptForInputs()
+		if err != nil {
 			return err
 		}
+		// Update variables with values from vaultConfig
+		vaultName = vaultConfig.Name
+		keyType = vaultConfig.Encryption.Type
+		usePassphrase = vaultConfig.Encryption.PassphraseProtected
+		chunkingStrategy = vaultConfig.Chunking.Strategy
+		chunkSize = vaultConfig.Chunking.ChunkSize
+		compressionType = vaultConfig.Chunking.HashAlgorithm
+		author = vaultConfig.Metadata.Author
+		tags = vaultConfig.Metadata.Tags
 	}
 
 	vaultID := uuid.New().String()
@@ -138,20 +149,6 @@ func runInit() error {
 
 	// Print success message
 	printSuccessMessage(vaultID, absVaultPath)
-
-	return nil
-}
-
-// Interactive mode prompt handler
-func promptForInputs() error {
-	// In a real implementation, this would use a library like promptui
-	// to create an interactive CLI experience
-	fmt.Println("Interactive mode would prompt for:")
-	fmt.Println("- Vault name")
-	fmt.Println("- Key type (aes/gpg/none)")
-	fmt.Println("- Passphrase protection")
-	fmt.Println("- Chunking strategy and size")
-	fmt.Println("- Compression settings")
 
 	return nil
 }
