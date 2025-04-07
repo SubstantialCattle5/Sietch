@@ -6,9 +6,10 @@ import (
 	"path/filepath"
 
 	"github.com/google/uuid"
+	"github.com/manifoldco/promptui"
 	"github.com/spf13/cobra"
 	"github.com/substantialcattle5/sietch/internal/config"
-	"github.com/substantialcattle5/sietch/internal/encryption"
+	"github.com/substantialcattle5/sietch/internal/encryption/keys"
 	"github.com/substantialcattle5/sietch/internal/fs"
 	"github.com/substantialcattle5/sietch/internal/manifest"
 	"github.com/substantialcattle5/sietch/internal/ui"
@@ -179,6 +180,7 @@ func runInit() error {
 
 	// Handle key generation or import
 	keyPath := filepath.Join(absVaultPath, ".sietch", "keys", "secret.key")
+	var keyConfig *config.KeyConfig
 
 	if keyFile != "" {
 		// Import key from file
@@ -200,15 +202,79 @@ func runInit() error {
 
 		fmt.Printf("Imported key from %s\n", keyFile)
 	} else {
-		// Generate new key
-		if err := encryption.GenerateKey(keyType, keyPath, usePassphrase); err != nil {
+		kdfValue := "pbkdf2"
+		if useScrypt {
+			kdfValue = "scrypt"
+		}
+		// Create encryption config
+		encConfig := &config.VaultConfig{
+			Encryption: config.EncryptionConfig{
+				Type:                keyType,
+				PassphraseProtected: usePassphrase,
+				KeyFile:             keyFile != "",
+				KeyFilePath:         keyFile,
+				AESConfig: &config.AESConfig{
+					Mode:    aesMode,
+					KDF:     kdfValue,
+					ScryptN: scryptN,
+					ScryptR: scryptR,
+					ScryptP: scryptP,
+					PBKDF2I: 10000, // Default PBKDF2 iterations if not using scrypt
+				},
+			},
+		}
+
+		// Get passphrase if needed
+		var passphrase string
+		if usePassphrase {
+			passphrasePrompt := promptui.Prompt{
+				Label: "Enter encryption passphrase",
+				Mask:  '*',
+				Validate: func(input string) error {
+					if len(input) < 8 {
+						return fmt.Errorf("passphrase must be at least 8 characters")
+					}
+					return nil
+				},
+			}
+
+			passphrase, err = passphrasePrompt.Run()
+			if err != nil {
+				return fmt.Errorf("failed to get passphrase: %w", err)
+			}
+
+			// Add confirmation prompt
+			confirmPrompt := promptui.Prompt{
+				Label: "Confirm passphrase",
+				Mask:  '*',
+				Validate: func(input string) error {
+					if input != passphrase {
+						return fmt.Errorf("passphrases do not match")
+					}
+					return nil
+				},
+			}
+
+			_, err = confirmPrompt.Run()
+			if err != nil {
+				return fmt.Errorf("passphrase confirmation failed: %w", err)
+			}
+		}
+
+		// Generate the key configuration
+		keyConfig, err = keys.GenerateAESKey(encConfig, passphrase)
+		if err != nil {
 			return fmt.Errorf("failed to generate encryption key: %w", err)
+		}
+
+		// If we need to save the key to a file
+		if encConfig.Encryption.KeyBackupPath != "" {
+			fmt.Printf("Key backed up to: %s\n", encConfig.Encryption.KeyBackupPath)
 		}
 	}
 
-	var keyConfig *config.KeyConfig
-	if keyType == "aes" && interactiveVaultConfig != nil && interactiveVaultConfig.Encryption.AESConfig != nil {
-		// Use the original AESConfig from interactive prompts
+	// If we didn't generate key config but have one from interactive mode
+	if keyConfig == nil && keyType == "aes" && interactiveVaultConfig != nil && interactiveVaultConfig.Encryption.AESConfig != nil {
 		keyConfig = &config.KeyConfig{
 			AESConfig: interactiveVaultConfig.Encryption.AESConfig,
 		}

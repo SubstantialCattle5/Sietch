@@ -5,6 +5,7 @@ import (
 
 	"github.com/manifoldco/promptui"
 	"github.com/substantialcattle5/sietch/internal/config"
+	"github.com/substantialcattle5/sietch/internal/encryption/keys"
 )
 
 // PromptSecurityConfig asks for security-related configuration
@@ -80,13 +81,84 @@ func promptAESOptions(configuration *config.VaultConfig) error {
 		if err := promptKDFOptions(configuration); err != nil {
 			return err
 		}
+
+		// Prompt for passphrase
+		passphrase, err := promptForPassphrase(true)
+		if err != nil {
+			return fmt.Errorf("failed to get passphrase: %w", err)
+		}
+
+		// Generate key configuration
+		keyConfig, err := keys.GenerateAESKey(configuration, passphrase)
+		if err != nil {
+			return fmt.Errorf("failed to generate AES key: %w", err)
+		}
+
+		// Store key configuration
+		configuration.Encryption.AESConfig = keyConfig.AESConfig
+		configuration.Encryption.KeyHash = keyConfig.KeyHash
+		configuration.Encryption.AESConfig.Salt = keyConfig.Salt
 	} else {
 		if err := promptKeyFileOptions(configuration); err != nil {
 			return err
 		}
+
+		// Generate key configuration for key file or random key
+		keyConfig, err := keys.GenerateAESKey(configuration, "")
+		if err != nil {
+			return fmt.Errorf("failed to generate AES key: %w", err)
+		}
+
+		// Store key configuration
+		configuration.Encryption.AESConfig = keyConfig.AESConfig
+		configuration.Encryption.KeyHash = keyConfig.KeyHash
 	}
 
 	return nil
+}
+
+// promptForPassphrase prompts the user for a passphrase
+func promptForPassphrase(confirm bool) (string, error) {
+	promptLabel := "Enter passphrase"
+	if confirm {
+		promptLabel = "Create new passphrase"
+	}
+
+	passphrasePrompt := promptui.Prompt{
+		Label: promptLabel,
+		Mask:  '*',
+		Validate: func(input string) error {
+			if len(input) < 8 {
+				return fmt.Errorf("passphrase must be at least 8 characters")
+			}
+			return nil
+		},
+	}
+
+	passphrase, err := passphrasePrompt.Run()
+	if err != nil {
+		return "", fmt.Errorf("passphrase prompt failed: %w", err)
+	}
+
+	if confirm {
+		confirmPrompt := promptui.Prompt{
+			Label: "Confirm passphrase",
+			Mask:  '*',
+			Validate: func(input string) error {
+				if input != passphrase {
+					return fmt.Errorf("passphrases do not match")
+				}
+				return nil
+			},
+		}
+
+		_, err = confirmPrompt.Run()
+		if err != nil {
+			return "", fmt.Errorf("passphrase confirmation failed: %w", err)
+		}
+	}
+
+	return passphrase, nil
 }
 
 // promptAESMode asks for AES encryption mode
@@ -297,6 +369,9 @@ func promptRandomKeyGeneration(configuration *config.VaultConfig) error {
 	if err == nil { // User selected yes
 		return promptKeyBackupPath(configuration)
 	}
+
+	// Make sure KeyBackupPath is empty if not backing up
+	configuration.Encryption.KeyBackupPath = ""
 	return nil
 }
 
