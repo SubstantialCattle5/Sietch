@@ -1,3 +1,7 @@
+/*
+Copyright © 2025 SubstantialCattle5, nilaysharan.com
+*/
+
 package cmd
 
 import (
