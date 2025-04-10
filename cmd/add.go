@@ -10,23 +10,25 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/substantialcattle5/sietch/internal/chunk"
 )
 
 // addCmd represents the add command
 var addCmd = &cobra.Command{
-	Use:   "add [file]",
+	Use:   "add <source_path> <destination_path>",
 	Short: "Add a file to the Sietch vault",
 	Long: `Add a file to your Sietch vault.
 
-This command reads the specified file, processes it according to your vault
-configuration, and securely stores it in the vault.
+This command adds a file from the specified source path to the destination
+path in your vault, then processes it according to your vault configuration.
 
 Example:
-  sietch add document.txt
-  sietch add ~/photos/vacation.jpg`,
-	Args: cobra.ExactArgs(1),
+  sietch add document.txt vault/documents/
+  sietch add ~/photos/vacation.jpg vault/photos/`,
+	Args: cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		filePath := args[0]
+		destPath := args[1]
 
 		// Check if file exists
 		fileInfo, err := os.Stat(filePath)
@@ -47,14 +49,23 @@ Example:
 		sizeReadable := humanReadableSize(sizeInBytes)
 
 		// Display file metadata for confirmation
+		fmt.Printf("\nFile Metadata:\n")
 		fmt.Printf("File: %s\n", filepath.Base(filePath))
-		fmt.Printf("Path: %s\n", filePath)
+		fmt.Printf("Source: %s\n", filePath)
 		fmt.Printf("Size: %s (%d bytes)\n", sizeReadable, sizeInBytes)
 		fmt.Printf("Modified: %s\n", fileInfo.ModTime().Format(time.RFC3339))
+		fmt.Printf("Destination: %s\n", destPath)
 
-		// TODO: Add actual file processing (chunking, encryption, etc.)
-		fmt.Println("\nFile metadata processed successfully")
-		fmt.Println("Ready to begin chunking, encryption, and storage")
+		// Process the file in chunks (2MB = 2 * 1024 * 1024 bytes)
+		chunkSize := int64(2 * 1024)
+		fmt.Println("\nBeginning chunking process...")
+		err = chunk.ChunkFile(filePath, chunkSize)
+		if err != nil {
+			return fmt.Errorf("chunking failed: %v", err)
+		}
+
+		fmt.Println("Chunking completed successfully")
+		fmt.Println("Ready for encryption and storage")
 
 		return nil
 	},
