@@ -9,6 +9,7 @@ import (
 
 	"github.com/substantialcattle5/sietch/internal/config"
 	"github.com/substantialcattle5/sietch/internal/fs"
+	"github.com/substantialcattle5/sietch/util"
 )
 
 func ChunkFile(filePath string, chunkSize int64, vaultRoot string) ([]config.ChunkRef, error) {
@@ -62,7 +63,7 @@ func ChunkFile(filePath string, chunkSize int64, vaultRoot string) ([]config.Chu
 		if err := os.WriteFile(chunkPath, buffer[:bytesRead], 0644); err != nil {
 			return nil, fmt.Errorf("failed to write chunk file: %v", err)
 		}
-		fmt.Printf("Chunk %d: %s bytes, hash: %s\n", chunkCount, humanReadableSize(int64(bytesRead)), chunkHash)
+		fmt.Printf("Chunk %d: %s bytes, hash: %s\n", chunkCount, util.HumanReadableSize(int64(bytesRead)), chunkHash)
 
 		// Add the chunk reference to our list
 		chunkRefs = append(chunkRefs, config.ChunkRef{
@@ -77,20 +78,7 @@ func ChunkFile(filePath string, chunkSize int64, vaultRoot string) ([]config.Chu
 	}
 
 	fmt.Printf("Total chunks processed: %d\n", chunkCount)
-	fmt.Printf("Total bytes processed: %s\n", humanReadableSize(totalBytes))
+	fmt.Printf("Total bytes processed: %s\n", util.HumanReadableSize(totalBytes))
 
 	return chunkRefs, nil
-}
-
-func humanReadableSize(bytes int64) string {
-	const unit = 1024
-	if bytes < unit {
-		return fmt.Sprintf("%d B", bytes)
-	}
-	div, exp := int64(unit), 0
-	for n := bytes / unit; n >= unit; n /= unit {
-		div *= unit
-		exp++
-	}
-	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
 }

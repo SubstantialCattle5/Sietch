@@ -15,6 +15,7 @@ import (
 	"github.com/substantialcattle5/sietch/internal/config"
 	"github.com/substantialcattle5/sietch/internal/fs"
 	"github.com/substantialcattle5/sietch/internal/manifest"
+	"github.com/substantialcattle5/sietch/util"
 )
 
 // addCmd represents the add command
@@ -70,7 +71,7 @@ Example:
 
 		// Get file size in human-readable format
 		sizeInBytes := fileInfo.Size()
-		sizeReadable := humanReadableSize(sizeInBytes)
+		sizeReadable := util.HumanReadableSize(sizeInBytes)
 
 		// Display file metadata for confirmation
 		fmt.Printf("\nFile Metadata:\n")
@@ -117,20 +118,6 @@ Example:
 
 		return nil
 	},
-}
-
-// humanReadableSize converts bytes to a human-readable size string
-func humanReadableSize(bytes int64) string {
-	const unit = 1024
-	if bytes < unit {
-		return fmt.Sprintf("%d B", bytes)
-	}
-	div, exp := int64(unit), 0
-	for n := bytes / unit; n >= unit; n /= unit {
-		div *= unit
-		exp++
-	}
-	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
 }
 
 func init() {
