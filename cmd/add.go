@@ -86,7 +86,7 @@ Example:
 
 		// Process the file in chunks (2MB = 2 * 1024 * 1024 bytes)
 		// For real implementation, use 4MB (4 * 1024 * 1024)
-		chunkSize := int64(2 * 1024 * 1024)
+		chunkSize := int64(2 * 1024)
 		fmt.Println("\nBeginning chunking process...")
 
 		// Process the file and store chunks
