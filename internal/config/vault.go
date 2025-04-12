@@ -80,6 +80,42 @@ type KeyConfig struct {
 	GPGConfig *GPGConfig `yaml:"gpg_config,omitempty"`
 }
 
+// FileManifest represents the metadata for a stored file
+type FileManifest struct {
+	FilePath    string              `yaml:"file"`
+	Size        int64               `yaml:"size"`
+	ModTime     string              `yaml:"mtime"`
+	Chunks      []ChunkRef          `yaml:"chunks"`
+	Destination string              `yaml:"destination"`
+	Tags        []string            `yaml:"tags,omitempty"`         // File-specific tags
+	Encryption  *FileEncryptionInfo `yaml:"encryption,omitempty"`   // Per-file encryption settings
+	ContentHash string              `yaml:"content_hash,omitempty"` // Hash of entire file content
+	MerkleRoot  string              `yaml:"merkle_root,omitempty"`  // Root hash of chunk Merkle tree
+	AddedAt     time.Time           `yaml:"added_at"`               // When file was added to vault
+	LastSynced  time.Time           `yaml:"last_synced,omitempty"`  // Last successful sync time
+}
+
+// FileEncryptionInfo contains per-file encryption details (if different from vault default)
+type FileEncryptionInfo struct {
+	Type         string `yaml:"type,omitempty"`          // Can override vault encryption type
+	KeyReference string `yaml:"key_reference,omitempty"` // References which key was used (vault_master or custom)
+	IV           string `yaml:"iv,omitempty"`            // Initialization vector if applicable
+	Nonce        string `yaml:"nonce,omitempty"`         // Nonce for GCM mode
+}
+
+// ChunkRef references a chunk in the vault
+type ChunkRef struct {
+	Hash          string `yaml:"hash"`                     // Hash of chunk content (pre-encryption)
+	EncryptedHash string `yaml:"encrypted_hash,omitempty"` // Hash of encrypted chunk (filename in storage)
+	Size          int64  `yaml:"size"`                     // Size of plaintext chunk
+	EncryptedSize int64  `yaml:"encrypted_size,omitempty"` // Size after encryption
+	Index         int    `yaml:"index"`                    // Position in the file
+	Deduplicated  bool   `yaml:"deduplicated,omitempty"`   // Whether this chunk was deduplicated
+	Compressed    bool   `yaml:"compressed,omitempty"`     // Whether this chunk was compressed
+	IV            string `yaml:"iv,omitempty"`             // Per-chunk IV if used
+	Integrity     string `yaml:"integrity,omitempty"`      // Integrity check value (e.g., HMAC)
+}
+
 // BuildVaultConfig creates a complete vault configuration with all necessary fields
 func BuildVaultConfig(
 	vaultID, vaultName, author, keyType, keyPath string,

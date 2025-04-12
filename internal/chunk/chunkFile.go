@@ -1,31 +1,43 @@
 package chunk
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+
+	"github.com/substantialcattle5/sietch/internal/config"
+	"github.com/substantialcattle5/sietch/internal/fs"
 )
 
-func ChunkFile(filePath string, chunkSize int64) error {
+func ChunkFile(filePath string, chunkSize int64, vaultRoot string) ([]config.ChunkRef, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return fmt.Errorf("file not found at %s", filePath)
+			return nil, fmt.Errorf("file not found at %s", filePath)
 		}
-		return fmt.Errorf("error opening file: %v", err)
+		return nil, fmt.Errorf("error opening file: %v", err)
 	}
 	defer file.Close()
+
+	// Ensure chunks directory exists
+	chunksDir := fs.GetChunkDirectory(vaultRoot)
+	if err := os.MkdirAll(chunksDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create chunks directory: %v", err)
+	}
 
 	// Create a buffer for reading chunks
 	buffer := make([]byte, chunkSize)
 	chunkCount := 0
 	totalBytes := int64(0)
+	chunkRefs := []config.ChunkRef{}
 
 	// Read the file in chunks
 	for {
 		bytesRead, err := file.Read(buffer)
 		if err != nil && err != io.EOF {
-			return fmt.Errorf("error reading file: %v", err)
+			return nil, fmt.Errorf("error reading file: %v", err)
 		}
 
 		if bytesRead == 0 {
@@ -36,14 +48,28 @@ func ChunkFile(filePath string, chunkSize int64) error {
 		chunkCount++
 		totalBytes += int64(bytesRead)
 
-		// Process the chunk (for now, just print its size and chunk number)
-		fmt.Printf("Chunk %d: %s bytes\n", chunkCount, humanReadableSize(int64(bytesRead)))
+		// calculate chunk hash
+		hasher := sha256.New()
+		hasher.Write(buffer[:bytesRead])
+		chunkHash := fmt.Sprintf("%x", hasher.Sum(nil))
 
-		// TODO: Here we would do further processing:
-		// 1. Calculate chunk hash
-		// 2. Encrypt chunk if needed
-		// 3. Save chunk to storage
-		// 4. Add chunk reference to file manifest
+		fmt.Printf("Chunk %d hash: %s\n", chunkCount, chunkHash)
+
+		// Save the chunk to the vault
+		chunkPath := filepath.Join(chunksDir, chunkHash)
+
+		//todo implement encryption later
+		if err := os.WriteFile(chunkPath, buffer[:bytesRead], 0644); err != nil {
+			return nil, fmt.Errorf("failed to write chunk file: %v", err)
+		}
+		fmt.Printf("Chunk %d: %s bytes, hash: %s\n", chunkCount, humanReadableSize(int64(bytesRead)), chunkHash)
+
+		// Add the chunk reference to our list
+		chunkRefs = append(chunkRefs, config.ChunkRef{
+			Hash:  chunkHash,
+			Size:  int64(bytesRead),
+			Index: chunkCount - 1, // 0-based index
+		})
 
 		if err == io.EOF {
 			break
@@ -53,7 +79,7 @@ func ChunkFile(filePath string, chunkSize int64) error {
 	fmt.Printf("Total chunks processed: %d\n", chunkCount)
 	fmt.Printf("Total bytes processed: %s\n", humanReadableSize(totalBytes))
 
-	return nil
+	return chunkRefs, nil
 }
 
 func humanReadableSize(bytes int64) string {

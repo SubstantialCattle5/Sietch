@@ -7,10 +7,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/substantialcattle5/sietch/internal/chunk"
+	"github.com/substantialcattle5/sietch/internal/config"
+	"github.com/substantialcattle5/sietch/internal/fs"
+	"github.com/substantialcattle5/sietch/internal/manifest"
 )
 
 // addCmd represents the add command
@@ -29,6 +33,26 @@ Example:
 	RunE: func(cmd *cobra.Command, args []string) error {
 		filePath := args[0]
 		destPath := args[1]
+
+		// Get tags from flags
+		tagsFlag, err := cmd.Flags().GetString("tags")
+		if err != nil {
+			return fmt.Errorf("error parsing tags flag: %v", err)
+		}
+
+		tags := []string{}
+		if tagsFlag != "" {
+			tags = strings.Split(tagsFlag, ",")
+		}
+
+		vaultRoot, err := fs.FindVaultRoot()
+		if err != nil {
+			return fmt.Errorf("not inside a vault: %v", err)
+		}
+		// Check if vault is initialized
+		if !fs.IsVaultInitialized(vaultRoot) {
+			return fmt.Errorf("vault not initialized, run 'sietch init' first")
+		}
 
 		// Check if file exists
 		fileInfo, err := os.Stat(filePath)
@@ -55,17 +79,41 @@ Example:
 		fmt.Printf("Size: %s (%d bytes)\n", sizeReadable, sizeInBytes)
 		fmt.Printf("Modified: %s\n", fileInfo.ModTime().Format(time.RFC3339))
 		fmt.Printf("Destination: %s\n", destPath)
+		if len(tags) > 0 {
+			fmt.Printf("Tags: %s\n", strings.Join(tags, ", "))
+		}
 
 		// Process the file in chunks (2MB = 2 * 1024 * 1024 bytes)
-		chunkSize := int64(2 * 1024)
+		// For real implementation, use 4MB (4 * 1024 * 1024)
+		chunkSize := int64(2 * 1024 * 1024)
 		fmt.Println("\nBeginning chunking process...")
-		err = chunk.ChunkFile(filePath, chunkSize)
+
+		// Process the file and store chunks
+		chunkRefs, err := chunk.ChunkFile(filePath, chunkSize, vaultRoot)
 		if err != nil {
 			return fmt.Errorf("chunking failed: %v", err)
 		}
 
-		fmt.Println("Chunking completed successfully")
-		fmt.Println("Ready for encryption and storage")
+		// Create and store the file manifest
+		fileManifest := &config.FileManifest{
+			FilePath:    filepath.Base(filePath),
+			Size:        sizeInBytes,
+			ModTime:     fileInfo.ModTime().Format(time.RFC3339),
+			Chunks:      chunkRefs,
+			Destination: destPath,
+			AddedAt:     time.Now().UTC(),
+		}
+
+		// Save the manifest
+		err = manifest.StoreFileManifest(vaultRoot, filepath.Base(filePath), fileManifest)
+		if err != nil {
+			return fmt.Errorf("failed to store manifest: %v", err)
+		}
+
+		fmt.Printf("\nChunking completed successfully\n")
+		fmt.Printf("✓ File added to vault: %s\n", filepath.Base(filePath))
+		fmt.Printf("✓ %d chunks stored in vault\n", len(chunkRefs))
+		fmt.Printf("✓ Manifest written to .sietch/manifests/%s.yaml\n", filepath.Base(filePath))
 
 		return nil
 	},
