@@ -13,7 +13,8 @@ import (
 )
 
 func LoadVaultConfig(vaultPath string) (*VaultConfig, error) {
-	configPath := filepath.Join(vaultPath, "vault.yml")
+	// Change from vault.yml to vault.yaml to match the actual file name
+	configPath := filepath.Join(vaultPath, "vault.yaml")
 
 	_, err := os.Stat(configPath)
 	if err != nil {
@@ -34,11 +35,6 @@ func LoadVaultConfig(vaultPath string) (*VaultConfig, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error parsing vault configuration: %w", err)
 	}
-
-	// Validate configuration
-	// if err := validateConfig(&config); err != nil {
-	// 	return nil, fmt.Errorf("invalid vault configuration: %w", err)
-	// }
 
 	return &config, nil
 }

@@ -69,6 +69,19 @@ Example:
 			return fmt.Errorf("%s is not a regular file", filePath)
 		}
 
+		// Load vault configuration
+		vaultConfig, err := config.LoadVaultConfig(vaultRoot)
+		if err != nil {
+			return fmt.Errorf("failed to load vault configuration: %v", err)
+		}
+
+		chunkSize, err := util.ParseChunkSize(vaultConfig.Chunking.ChunkSize)
+		if err != nil {
+			// Fallback to default if parsing fails
+			fmt.Printf("Warning: Invalid chunk size in configuration (%s). Using default (4MB).\n",
+				vaultConfig.Chunking.ChunkSize)
+			chunkSize = int64(4 * 1024 * 1024) // Default to 4MB
+		}
 		// Get file size in human-readable format
 		sizeInBytes := fileInfo.Size()
 		sizeReadable := util.HumanReadableSize(sizeInBytes)
@@ -83,10 +96,6 @@ Example:
 		if len(tags) > 0 {
 			fmt.Printf("Tags: %s\n", strings.Join(tags, ", "))
 		}
-
-		// Process the file in chunks (2MB = 2 * 1024 * 1024 bytes)
-		// For real implementation, use 4MB (4 * 1024 * 1024)
-		chunkSize := int64(2 * 1024)
 		fmt.Println("\nBeginning chunking process...")
 
 		// Process the file and store chunks
