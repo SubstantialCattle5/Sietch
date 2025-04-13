@@ -87,7 +87,7 @@ func promptBasicConfig(configuration *config.VaultConfig) error {
 	return nil
 }
 
-// promptStorageConfig asks for chunking and compression settings
+// promptStorageConfig asks for chunking, hashing, and compression settings
 func promptStorageConfig(configuration *config.VaultConfig) error {
 	// Chunking strategy prompt with descriptions
 	chunkStrategyPrompt := promptui.Select{
@@ -129,6 +129,30 @@ func promptStorageConfig(configuration *config.VaultConfig) error {
 	}
 	configuration.Chunking.ChunkSize = sizeResult
 
+	// Hash algorithm prompt with descriptions
+	hashAlgorithmPrompt := promptui.Select{
+		Label: "Hash algorithm",
+		Items: []string{"sha256", "blake3", "sha512", "sha1"},
+		Templates: &promptui.SelectTemplates{
+			Selected: "Hash algorithm: {{ . }}",
+			Active:   "▸ {{ . }}",
+			Inactive: "  {{ . }}",
+			Details: `
+{{ "Details:" | faint }}
+{{ if eq . "sha256" }}SHA-256 (recommended default, good balance of security and speed)
+{{ else if eq . "blake3" }}BLAKE3 (modern, very fast with strong security)
+{{ else if eq . "sha512" }}SHA-512 (stronger security, slightly slower)
+{{ else if eq . "sha1" }}SHA-1 (faster but less secure, not recommended for sensitive data){{ end }}
+`,
+		},
+	}
+
+	_, hashResult, err := hashAlgorithmPrompt.Run()
+	if err != nil {
+		return fmt.Errorf("prompt failed: %w", err)
+	}
+	configuration.Chunking.HashAlgorithm = hashResult
+
 	// Compression prompt with descriptions
 	compressionPrompt := promptui.Select{
 		Label: "Compression algorithm",
@@ -150,7 +174,7 @@ func promptStorageConfig(configuration *config.VaultConfig) error {
 	if err != nil {
 		return fmt.Errorf("prompt failed: %w", err)
 	}
-	configuration.Chunking.HashAlgorithm = compResult
+	configuration.Compression = compResult
 
 	return nil
 }
