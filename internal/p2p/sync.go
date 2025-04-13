@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"slices"
+
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -195,13 +197,7 @@ func (s *SyncService) findMissingChunks(local, remote *config.Manifest) []string
 		for _, chunk := range file.Chunks {
 			if !localChunks[chunk.Hash] {
 				// Check if we already added this chunk to the missing list
-				alreadyAdded := false
-				for _, hash := range missingChunks {
-					if hash == chunk.Hash {
-						alreadyAdded = true
-						break
-					}
-				}
+				alreadyAdded := slices.Contains(missingChunks, chunk.Hash)
 				if !alreadyAdded {
 					missingChunks = append(missingChunks, chunk.Hash)
 				}
