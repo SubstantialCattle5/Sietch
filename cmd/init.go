@@ -217,6 +217,7 @@ func runInit() error {
 				PassphraseProtected: usePassphrase,
 				KeyFile:             keyFile != "",
 				KeyFilePath:         keyFile,
+				KeyPath:             keyPath,
 				AESConfig: &config.AESConfig{
 					Mode:    aesMode,
 					KDF:     kdfValue,

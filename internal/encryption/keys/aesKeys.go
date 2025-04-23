@@ -1,6 +1,9 @@
 package keys
 
 import (
+	"bytes"
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
@@ -14,46 +17,86 @@ import (
 )
 
 // GenerateAESKey creates a key configuration based on vault settings
+// and stores the key at the configured key path
 func GenerateAESKey(cfg *config.VaultConfig, passphrase string) (*config.KeyConfig, error) {
+	// Initialize key configuration with empty AESConfig if not present
 	keyConfig := &config.KeyConfig{
 		AESConfig: &config.AESConfig{},
 	}
 
+	// Ensure AESConfig exists in the vault configuration
+	if cfg.Encryption.AESConfig == nil {
+		cfg.Encryption.AESConfig = config.BuildDefaultAESConfig()
+	}
+
 	// Generate nonce/IV based on the selected encryption mode
-	if cfg.Encryption.AESConfig.Mode == "gcm" {
+	if cfg.Encryption.AESConfig.Mode == "gcm" || cfg.Encryption.AESConfig.Mode == "" {
 		nonce, err := generateNonce()
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate nonce: %w", err)
 		}
 		keyConfig.AESConfig.Nonce = nonce
-	} else {
-		// CBC mode
+		// Set default mode to GCM if not specified
+		if cfg.Encryption.AESConfig.Mode == "" {
+			cfg.Encryption.AESConfig.Mode = "gcm"
+		}
+	} else if cfg.Encryption.AESConfig.Mode == "cbc" {
 		iv, err := generateIV()
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate IV: %w", err)
 		}
 		keyConfig.AESConfig.IV = iv
+	} else {
+		return nil, fmt.Errorf("unsupported AES mode: %s", cfg.Encryption.AESConfig.Mode)
 	}
+
+	var keyMaterial []byte
+	var err error
 
 	// Handle passphrase-protected encryption
 	if cfg.Encryption.PassphraseProtected {
+		// Generate salt for key derivation
 		salt, err := generateSalt()
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate salt: %w", err)
 		}
 		keyConfig.Salt = salt
+		keyConfig.AESConfig.Salt = salt
 
-		// Copy KDF algorithm type from config
+		// Generate a random key that will be encrypted with the passphrase
+		keyMaterial, err = generateRandomKey()
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate random key material: %w", err)
+		}
+
+		// Set KDF algorithm type from config or default to scrypt
+		if cfg.Encryption.AESConfig.KDF == "" {
+			cfg.Encryption.AESConfig.KDF = "scrypt"
+		}
 		keyConfig.AESConfig.KDF = cfg.Encryption.AESConfig.KDF
 
-		// Copy KDF parameters from config
+		var derivedKey []byte
+
+		// Generate key using selected KDF
 		if cfg.Encryption.AESConfig.KDF == "scrypt" {
+			// Set default scrypt parameters if not specified
+			if cfg.Encryption.AESConfig.ScryptN == 0 {
+				cfg.Encryption.AESConfig.ScryptN = 32768
+			}
+			if cfg.Encryption.AESConfig.ScryptR == 0 {
+				cfg.Encryption.AESConfig.ScryptR = 8
+			}
+			if cfg.Encryption.AESConfig.ScryptP == 0 {
+				cfg.Encryption.AESConfig.ScryptP = 1
+			}
+
+			// Copy parameters to key config
 			keyConfig.AESConfig.ScryptN = cfg.Encryption.AESConfig.ScryptN
 			keyConfig.AESConfig.ScryptR = cfg.Encryption.AESConfig.ScryptR
 			keyConfig.AESConfig.ScryptP = cfg.Encryption.AESConfig.ScryptP
 
-			// Generate key using scrypt
-			key, err := scrypt.Key(
+			// Generate derived key using scrypt
+			derivedKey, err = scrypt.Key(
 				[]byte(passphrase),
 				[]byte(salt),
 				cfg.Encryption.AESConfig.ScryptN,
@@ -64,55 +107,152 @@ func GenerateAESKey(cfg *config.VaultConfig, passphrase string) (*config.KeyConf
 			if err != nil {
 				return nil, fmt.Errorf("failed to derive key using scrypt: %w", err)
 			}
-			keyConfig.KeyHash = calculateKeyHash(key)
-		} else {
-			// PBKDF2
+		} else if cfg.Encryption.AESConfig.KDF == "pbkdf2" {
+			// Set default PBKDF2 iterations if not specified
+			if cfg.Encryption.AESConfig.PBKDF2I == 0 {
+				cfg.Encryption.AESConfig.PBKDF2I = 10000
+			}
+
 			keyConfig.AESConfig.PBKDF2I = cfg.Encryption.AESConfig.PBKDF2I
 
 			// Generate key using PBKDF2
-			key := pbkdf2.Key(
+			derivedKey = pbkdf2.Key(
 				[]byte(passphrase),
 				[]byte(salt),
 				cfg.Encryption.AESConfig.PBKDF2I,
 				32, // 32 bytes for AES-256
 				sha256.New,
 			)
-			keyConfig.KeyHash = calculateKeyHash(key)
+		} else {
+			return nil, fmt.Errorf("unsupported KDF algorithm: %s", cfg.Encryption.AESConfig.KDF)
 		}
 
-		return keyConfig, nil
-	}
-
-	// Handle key file or random key generation
-	var key []byte
-	var err error
-
-	if cfg.Encryption.KeyFile {
-		// Use existing key file
-		expandedPath := expandPath(cfg.Encryption.KeyFilePath)
-		key, err = os.ReadFile(expandedPath)
+		// Encrypt the key material with the derived key
+		encryptedKeyMaterial, err := encryptKeyWithDerivedKey(keyMaterial, derivedKey, keyConfig.AESConfig)
 		if err != nil {
-			return nil, fmt.Errorf("failed to read key file %s: %w", expandedPath, err)
+			return nil, fmt.Errorf("failed to encrypt key material: %w", err)
 		}
+
+		// Store the encrypted key material and its hash
+		keyMaterial = encryptedKeyMaterial
+		keyConfig.KeyHash = calculateKeyHash(keyMaterial)
+
+		// Add a key check for validation during decryption
+		keyCheck, err := generateKeyCheck(derivedKey)
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate key check: %w", err)
+		}
+		keyConfig.AESConfig.KeyCheck = keyCheck
 	} else {
-		// Generate random key
-		key, err = generateRandomKey()
-		if err != nil {
-			return nil, fmt.Errorf("failed to generate random key: %w", err)
+		// Handle key file or random key generation
+		if cfg.Encryption.KeyFile {
+			// Use existing key file
+			expandedPath := expandPath(cfg.Encryption.KeyFilePath)
+			keyMaterial, err = os.ReadFile(expandedPath)
+			if err != nil {
+				return nil, fmt.Errorf("failed to read key file %s: %w", expandedPath, err)
+			}
+
+			// Verify the key is valid for AES (must be 16, 24, or 32 bytes)
+			keyLen := len(keyMaterial)
+			if keyLen != 16 && keyLen != 24 && keyLen != 32 {
+				return nil, fmt.Errorf("invalid key length %d bytes - must be 16, 24, or 32 bytes for AES", keyLen)
+			}
+		} else {
+			// Generate random key
+			keyMaterial, err = generateRandomKey()
+			if err != nil {
+				return nil, fmt.Errorf("failed to generate random key: %w", err)
+			}
 		}
 
-		// Backup key if requested
-		if cfg.Encryption.KeyBackupPath != "" {
-			expandedBackupPath := expandPath(cfg.Encryption.KeyBackupPath)
-			if err := backupKeyToFile(key, expandedBackupPath); err != nil {
-				return nil, fmt.Errorf("failed to backup key to %s: %w", expandedBackupPath, err)
-			}
-			fmt.Printf("Key backed up to: %s\n", expandedBackupPath)
-		}
+		keyConfig.KeyHash = calculateKeyHash(keyMaterial)
 	}
 
-	keyConfig.KeyHash = calculateKeyHash(key)
+	// Store the key material at the configured key path
+	if cfg.Encryption.KeyPath != "" {
+		// Create directory structure for the key if it doesn't exist
+		keyDir := filepath.Dir(cfg.Encryption.KeyPath)
+		if err := os.MkdirAll(keyDir, 0700); err != nil {
+			return nil, fmt.Errorf("failed to create key directory %s: %w", keyDir, err)
+		}
+
+		// Write the key with secure permissions
+		if err := os.WriteFile(cfg.Encryption.KeyPath, keyMaterial, 0600); err != nil {
+			return nil, fmt.Errorf("failed to write key to %s: %w", cfg.Encryption.KeyPath, err)
+		}
+
+		fmt.Printf("Encryption key stored at: %s\n", cfg.Encryption.KeyPath)
+	} else {
+		return nil, fmt.Errorf("encryption key path is not specified in the vault configuration")
+	}
+
+	// Backup key if requested
+	if cfg.Encryption.KeyBackupPath != "" {
+		expandedBackupPath := expandPath(cfg.Encryption.KeyBackupPath)
+		if err := backupKeyToFile(keyMaterial, expandedBackupPath); err != nil {
+			return nil, fmt.Errorf("failed to backup key to %s: %w", expandedBackupPath, err)
+		}
+		fmt.Printf("Key backed up to: %s\n", expandedBackupPath)
+	}
+
 	return keyConfig, nil
+}
+
+// encryptKeyWithDerivedKey encrypts the key material using the derived key
+func encryptKeyWithDerivedKey(keyMaterial, derivedKey []byte, aesConfig *config.AESConfig) ([]byte, error) {
+	block, err := aes.NewCipher(derivedKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create cipher: %w", err)
+	}
+
+	if aesConfig.Mode == "gcm" {
+		// For GCM mode
+		gcm, err := cipher.NewGCM(block)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create GCM: %w", err)
+		}
+
+		nonce, err := base64.StdEncoding.DecodeString(aesConfig.Nonce)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode nonce: %w", err)
+		}
+
+		// Encrypt the key material
+		encryptedKey := gcm.Seal(nil, nonce, keyMaterial, nil)
+
+		// Prepend nonce for storage
+		return append(nonce, encryptedKey...), nil
+	} else if aesConfig.Mode == "cbc" {
+		// For CBC mode
+		if aesConfig.IV == "" {
+			return nil, fmt.Errorf("IV is required for CBC mode")
+		}
+
+		iv, err := base64.StdEncoding.DecodeString(aesConfig.IV)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode IV: %w", err)
+		}
+
+		if len(iv) != aes.BlockSize {
+			return nil, fmt.Errorf("IV length must be %d bytes for CBC mode", aes.BlockSize)
+		}
+
+		// Implement PKCS#7 padding
+		padLength := aes.BlockSize - (len(keyMaterial) % aes.BlockSize)
+		padText := bytes.Repeat([]byte{byte(padLength)}, padLength)
+		paddedData := append(keyMaterial, padText...)
+
+		// Create CBC encrypter
+		mode := cipher.NewCBCEncrypter(block, iv)
+		ciphertext := make([]byte, len(paddedData))
+		mode.CryptBlocks(ciphertext, paddedData)
+
+		// Prepend IV for storage
+		return append(iv, ciphertext...), nil
+	}
+
+	return nil, fmt.Errorf("unsupported encryption mode: %s", aesConfig.Mode)
 }
 
 func generateNonce() (string, error) {
@@ -172,4 +312,35 @@ func expandPath(path string) string {
 func calculateKeyHash(key []byte) string {
 	hash := sha256.Sum256(key)
 	return base64.StdEncoding.EncodeToString(hash[:])
+}
+
+// generateKeyCheck creates a validation string to verify the key during decryption
+func generateKeyCheck(key []byte) (string, error) {
+	// Create a simple string that can be encrypted and later verified
+	plaintext := []byte("sietch-key-validation")
+
+	// Encrypt with the key
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return "", err
+	}
+
+	// Use GCM mode for the check
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return "", err
+	}
+
+	// Generate a nonce
+	nonce := make([]byte, gcm.NonceSize())
+	if _, err := rand.Read(nonce); err != nil {
+		return "", err
+	}
+
+	// Encrypt the validation string
+	ciphertext := gcm.Seal(nil, nonce, plaintext, nil)
+
+	// Combine nonce and ciphertext for storage
+	result := append(nonce, ciphertext...)
+	return base64.StdEncoding.EncodeToString(result), nil
 }

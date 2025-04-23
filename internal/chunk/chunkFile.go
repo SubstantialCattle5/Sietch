@@ -1,6 +1,3 @@
-/*
-Copyright © 2025 SubstantialCattle5, nilaysharan.com
-*/
 package chunk
 
 import (
@@ -11,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/substantialcattle5/sietch/internal/config"
+	"github.com/substantialcattle5/sietch/internal/encryption"
 	"github.com/substantialcattle5/sietch/internal/fs"
 	"github.com/substantialcattle5/sietch/util"
 )
@@ -25,6 +23,12 @@ func ChunkFile(filePath string, chunkSize int64, vaultRoot string) ([]config.Chu
 	}
 	defer file.Close()
 
+	// Load vault configuration to access encryption settings
+	vaultConfig, err := config.LoadVaultConfig(vaultRoot)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load vault configuration: %v", err)
+	}
+
 	// Ensure chunks directory exists
 	chunksDir := fs.GetChunkDirectory(vaultRoot)
 	if err := os.MkdirAll(chunksDir, 0755); err != nil {
@@ -36,6 +40,17 @@ func ChunkFile(filePath string, chunkSize int64, vaultRoot string) ([]config.Chu
 	chunkCount := 0
 	totalBytes := int64(0)
 	chunkRefs := []config.ChunkRef{}
+
+	// Prepare passphrase if key is passphrase protected
+	var passphrase string
+	if vaultConfig.Encryption.PassphraseProtected {
+		// In a real implementation, you would securely prompt for the passphrase
+		// This is a placeholder - you should replace with secure passphrase handling
+		passphrase = os.Getenv("SIETCH_PASSPHRASE")
+		if passphrase == "" {
+			return nil, fmt.Errorf("passphrase required for encrypted vault but not provided")
+		}
+	}
 
 	// Read the file in chunks
 	for {
@@ -52,28 +67,63 @@ func ChunkFile(filePath string, chunkSize int64, vaultRoot string) ([]config.Chu
 		chunkCount++
 		totalBytes += int64(bytesRead)
 
-		// calculate chunk hash
+		// Calculate chunk hash (pre-encryption)
 		hasher := sha256.New()
 		hasher.Write(buffer[:bytesRead])
 		chunkHash := fmt.Sprintf("%x", hasher.Sum(nil))
 
-		fmt.Printf("Chunk %d hash: %s\n", chunkCount, chunkHash)
-
-		// Save the chunk to the vault
-		chunkPath := filepath.Join(chunksDir, chunkHash)
-
-		//todo implement encryption later
-		if err := os.WriteFile(chunkPath, buffer[:bytesRead], 0644); err != nil {
-			return nil, fmt.Errorf("failed to write chunk file: %v", err)
-		}
-		fmt.Printf("Chunk %d: %s bytes, hash: %s\n", chunkCount, util.HumanReadableSize(int64(bytesRead)), chunkHash)
-
-		// Add the chunk reference to our list
-		chunkRefs = append(chunkRefs, config.ChunkRef{
+		// Create chunk reference
+		chunkRef := config.ChunkRef{
 			Hash:  chunkHash,
 			Size:  int64(bytesRead),
 			Index: chunkCount - 1, // 0-based index
-		})
+		}
+
+		// Encrypt the chunk if encryption is enabled
+		if vaultConfig.Encryption.Type != "" && vaultConfig.Encryption.Type != "none" {
+			// Convert chunk data to string for encryption
+			chunkData := string(buffer[:bytesRead])
+
+			// Use encryption with vault config
+			encryptedData, err := encryption.AesEncryption(
+				chunkData,
+				vaultRoot,
+			)
+
+			if err != nil {
+				return nil, fmt.Errorf("failed to encrypt chunk %d: %v", chunkCount, err)
+			}
+
+			// Calculate hash of encrypted data for storage filename
+			encHasher := sha256.New()
+			encHasher.Write([]byte(encryptedData))
+			encryptedHash := fmt.Sprintf("%x", encHasher.Sum(nil))
+
+			// Update chunk reference with encryption info
+			chunkRef.EncryptedHash = encryptedHash
+			chunkRef.EncryptedSize = int64(len(encryptedData))
+
+			// Save the encrypted chunk
+			chunkPath := filepath.Join(chunksDir, encryptedHash)
+			if err := os.WriteFile(chunkPath, []byte(encryptedData), 0644); err != nil {
+				return nil, fmt.Errorf("failed to write encrypted chunk file: %v", err)
+			}
+		} else {
+			// If no encryption, save the raw chunk
+			chunkPath := filepath.Join(chunksDir, chunkHash)
+			if err := os.WriteFile(chunkPath, buffer[:bytesRead], 0644); err != nil {
+				return nil, fmt.Errorf("failed to write chunk file: %v", err)
+			}
+		}
+
+		fmt.Printf("Chunk %d: %s bytes, hash: %s\n",
+			chunkCount,
+			util.HumanReadableSize(int64(bytesRead)),
+			chunkHash,
+		)
+
+		// Add the chunk reference to our list
+		chunkRefs = append(chunkRefs, chunkRef)
 
 		if err == io.EOF {
 			break
