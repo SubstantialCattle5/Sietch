@@ -13,7 +13,6 @@ import (
 )
 
 func AesEncryption(data string, vaultPath string) (string, error) {
-
 	// Load vault configuration
 	vaultConfig, err := config.LoadVaultConfig(vaultPath)
 	if err != nil {
@@ -22,9 +21,9 @@ func AesEncryption(data string, vaultPath string) (string, error) {
 
 	// Validate encryption type is AES
 	if vaultConfig.Encryption.Type != "aes" {
-		return "", fmt.Errorf("vault is not configured for AES encryption (using %s)", vaultConfig.Encryption.Type)
+		return "", fmt.Errorf("vault is not configured for AES encryption (using %s)",
+			vaultConfig.Encryption.Type)
 	}
-	fmt.Print(vaultConfig.Encryption.Type)
 
 	// Load encryption key from the specified path
 	keyData, err := loadEncryptionKey(vaultConfig.Encryption.KeyPath)
@@ -32,37 +31,34 @@ func AesEncryption(data string, vaultPath string) (string, error) {
 		return "", fmt.Errorf("failed to load encryption key: %w", err)
 	}
 
+	// Ensure key is valid for AES (16, 24, or 32 bytes)
+	if len(keyData) != 16 && len(keyData) != 24 && len(keyData) != 32 {
+		return "", fmt.Errorf("invalid key length: %d bytes", len(keyData))
+	}
+
 	plainText := []byte(data)
-	key := make([]byte, 32)
 
-	if _, err := rand.Reader.Read(keyData); err != nil {
-		fmt.Println("error generating random encryption key ", err)
-		return "", err
-	}
-
-	block, err := aes.NewCipher(key)
+	// Create cipher block using the loaded key data
+	block, err := aes.NewCipher(keyData)
 	if err != nil {
-		fmt.Println("error creating aes block cipher", err)
-		return "", err
+		return "", fmt.Errorf("error creating AES cipher block: %w", err)
 	}
 
+	// Use GCM mode
 	gcm, err := cipher.NewGCM(block)
 	if err != nil {
-		fmt.Println("error setting gcm mode", err)
-		return "", err
+		return "", fmt.Errorf("error setting GCM mode: %w", err)
 	}
 
+	// Generate nonce
 	nonce := make([]byte, gcm.NonceSize())
 	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
-		fmt.Println("error generating the nonce ", err)
-		return "", err
+		return "", fmt.Errorf("error generating nonce: %w", err)
 	}
 
+	// Encrypt data
 	ciphertext := gcm.Seal(nonce, nonce, plainText, nil)
 
-	enc := hex.EncodeToString(ciphertext)
-	fmt.Println("original data:", data)
-	fmt.Println("encrypted data:", enc)
 	return hex.EncodeToString(ciphertext), nil
 }
 
@@ -124,8 +120,5 @@ func loadEncryptionKey(keyPath string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error reading key file: %w", err)
 	}
-
-	// Here you might add logic to handle passphrase decryption if needed
-
 	return keyData, nil
 }
