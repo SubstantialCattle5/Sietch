@@ -1,7 +1,6 @@
 /*
 Copyright © 2025 SubstantialCattle5, nilaysharan.com
 */
-
 package cmd
 
 import (
@@ -10,13 +9,13 @@ import (
 	"path/filepath"
 
 	"github.com/google/uuid"
-	"github.com/manifoldco/promptui"
 	"github.com/spf13/cobra"
 	"github.com/substantialcattle5/sietch/internal/config"
-	"github.com/substantialcattle5/sietch/internal/encryption/keys"
 	"github.com/substantialcattle5/sietch/internal/fs"
 	"github.com/substantialcattle5/sietch/internal/manifest"
 	"github.com/substantialcattle5/sietch/internal/ui"
+	"github.com/substantialcattle5/sietch/internal/validation"
+	"github.com/substantialcattle5/sietch/internal/vault"
 )
 
 var (
@@ -24,9 +23,10 @@ var (
 	vaultPath string
 
 	// Security key generation
-	keyType       string
-	usePassphrase bool
-	keyFile       string
+	keyType         string
+	usePassphrase   bool
+	keyFile         string
+	passphraseValue string
 
 	// aes specific keys
 	aesMode   string
@@ -57,7 +57,8 @@ var (
 	configFile      string
 )
 
-var initCmd = &cobra.Command{Use: "init",
+var initCmd = &cobra.Command{
+	Use:   "init",
 	Short: "Initialize a new Sietch vault",
 	Long: `Initialize a new Sietch vault with secure encryption and configurable options.
 This creates the necessary directory structure and configuration files for your vault.
@@ -88,8 +89,9 @@ Examples:
   sietch init --force`,
 
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return runInit()
-	}}
+		return runInit(cmd)
+	},
+}
 
 func init() {
 	rootCmd.AddCommand(initCmd)
@@ -102,6 +104,7 @@ func init() {
 	initCmd.Flags().StringVar(&keyType, "key-type", "aes", "Type of encryption key (aes, gpg, none)")
 	initCmd.Flags().BoolVar(&usePassphrase, "passphrase", false, "Protect key with passphrase")
 	initCmd.Flags().StringVar(&keyFile, "key-file", "", "Path to key file (for importing an existing key)")
+	initCmd.Flags().StringVar(&passphraseValue, "passphrase-value", "", "Passphrase for encryption (NOT RECOMMENDED: passphrase will be visible in command history)")
 
 	// AES specific parameters
 	initCmd.Flags().StringVar(&aesMode, "aes-mode", "gcm", "AES encryption mode (gcm, cbc)")
@@ -132,50 +135,24 @@ func init() {
 	initCmd.Flags().StringVar(&configFile, "from-config", "", "Initialize from a configuration file")
 }
 
-func runInit() error {
-	// If interactive mode is enabled, prompt for inputs
+func runInit(cmd *cobra.Command) error {
+
+	// Handle interactive mode first
 	interactiveVaultConfig, err := handleInteractiveMode()
 	if err != nil {
 		return err
 	}
 
-	// Set default author if not provided
-	if author == "" {
-		author = "sietch-user@example.com"
+	// Validate and prepare inputs
+	if err := validation.ValidateAndPrepareInputs(author, tags, templateName, configFile); err != nil {
+		return err
 	}
 
-	// If no tags are provided, set default tags
-	if len(tags) == 0 {
-		tags = []string{"research", "desert", "offline"}
-	}
-
-	absVaultPath, err := filepath.Abs(filepath.Join(vaultPath, vaultName))
+	// Prepare vault path and check for existing vault
+	absVaultPath, err := vault.PrepareVaultPath(vaultPath, vaultName, forceInit)
 	if err != nil {
-		return fmt.Errorf("failed to get absolute path: %w", err)
+		return err
 	}
-
-	// Check if vault already exists by checking for .sietch directory
-	sietchDir := filepath.Join(absVaultPath, ".sietch")
-	if _, err := os.Stat(sietchDir); err == nil {
-		if !forceInit {
-			return fmt.Errorf("vault already exists at %s. Use --force to re-initialize (warning: this will destroy existing data)", absVaultPath)
-		}
-		// If force is true, we'll continue and overwrite
-	}
-
-	// Apply template configuration if specified
-	if templateName != "" {
-		fmt.Printf("Applying template: %s\n", templateName)
-		// This would require implementing template functionality
-	}
-
-	// Load configuration from file if specified
-	if configFile != "" {
-		fmt.Printf("Loading configuration from: %s\n", configFile)
-		// This would require implementing config loading functionality
-	}
-
-	vaultID := uuid.New().String()
 
 	// Create directory structure
 	if err := fs.CreateVaultStructure(absVaultPath); err != nil {
@@ -183,99 +160,23 @@ func runInit() error {
 	}
 
 	// Handle key generation or import
-	keyPath := filepath.Join(absVaultPath, ".sietch", "keys", "secret.key")
-	var keyConfig *config.KeyConfig
+	keyParams := validation.KeyGenParams{
+		KeyType:          keyType,
+		UsePassphrase:    usePassphrase,
+		KeyFile:          keyFile,
+		AESMode:          aesMode,
+		UseScrypt:        useScrypt,
+		ScryptN:          scryptN,
+		ScryptR:          scryptR,
+		ScryptP:          scryptP,
+		PBKDF2Iterations: 10000, // Default PBKDF2 iterations
+	}
 
-	if keyFile != "" {
-		// Import key from file
-		keyData, err := os.ReadFile(keyFile)
-		if err != nil {
-			return fmt.Errorf("failed to read key file %s: %w", keyFile, err)
-		}
-
-		// Ensure directory exists
-		keyDir := filepath.Dir(keyPath)
-		if err := os.MkdirAll(keyDir, 0700); err != nil {
-			return fmt.Errorf("failed to create key directory: %w", err)
-		}
-
-		// Write key file
-		if err := os.WriteFile(keyPath, keyData, 0600); err != nil {
-			return fmt.Errorf("failed to write key to %s: %w", keyPath, err)
-		}
-
-		fmt.Printf("Imported key from %s\n", keyFile)
-	} else {
-		kdfValue := "pbkdf2"
-		if useScrypt {
-			kdfValue = "scrypt"
-		}
-		// Create encryption config
-		encConfig := &config.VaultConfig{
-			Encryption: config.EncryptionConfig{
-				Type:                keyType,
-				PassphraseProtected: usePassphrase,
-				KeyFile:             keyFile != "",
-				KeyFilePath:         keyFile,
-				KeyPath:             keyPath,
-				AESConfig: &config.AESConfig{
-					Mode:    aesMode,
-					KDF:     kdfValue,
-					ScryptN: scryptN,
-					ScryptR: scryptR,
-					ScryptP: scryptP,
-					PBKDF2I: 10000, // Default PBKDF2 iterations if not using scrypt
-				},
-			},
-		}
-
-		// Get passphrase if needed
-		var passphrase string
-		if usePassphrase {
-			passphrasePrompt := promptui.Prompt{
-				Label: "Enter encryption passphrase",
-				Mask:  '*',
-				Validate: func(input string) error {
-					if len(input) < 8 {
-						return fmt.Errorf("passphrase must be at least 8 characters")
-					}
-					return nil
-				},
-			}
-
-			passphrase, err = passphrasePrompt.Run()
-			if err != nil {
-				return fmt.Errorf("failed to get passphrase: %w", err)
-			}
-
-			// Add confirmation prompt
-			confirmPrompt := promptui.Prompt{
-				Label: "Confirm passphrase",
-				Mask:  '*',
-				Validate: func(input string) error {
-					if input != passphrase {
-						return fmt.Errorf("passphrases do not match")
-					}
-					return nil
-				},
-			}
-
-			_, err = confirmPrompt.Run()
-			if err != nil {
-				return fmt.Errorf("passphrase confirmation failed: %w", err)
-			}
-		}
-
-		// Generate the key configuration
-		keyConfig, err = keys.GenerateAESKey(encConfig, passphrase)
-		if err != nil {
-			return fmt.Errorf("failed to generate encryption key: %w", err)
-		}
-
-		// If we need to save the key to a file
-		if encConfig.Encryption.KeyBackupPath != "" {
-			fmt.Printf("Key backed up to: %s\n", encConfig.Encryption.KeyBackupPath)
-		}
+	keyConfig, err := validation.HandleKeyGeneration(cmd, absVaultPath, keyParams)
+	if err != nil {
+		// Clean up on error
+		cleanupOnError(absVaultPath)
+		return fmt.Errorf("key generation failed: %w", err)
 	}
 
 	// If we didn't generate key config but have one from interactive mode
@@ -285,13 +186,16 @@ func runInit() error {
 		}
 	}
 
+	// Generate vault ID
+	vaultID := uuid.New().String()
+
 	// Build vault configuration
 	configuration := config.BuildVaultConfig(
 		vaultID,
 		vaultName,
 		author,
 		keyType,
-		keyPath,
+		filepath.Join(absVaultPath, ".sietch", "keys", "secret.key"),
 		usePassphrase,
 		chunkingStrategy,
 		chunkSize,
@@ -299,11 +203,12 @@ func runInit() error {
 		compressionType,
 		syncMode,
 		tags,
-		keyConfig, // Pass keyConfig as the last parameter
+		keyConfig,
 	)
 
 	// Write configuration to manifest
 	if err := manifest.WriteManifest(absVaultPath, configuration); err != nil {
+		cleanupOnError(absVaultPath)
 		return fmt.Errorf("failed to write vault manifest: %w", err)
 	}
 
@@ -362,4 +267,9 @@ func handleInteractiveMode() (*config.VaultConfig, error) {
 	tags = vaultConfig.Metadata.Tags
 
 	return vaultConfig, nil
+}
+
+func cleanupOnError(absVaultPath string) {
+	// Attempt to clean up partially created vault on error
+	_ = os.RemoveAll(absVaultPath)
 }

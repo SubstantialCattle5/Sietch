@@ -1,6 +1,9 @@
 package config
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 // VaultConfig represents the structure for vault.yaml
 type VaultConfig struct {
@@ -204,4 +207,18 @@ func BuildDefaultGPGConfig() *GPGConfig {
 	return &GPGConfig{
 		KeyServer: "hkps://keys.openpgp.org",
 	}
+}
+
+func IsPassphraseProtected(vaultPath string) (bool, error) {
+	config, err := LoadVaultConfig(vaultPath)
+	if err != nil {
+		return false, fmt.Errorf("couldn't load vault config: %w", err)
+	}
+
+	// Check if encryption is configured and passphrase protected
+	if config.Encryption.Type != "none" && config.Encryption.PassphraseProtected {
+		return true, nil
+	}
+
+	return false, nil
 }

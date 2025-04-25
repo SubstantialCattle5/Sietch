@@ -7,6 +7,7 @@ import (
 	"github.com/substantialcattle5/sietch/internal/config"
 )
 
+// PrintSuccessMessage displays a formatted success message after vault initialization
 func PrintSuccessMessage(config *config.VaultConfig, vaultID, vaultPath string) {
 	// Create a visual separator
 	separator := strings.Repeat("─", 50)
@@ -31,9 +32,9 @@ func PrintSuccessMessage(config *config.VaultConfig, vaultID, vaultPath string) 
 
 	// Storage configuration
 	fmt.Println("\n💾 Storage:")
-	fmt.Printf("  • Chunking:    %s (avg. %s MB)\n", config.Chunking.Strategy, config.Chunking.ChunkSize)
-	fmt.Printf("  • Compression: %s\n", config.Chunking.HashAlgorithm)
-	fmt.Printf("  • Manifest:    vault.yaml\n")
+	fmt.Printf("  • Chunking:    %s (size: %s)\n", config.Chunking.Strategy, config.Chunking.ChunkSize)
+	fmt.Printf("  • Hash:        %s\n", config.Chunking.HashAlgorithm)
+	fmt.Printf("  • Compression: %s\n", config.Compression)
 
 	// Metadata
 	fmt.Println("\n📋 Metadata:")
@@ -63,7 +64,7 @@ func PrintSuccessMessage(config *config.VaultConfig, vaultID, vaultPath string) 
 	fmt.Println("\n💡 Tips:")
 	fmt.Println("  • Run 'sietch help' for a list of all commands")
 	fmt.Println("  • Use 'sietch config' to view or modify vault settings")
-	fmt.Printf("  • Your vault configuration is stored at %s/vault.yaml\n", vaultPath)
+	fmt.Printf("  • Your vault configuration is stored at %s/.sietch/vault.yaml\n", vaultPath)
 
 	fmt.Println("\nThank you for using Sietch Vault! 🏜️")
 }

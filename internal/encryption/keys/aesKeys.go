@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/substantialcattle5/sietch/internal/config"
 	"golang.org/x/crypto/pbkdf2"
@@ -19,6 +20,9 @@ import (
 // GenerateAESKey creates a key configuration based on vault settings
 // and stores the key at the configured key path
 func GenerateAESKey(cfg *config.VaultConfig, passphrase string) (*config.KeyConfig, error) {
+
+	fmt.Printf("Vault Configuration: %+v\n", cfg)
+
 	// Initialize key configuration with empty AESConfig if not present
 	keyConfig := &config.KeyConfig{
 		AESConfig: &config.AESConfig{},
@@ -169,7 +173,13 @@ func GenerateAESKey(cfg *config.VaultConfig, passphrase string) (*config.KeyConf
 		keyConfig.KeyHash = calculateKeyHash(keyMaterial)
 	}
 
-	// Store the key material at the configured key path
+	// Create the key path based on the vault name
+	absVaultPath := filepath.Join(".", cfg.Name)
+	keyPath := filepath.Join(absVaultPath, ".sietch", "keys", "secret.key")
+
+	// Set both KeyPath and KeyFilePath in the configuration
+	cfg.Encryption.KeyPath = keyPath
+	cfg.Encryption.KeyFilePath = keyPath // Store the key material at the configured key path
 	if cfg.Encryption.KeyPath != "" {
 		// Create directory structure for the key if it doesn't exist
 		keyDir := filepath.Dir(cfg.Encryption.KeyPath)
@@ -206,11 +216,31 @@ func encryptKeyWithDerivedKey(keyMaterial, derivedKey []byte, aesConfig *config.
 		return nil, fmt.Errorf("failed to create cipher: %w", err)
 	}
 
-	if aesConfig.Mode == "gcm" {
+	// Normalize and validate mode
+	mode := strings.TrimSpace(strings.ToLower(aesConfig.Mode))
+
+	// Default to GCM mode if not specified
+	if mode == "" {
+		mode = "gcm"
+		// Update the config to match our selection
+		aesConfig.Mode = mode
+	}
+
+	switch mode {
+	case "gcm":
 		// For GCM mode
 		gcm, err := cipher.NewGCM(block)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create GCM: %w", err)
+		}
+
+		// Ensure nonce exists
+		if aesConfig.Nonce == "" {
+			nonce, err := generateNonce()
+			if err != nil {
+				return nil, fmt.Errorf("failed to generate nonce: %w", err)
+			}
+			aesConfig.Nonce = nonce
 		}
 
 		nonce, err := base64.StdEncoding.DecodeString(aesConfig.Nonce)
@@ -223,10 +253,15 @@ func encryptKeyWithDerivedKey(keyMaterial, derivedKey []byte, aesConfig *config.
 
 		// Prepend nonce for storage
 		return append(nonce, encryptedKey...), nil
-	} else if aesConfig.Mode == "cbc" {
+
+	case "cbc":
 		// For CBC mode
 		if aesConfig.IV == "" {
-			return nil, fmt.Errorf("IV is required for CBC mode")
+			iv, err := generateIV()
+			if err != nil {
+				return nil, fmt.Errorf("failed to generate IV: %w", err)
+			}
+			aesConfig.IV = iv
 		}
 
 		iv, err := base64.StdEncoding.DecodeString(aesConfig.IV)
@@ -250,9 +285,10 @@ func encryptKeyWithDerivedKey(keyMaterial, derivedKey []byte, aesConfig *config.
 
 		// Prepend IV for storage
 		return append(iv, ciphertext...), nil
-	}
 
-	return nil, fmt.Errorf("unsupported encryption mode: %s", aesConfig.Mode)
+	default:
+		return nil, fmt.Errorf("unsupported encryption mode: '%s' (must be 'gcm' or 'cbc')", mode)
+	}
 }
 
 func generateNonce() (string, error) {

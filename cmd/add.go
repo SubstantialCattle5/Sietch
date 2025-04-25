@@ -15,6 +15,7 @@ import (
 	"github.com/substantialcattle5/sietch/internal/config"
 	"github.com/substantialcattle5/sietch/internal/fs"
 	"github.com/substantialcattle5/sietch/internal/manifest"
+	"github.com/substantialcattle5/sietch/internal/ui"
 	"github.com/substantialcattle5/sietch/util"
 )
 
@@ -82,6 +83,7 @@ Example:
 				vaultConfig.Chunking.ChunkSize)
 			chunkSize = int64(4 * 1024 * 1024) // Default to 4MB
 		}
+
 		// Get file size in human-readable format
 		sizeInBytes := fileInfo.Size()
 		sizeReadable := util.HumanReadableSize(sizeInBytes)
@@ -98,8 +100,22 @@ Example:
 		}
 		fmt.Println("\nBeginning chunking process...")
 
-		// Process the file and store chunks
-		chunkRefs, err := chunk.ChunkFile(filePath, chunkSize, vaultRoot)
+		// Get passphrase if needed for encryption
+		passphrase, err := ui.GetPassphraseForVault(cmd, vaultConfig)
+		if err != nil {
+			return err
+		}
+
+		// Process the file and store chunks - using the appropriate chunking function
+		var chunkRefs []config.ChunkRef
+		if vaultConfig.Encryption.Type != "none" && vaultConfig.Encryption.PassphraseProtected {
+			// Use passphrase-aware chunking
+			chunkRefs, err = chunk.ChunkFileWithPassphrase(filePath, chunkSize, vaultRoot, passphrase)
+		} else {
+			// Use regular chunking
+			chunkRefs, err = chunk.ChunkFile(filePath, chunkSize, vaultRoot)
+		}
+
 		if err != nil {
 			return fmt.Errorf("chunking failed: %v", err)
 		}
@@ -112,6 +128,7 @@ Example:
 			Chunks:      chunkRefs,
 			Destination: destPath,
 			AddedAt:     time.Now().UTC(),
+			Tags:        tags, // Include tags in the manifest
 		}
 
 		// Save the manifest
@@ -135,4 +152,5 @@ func init() {
 	// Optional flags for the add command
 	addCmd.Flags().BoolP("force", "f", false, "Force add without confirmation")
 	addCmd.Flags().StringP("tags", "t", "", "Comma-separated tags to associate with the file")
+	addCmd.Flags().StringP("passphrase-value", "p", "", "Passphrase for encrypted vault (if required)")
 }
