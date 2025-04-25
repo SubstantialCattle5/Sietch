@@ -18,9 +18,8 @@ import (
 )
 
 // GenerateAESKey creates a key configuration based on vault settings
-// and stores the key at the configured key path
+// and optionally stores the key in memory rather than writing to file
 func GenerateAESKey(cfg *config.VaultConfig, passphrase string) (*config.KeyConfig, error) {
-
 	fmt.Printf("Vault Configuration: %+v\n", cfg)
 
 	// Initialize key configuration with empty AESConfig if not present
@@ -173,14 +172,17 @@ func GenerateAESKey(cfg *config.VaultConfig, passphrase string) (*config.KeyConf
 		keyConfig.KeyHash = calculateKeyHash(keyMaterial)
 	}
 
-	// Create the key path based on the vault name
-	absVaultPath := filepath.Join(".", cfg.Name)
-	keyPath := filepath.Join(absVaultPath, ".sietch", "keys", "secret.key")
+	// Store the key in the struct using base64 encoding
+	encodedKey := base64.StdEncoding.EncodeToString(keyMaterial)
+	keyConfig.AESConfig.Key = encodedKey
 
-	// Set both KeyPath and KeyFilePath in the configuration
-	cfg.Encryption.KeyPath = keyPath
-	cfg.Encryption.KeyFilePath = keyPath // Store the key material at the configured key path
-	if cfg.Encryption.KeyPath != "" {
+	// Also store it in the original config struct
+	if cfg.Encryption.AESConfig != nil {
+		cfg.Encryption.AESConfig.Key = encodedKey
+	}
+
+	// Optionally write to file if requested
+	if cfg.Encryption.KeyPath != "" && cfg.Encryption.KeyFile {
 		// Create directory structure for the key if it doesn't exist
 		keyDir := filepath.Dir(cfg.Encryption.KeyPath)
 		if err := os.MkdirAll(keyDir, 0700); err != nil {
@@ -193,8 +195,6 @@ func GenerateAESKey(cfg *config.VaultConfig, passphrase string) (*config.KeyConf
 		}
 
 		fmt.Printf("Encryption key stored at: %s\n", cfg.Encryption.KeyPath)
-	} else {
-		return nil, fmt.Errorf("encryption key path is not specified in the vault configuration")
 	}
 
 	// Backup key if requested

@@ -35,6 +35,7 @@ type EncryptionConfig struct {
 
 // AESConfig contains AES-specific encryption settings
 type AESConfig struct {
+	Key      string
 	Mode     string `yaml:"mode,omitempty"`      // GCM or CBC
 	KDF      string `yaml:"kdf,omitempty"`       // scrypt or pbkdf2
 	Salt     string `yaml:"salt,omitempty"`      // Base64 encoded salt
@@ -126,7 +127,7 @@ func BuildVaultConfig(
 	chunkingStrategy, chunkSize, hashAlgorithm, compression string,
 	syncMode string,
 	tags []string,
-	keyConfig ...*KeyConfig, // Optional key configuration
+	keyConfig *KeyConfig, // Changed from variadic to single pointer
 ) VaultConfig {
 	config := VaultConfig{
 		VaultID:       vaultID,
@@ -155,18 +156,23 @@ func BuildVaultConfig(
 	config.Metadata.Tags = tags
 
 	// If key configuration is provided, apply it
-	if len(keyConfig) > 0 && keyConfig[0] != nil {
-		kc := keyConfig[0]
-		config.Encryption.KeyHash = kc.KeyHash
+	if keyConfig != nil {
+		config.Encryption.KeyHash = keyConfig.KeyHash
 
 		// Apply AES-specific config if available
-		if kc.AESConfig != nil && keyType == "aes" {
-			config.Encryption.AESConfig = kc.AESConfig
+		if keyConfig.AESConfig != nil && keyType == "aes" {
+			// Create a new AESConfig if it doesn't exist
+			if config.Encryption.AESConfig == nil {
+				config.Encryption.AESConfig = &AESConfig{}
+			}
+
+			// Copy all fields from keyConfig.AESConfig to config.Encryption.AESConfig
+			*config.Encryption.AESConfig = *keyConfig.AESConfig
 		}
 
 		// Apply GPG-specific config if available
-		if kc.GPGConfig != nil && keyType == "gpg" {
-			config.Encryption.GPGConfig = kc.GPGConfig
+		if keyConfig.GPGConfig != nil && keyType == "gpg" {
+			config.Encryption.GPGConfig = keyConfig.GPGConfig
 		}
 	}
 
@@ -188,6 +194,7 @@ func BuildDefaultVaultConfig(vaultID, vaultName, keyPath string) VaultConfig {
 		"none",   // Default compression
 		"manual", // Default sync mode
 		[]string{"research", "desert", "offline"}, // Default tags
+		nil, // No key config by default - will be generated when actually creating a vault
 	)
 }
 

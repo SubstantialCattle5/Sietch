@@ -4,6 +4,7 @@ Copyright © 2025 SubstantialCattle5, nilaysharan.com
 package cmd
 
 import (
+	"encoding/base64"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -136,7 +137,6 @@ func init() {
 }
 
 func runInit(cmd *cobra.Command) error {
-
 	// Handle interactive mode first
 	interactiveVaultConfig, err := handleInteractiveMode()
 	if err != nil {
@@ -190,8 +190,51 @@ func runInit(cmd *cobra.Command) error {
 		}
 	}
 
+	// Print the key config to verify it contains the key
+	if keyConfig != nil && keyConfig.AESConfig != nil {
+		fmt.Println("\nKey Configuration:")
+		fmt.Printf("  Key exists: %v\n", keyConfig.AESConfig.Key != "")
+		// Print first few chars of the key if it exists (for debugging)
+		if keyConfig.AESConfig.Key != "" {
+			keyLen := len(keyConfig.AESConfig.Key)
+			if keyLen > 10 {
+				fmt.Printf("  Key (first 10 chars): %s...\n", keyConfig.AESConfig.Key[:10])
+			} else {
+				fmt.Printf("  Key: %s\n", keyConfig.AESConfig.Key)
+			}
+		}
+	}
+
 	// Generate vault ID
 	vaultID := uuid.New().String()
+
+	// Create the key path for storing the key file
+	keyPath := filepath.Join(absVaultPath, ".sietch", "keys", "secret.key")
+
+	// Write the key to file if it exists
+	if keyType == "aes" && keyConfig != nil && keyConfig.AESConfig != nil && keyConfig.AESConfig.Key != "" {
+		// Decode the base64-encoded key
+		keyMaterial, err := base64.StdEncoding.DecodeString(keyConfig.AESConfig.Key)
+		if err != nil {
+			cleanupOnError(absVaultPath)
+			return fmt.Errorf("failed to decode key: %w", err)
+		}
+
+		// Create directory structure for the key if it doesn't exist
+		keyDir := filepath.Dir(keyPath)
+		if err := os.MkdirAll(keyDir, 0700); err != nil {
+			cleanupOnError(absVaultPath)
+			return fmt.Errorf("failed to create key directory %s: %w", keyDir, err)
+		}
+
+		// Write the key with secure permissions (only owner can read/write)
+		if err := os.WriteFile(keyPath, keyMaterial, 0600); err != nil {
+			cleanupOnError(absVaultPath)
+			return fmt.Errorf("failed to write key to %s: %w", keyPath, err)
+		}
+
+		fmt.Printf("Encryption key stored at: %s\n", keyPath)
+	}
 
 	// Build vault configuration
 	configuration := config.BuildVaultConfig(
@@ -199,7 +242,7 @@ func runInit(cmd *cobra.Command) error {
 		vaultName,
 		authorValidated,
 		keyType,
-		filepath.Join(absVaultPath, ".sietch", "keys", "secret.key"),
+		keyPath,
 		usePassphrase,
 		chunkingStrategy,
 		chunkSize,
@@ -209,6 +252,12 @@ func runInit(cmd *cobra.Command) error {
 		tags,
 		keyConfig,
 	)
+
+	// Print the final configuration to verify it has the key
+	fmt.Println("\nFinal Vault Configuration:")
+	if configuration.Encryption.AESConfig != nil {
+		fmt.Printf("  AES Key exists: %v\n", configuration.Encryption.AESConfig.Key != "")
+	}
 
 	// Write configuration to manifest
 	if err := manifest.WriteManifest(absVaultPath, configuration); err != nil {
@@ -231,7 +280,6 @@ func handleInteractiveMode() (*config.VaultConfig, error) {
 	if err != nil {
 		return nil, fmt.Errorf("interactive input failed: %w", err)
 	}
-
 	// Update variables with values from vaultConfig
 	vaultName = vaultConfig.Name
 	keyType = vaultConfig.Encryption.Type
