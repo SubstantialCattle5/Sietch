@@ -144,9 +144,13 @@ func runInit(cmd *cobra.Command) error {
 	}
 
 	// Validate and prepare inputs
-	if err := validation.ValidateAndPrepareInputs(author, tags, templateName, configFile); err != nil {
+	authorValidated, tagsValidated, err := validation.ValidateAndPrepareInputs(author, tags, templateName, configFile)
+	if err != nil {
 		return err
 	}
+	// Update the original variables with validated values
+	author = authorValidated
+	tags = tagsValidated
 
 	// Prepare vault path and check for existing vault
 	absVaultPath, err := vault.PrepareVaultPath(vaultPath, vaultName, forceInit)
@@ -193,7 +197,7 @@ func runInit(cmd *cobra.Command) error {
 	configuration := config.BuildVaultConfig(
 		vaultID,
 		vaultName,
-		author,
+		authorValidated,
 		keyType,
 		filepath.Join(absVaultPath, ".sietch", "keys", "secret.key"),
 		usePassphrase,

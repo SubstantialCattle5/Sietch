@@ -2,7 +2,7 @@ package validation
 
 import "fmt"
 
-func ValidateAndPrepareInputs(author string, tags []string, templateName string, configFile string) error {
+func ValidateAndPrepareInputs(author string, tags []string, templateName string, configFile string) (string, []string, error) {
 	// Set default author if not provided
 	if author == "" {
 		author = "sietch-user@example.com"
@@ -23,5 +23,5 @@ func ValidateAndPrepareInputs(author string, tags []string, templateName string,
 		//todo Implement config loading functionality
 	}
 
-	return nil
+	return author, tags, nil
 }
