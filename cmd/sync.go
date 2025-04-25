@@ -6,13 +6,18 @@ package cmd
 
 import (
 	"context"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
 	"github.com/libp2p/go-libp2p"
+	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/spf13/cobra"
@@ -54,9 +59,31 @@ Examples:
 			return fmt.Errorf("not inside a vault: %v", err)
 		}
 
-		// Create a libp2p host
+		// Load vault configuration
+		vaultCfg, err := config.LoadVaultConfig(vaultRoot)
+		if err != nil {
+			return fmt.Errorf("failed to load vault config: %v", err)
+		}
+
+		// Load RSA keys for secure communication
+		privateKey, publicKey, err := loadRSAKeys(vaultRoot, vaultCfg)
+		if err != nil {
+			return fmt.Errorf("failed to load RSA keys: %v", err)
+		}
+
+		// Convert RSA private key to libp2p format
+		libp2pPrivKey, err := rsaToLibp2pPrivateKey(privateKey)
+		if err != nil {
+			return fmt.Errorf("failed to convert RSA key to libp2p format: %v", err)
+		}
+
+		// Create a libp2p host with our identity key
 		port, _ := cmd.Flags().GetInt("port")
 		var opts []libp2p.Option
+
+		// Use our RSA key as the node identity
+		opts = append(opts, libp2p.Identity(libp2pPrivKey))
+
 		if port > 0 {
 			opts = append(opts, libp2p.ListenAddrStrings(fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", port)))
 		} else {
@@ -71,17 +98,26 @@ Examples:
 
 		fmt.Printf("🔌 Started Sietch node with ID: %s\n", host.ID().String())
 
+		// Print our listen addresses
+		fmt.Println("📡 Listening on:")
+		for _, addr := range host.Addrs() {
+			fmt.Printf("   %s/p2p/%s\n", addr.String(), host.ID().String())
+		}
+
 		// Load the vault manager
 		vaultMgr, err := config.NewManager(vaultRoot)
 		if err != nil {
 			return fmt.Errorf("failed to load vault: %v", err)
 		}
 
-		// Create the sync service
-		syncService, err := p2p.NewSyncService(host, vaultMgr)
+		// Create the sync service with RSA key information
+		syncService, err := p2p.NewSecureSyncService(host, vaultMgr, privateKey, publicKey, vaultCfg.Sync.RSA)
 		if err != nil {
 			return fmt.Errorf("failed to create sync service: %v", err)
 		}
+
+		// Start secure protocol handlers
+		syncService.RegisterProtocols(ctx)
 
 		// Specific peer address provided
 		if len(args) > 0 {
@@ -106,6 +142,34 @@ Examples:
 			}
 
 			fmt.Printf("✅ Connected to peer: %s\n", info.ID.String())
+
+			// Perform secure handshake and key exchange
+			trusted, err := syncService.VerifyAndExchangeKeys(ctx, info.ID)
+			if err != nil {
+				return fmt.Errorf("key exchange failed: %v", err)
+			}
+
+			if !trusted {
+				// If not automatically trusted, prompt user
+				fmt.Printf("\n⚠️  New peer detected!\n")
+				fmt.Printf("Peer ID: %s\n", info.ID.String())
+
+				fingerprint, err := syncService.GetPeerFingerprint(info.ID)
+				if err == nil {
+					fmt.Printf("Fingerprint: %s\n", fingerprint)
+				}
+
+				if !promptForTrust() {
+					return fmt.Errorf("sync cancelled - peer not trusted")
+				}
+
+				// Add peer to trusted list
+				err = syncService.AddTrustedPeer(ctx, info.ID)
+				if err != nil {
+					return fmt.Errorf("failed to add trusted peer: %v", err)
+				}
+			}
+
 			fmt.Println("📝 Starting vault synchronization...")
 
 			// Sync with the peer
@@ -167,6 +231,33 @@ Examples:
 				return fmt.Errorf("failed to connect to peer: %v", err)
 			}
 
+			// Perform secure handshake and key exchange
+			trusted, err := syncService.VerifyAndExchangeKeys(ctx, peerInfo.ID)
+			if err != nil {
+				return fmt.Errorf("key exchange failed: %v", err)
+			}
+
+			if !trusted {
+				// If not automatically trusted, prompt user
+				fmt.Printf("\n⚠️  New peer detected!\n")
+				fmt.Printf("Peer ID: %s\n", peerInfo.ID.String())
+
+				fingerprint, err := syncService.GetPeerFingerprint(peerInfo.ID)
+				if err == nil {
+					fmt.Printf("Fingerprint: %s\n", fingerprint)
+				}
+
+				if !promptForTrust() {
+					return fmt.Errorf("sync cancelled - peer not trusted")
+				}
+
+				// Add peer to trusted list
+				err = syncService.AddTrustedPeer(ctx, peerInfo.ID)
+				if err != nil {
+					return fmt.Errorf("failed to add trusted peer: %v", err)
+				}
+			}
+
 			fmt.Printf("🔄 Starting sync with peer: %s\n", peerInfo.ID.String())
 
 			// Sync with the peer
@@ -186,6 +277,49 @@ Examples:
 	},
 }
 
+// loadRSAKeys loads the RSA key pair from the vault
+func loadRSAKeys(vaultRoot string, cfg *config.VaultConfig) (*rsa.PrivateKey, *rsa.PublicKey, error) {
+	// Get path to private key
+	privateKeyPath := filepath.Join(vaultRoot, cfg.Sync.RSA.PrivateKeyPath)
+
+	// Read private key file
+	privateKeyData, err := os.ReadFile(privateKeyPath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to read private key: %w", err)
+	}
+
+	// Decode PEM block
+	block, _ := pem.Decode(privateKeyData)
+	if block == nil || block.Type != "RSA PRIVATE KEY" {
+		return nil, nil, fmt.Errorf("failed to decode PEM block containing private key")
+	}
+
+	// Parse private key
+	privateKey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to parse private key: %w", err)
+	}
+
+	// Get public key from private key
+	publicKey := &privateKey.PublicKey
+
+	return privateKey, publicKey, nil
+}
+
+// rsaToLibp2pPrivateKey converts a Go RSA private key to libp2p format
+func rsaToLibp2pPrivateKey(privateKey *rsa.PrivateKey) (crypto.PrivKey, error) {
+	privateKeyBytes := x509.MarshalPKCS1PrivateKey(privateKey)
+	return crypto.UnmarshalRsaPrivateKey(privateKeyBytes)
+}
+
+// promptForTrust asks the user whether to trust a new peer
+func promptForTrust() bool {
+	fmt.Print("\nDo you want to trust this peer? (y/n): ")
+	var response string
+	fmt.Scanln(&response)
+	return response == "y" || response == "Y" || response == "yes" || response == "Yes"
+}
+
 // displaySyncResults shows the results of a sync operation
 func displaySyncResults(result *p2p.SyncResult) {
 	fmt.Println("\n✅ Synchronization complete!")
@@ -202,4 +336,6 @@ func init() {
 	// Add command flags
 	syncCmd.Flags().IntP("port", "p", 0, "Port to use for libp2p (0 for random port)")
 	syncCmd.Flags().IntP("timeout", "t", 60, "Discovery timeout in seconds (for auto-discovery)")
+	syncCmd.Flags().BoolP("force-trust", "f", false, "Automatically trust new peers without prompting")
+	syncCmd.Flags().BoolP("read-only", "r", false, "Only receive files, don't send")
 }

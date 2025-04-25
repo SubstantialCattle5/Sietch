@@ -128,3 +128,61 @@ func loadFileManifest(path string) (*FileManifest, error) {
 
 	return &manifest, nil
 }
+
+// GetConfig loads and returns the vault configuration
+func (m *Manager) GetConfig() (*VaultConfig, error) {
+	configPath := filepath.Join(m.vaultRoot, "vault.yaml")
+
+	// Check if config file exists
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		return nil, fmt.Errorf("vault configuration not found: %v", err)
+	}
+
+	// Read config file
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read configuration file: %v", err)
+	}
+
+	// Parse YAML content
+	var config VaultConfig
+	if err := yaml.Unmarshal(data, &config); err != nil {
+		return nil, fmt.Errorf("failed to parse configuration: %v", err)
+	}
+
+	return &config, nil
+}
+
+// SaveConfig writes the vault configuration to disk
+func (m *Manager) SaveConfig(config *VaultConfig) error {
+	configPath := filepath.Join(m.vaultRoot, "vault.yaml")
+
+	// Ensure .sietch directory exists
+	sietchDir := filepath.Join(m.vaultRoot, ".sietch")
+	if err := os.MkdirAll(sietchDir, 0755); err != nil {
+		return fmt.Errorf("failed to create .sietch directory: %v", err)
+	}
+
+	// Marshal configuration to YAML
+	data, err := yaml.Marshal(config)
+	if err != nil {
+		return fmt.Errorf("failed to marshal configuration: %v", err)
+	}
+
+	// Write to file
+	if err := os.WriteFile(configPath, data, 0644); err != nil {
+		return fmt.Errorf("failed to write configuration file: %v", err)
+	}
+
+	return nil
+}
+
+// SaveVaultConfig saves the vault configuration
+// This is a shorthand for backward compatibility
+func SaveVaultConfig(vaultRoot string, config *VaultConfig) error {
+	manager, err := NewManager(vaultRoot)
+	if err != nil {
+		return err
+	}
+	return manager.SaveConfig(config)
+}
