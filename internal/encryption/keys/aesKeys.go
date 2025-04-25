@@ -209,6 +209,75 @@ func GenerateAESKey(cfg *config.VaultConfig, passphrase string) (*config.KeyConf
 	return keyConfig, nil
 }
 
+// LoadEncryptionKey loads the encryption key using the provided passphrase
+func LoadEncryptionKey(cfg *config.VaultConfig, passphrase string) ([]byte, error) {
+	printKeyDetails(cfg) // Debug info about the key configuration
+
+	// Extract key check and salt from config
+	keyCheck := cfg.Encryption.AESConfig.KeyCheck
+	salt := cfg.Encryption.AESConfig.Salt
+
+	// Add debug logging
+	fmt.Printf("Debug: Loading encryption key with KDF=%s\n", cfg.Encryption.AESConfig.KDF)
+
+	// Derive key from passphrase using the appropriate KDF
+	var derivedKey []byte
+	var err error
+
+	switch cfg.Encryption.AESConfig.KDF {
+	case "scrypt":
+		derivedKey, err = scrypt.Key(
+			[]byte(passphrase),
+			[]byte(salt),
+			cfg.Encryption.AESConfig.ScryptN,
+			cfg.Encryption.AESConfig.ScryptR,
+			cfg.Encryption.AESConfig.ScryptP,
+			32, // 32 bytes for AES-256
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to derive key using scrypt: %w", err)
+		}
+	case "pbkdf2":
+		derivedKey = pbkdf2.Key(
+			[]byte(passphrase),
+			[]byte(salt),
+			cfg.Encryption.AESConfig.PBKDF2I,
+			32, // 32 bytes for AES-256
+			sha256.New,
+		)
+	default:
+		return nil, fmt.Errorf("unsupported KDF algorithm: %s", cfg.Encryption.AESConfig.KDF)
+	}
+
+	// Verify passphrase using key check with fallback for legacy vaults
+	if err := verifyPassphraseWithFallback(keyCheck, derivedKey); err != nil {
+		return nil, fmt.Errorf("failed to load encryption key: %w", err)
+	}
+
+	// Load and decrypt the key
+	encryptedKey, err := base64.StdEncoding.DecodeString(cfg.Encryption.AESConfig.Key)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode key: %w", err)
+	}
+
+	// Extract the nonce/IV based on the encryption mode
+	var key []byte
+	switch cfg.Encryption.AESConfig.Mode {
+	case "gcm":
+		key, err = decryptWithGCM(encryptedKey, derivedKey)
+	case "cbc":
+		key, err = decryptWithCBC(encryptedKey, derivedKey)
+	default:
+		return nil, fmt.Errorf("unsupported encryption mode: %s", cfg.Encryption.AESConfig.Mode)
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt key: %w", err)
+	}
+
+	return key, nil
+}
+
 // encryptKeyWithDerivedKey encrypts the key material using the derived key
 func encryptKeyWithDerivedKey(keyMaterial, derivedKey []byte, aesConfig *config.AESConfig) ([]byte, error) {
 	block, err := aes.NewCipher(derivedKey)
@@ -279,9 +348,9 @@ func encryptKeyWithDerivedKey(keyMaterial, derivedKey []byte, aesConfig *config.
 		paddedData := append(keyMaterial, padText...)
 
 		// Create CBC encrypter
-		mode := cipher.NewCBCEncrypter(block, iv)
+		cbc := cipher.NewCBCEncrypter(block, iv)
 		ciphertext := make([]byte, len(paddedData))
-		mode.CryptBlocks(ciphertext, paddedData)
+		cbc.CryptBlocks(ciphertext, paddedData)
 
 		// Prepend IV for storage
 		return append(iv, ciphertext...), nil
@@ -291,6 +360,197 @@ func encryptKeyWithDerivedKey(keyMaterial, derivedKey []byte, aesConfig *config.
 	}
 }
 
+func decryptWithGCM(data, key []byte) ([]byte, error) {
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create cipher: %w", err)
+	}
+
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create GCM: %w", err)
+	}
+
+	nonceSize := gcm.NonceSize()
+	if len(data) < nonceSize {
+		return nil, fmt.Errorf("encrypted data too short")
+	}
+
+	nonce := data[:nonceSize]
+	ciphertext := data[nonceSize:]
+
+	return gcm.Open(nil, nonce, ciphertext, nil)
+}
+
+func decryptWithCBC(data, key []byte) ([]byte, error) {
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create cipher: %w", err)
+	}
+
+	if len(data) < aes.BlockSize {
+		return nil, fmt.Errorf("encrypted data too short")
+	}
+
+	iv := data[:aes.BlockSize]
+	ciphertext := data[aes.BlockSize:]
+
+	if len(ciphertext)%aes.BlockSize != 0 {
+		return nil, fmt.Errorf("ciphertext is not a multiple of the block size")
+	}
+
+	cbc := cipher.NewCBCDecrypter(block, iv)
+	plaintext := make([]byte, len(ciphertext))
+	cbc.CryptBlocks(plaintext, ciphertext)
+
+	// Remove PKCS#7 padding
+	padLen := int(plaintext[len(plaintext)-1])
+	if padLen > aes.BlockSize || padLen > len(plaintext) {
+		return nil, fmt.Errorf("invalid padding")
+	}
+
+	// Validate padding
+	for i := len(plaintext) - padLen; i < len(plaintext); i++ {
+		if plaintext[i] != byte(padLen) {
+			return nil, fmt.Errorf("invalid padding")
+		}
+	}
+
+	return plaintext[:len(plaintext)-padLen], nil
+}
+
+func verifyPassphrase(keyCheck string, derivedKey []byte) error {
+	// Decode base64 key check
+	checkData, err := base64.StdEncoding.DecodeString(keyCheck)
+	if err != nil {
+		return fmt.Errorf("invalid key check encoding: %w", err)
+	}
+
+	// Create AES cipher
+	block, err := aes.NewCipher(derivedKey)
+	if err != nil {
+		return fmt.Errorf("cipher creation failed: %w", err)
+	}
+
+	// Create GCM mode
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return fmt.Errorf("GCM mode creation failed: %w", err)
+	}
+
+	// The nonce size should be 12 bytes for GCM
+	nonceSize := gcm.NonceSize()
+
+	if len(checkData) < nonceSize {
+		return fmt.Errorf("key check too short (%d bytes)", len(checkData))
+	}
+
+	// Extract nonce and ciphertext
+	nonce := checkData[:nonceSize]
+	ciphertext := checkData[nonceSize:]
+
+	// Try to decrypt
+	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
+	if err != nil {
+		return fmt.Errorf("incorrect passphrase: key verification failed")
+	}
+
+	// Confirm expected string
+	if string(plaintext) != "sietch-key-validation" {
+		return fmt.Errorf("key validation failed: unexpected content")
+	}
+
+	return nil
+}
+
+func verifyPassphraseWithFallback(keyCheck string, derivedKey []byte) error {
+	err := verifyPassphrase(keyCheck, derivedKey)
+	if err != nil && strings.Contains(err.Error(), "key check too short") {
+		// Try with legacy format (16-byte nonce)
+		fmt.Println("Warning: Attempting fallback with 16-byte nonce (legacy format)")
+		return verifyLegacyPassphrase(keyCheck, derivedKey)
+	}
+	return err
+}
+
+func verifyLegacyPassphrase(keyCheck string, derivedKey []byte) error {
+	// Decode base64 key check
+	checkData, err := base64.StdEncoding.DecodeString(keyCheck)
+	if err != nil {
+		return fmt.Errorf("invalid key check encoding: %w", err)
+	}
+
+	// Create AES cipher
+	block, err := aes.NewCipher(derivedKey)
+	if err != nil {
+		return fmt.Errorf("cipher creation failed: %w", err)
+	}
+
+	// Force 16-byte nonce size for legacy vaults
+	nonceSize := 16
+
+	if len(checkData) < nonceSize {
+		return fmt.Errorf("key check too short even for legacy format")
+	}
+
+	// Extract oversized nonce (16 bytes instead of 12)
+	nonce := checkData[:nonceSize]
+	ciphertext := checkData[nonceSize:]
+
+	// Use only the first 12 bytes of the nonce for GCM
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return fmt.Errorf("GCM mode creation failed: %w", err)
+	}
+
+	// Try to decrypt with the first 12 bytes of the 16-byte nonce
+	plaintext, err := gcm.Open(nil, nonce[:gcm.NonceSize()], ciphertext, nil)
+	if err != nil {
+		return fmt.Errorf("incorrect passphrase: key verification failed")
+	}
+
+	// Confirm expected string
+	if string(plaintext) != "sietch-key-validation" {
+		return fmt.Errorf("key validation failed: unexpected content")
+	}
+
+	fmt.Println("Warning: Successfully verified with legacy format. Consider reinitializing your vault.")
+	return nil
+}
+
+// NEW: Diagnostic function
+func printKeyDetails(cfg *config.VaultConfig) {
+	fmt.Println("=== Vault Key Diagnostics ===")
+
+	// Show AES config details
+	if cfg.Encryption.AESConfig != nil {
+		fmt.Printf("Mode: %s\n", cfg.Encryption.AESConfig.Mode)
+		fmt.Printf("KDF: %s\n", cfg.Encryption.AESConfig.KDF)
+
+		// Check nonce
+		if nonceStr := cfg.Encryption.AESConfig.Nonce; nonceStr != "" {
+			nonce, err := base64.StdEncoding.DecodeString(nonceStr)
+			if err != nil {
+				fmt.Printf("Nonce: [Invalid base64] %s\n", nonceStr)
+			} else {
+				fmt.Printf("Nonce: %d bytes (base64: %s)\n", len(nonce), nonceStr)
+			}
+		}
+
+		// Check key check
+		if keyCheck := cfg.Encryption.AESConfig.KeyCheck; keyCheck != "" {
+			data, err := base64.StdEncoding.DecodeString(keyCheck)
+			if err != nil {
+				fmt.Printf("Key check: [Invalid base64] %s\n", keyCheck)
+			} else {
+				fmt.Printf("Key check: %d bytes\n", len(data))
+			}
+		}
+	}
+	fmt.Println("=============================")
+}
+
+// Existing utility functions
 func generateNonce() (string, error) {
 	nonce := make([]byte, 12) // 12 bytes for GCM
 	if _, err := rand.Read(nonce); err != nil {
