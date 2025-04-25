@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 	"github.com/substantialcattle5/sietch/internal/config"
+	"github.com/substantialcattle5/sietch/internal/encryption/keys"
 	"github.com/substantialcattle5/sietch/internal/fs"
 	"github.com/substantialcattle5/sietch/internal/manifest"
 	"github.com/substantialcattle5/sietch/internal/ui"
@@ -128,6 +129,9 @@ func init() {
 	// Metadata vars
 	initCmd.Flags().StringVar(&author, "author", "", "Author metadata")
 	initCmd.Flags().StringSliceVar(&tags, "tags", []string{}, "Tags for vault")
+
+	// RSA Keys
+	initCmd.Flags().Int("rsa-bits", 4096, "Bit size for the RSA key pair (min 2048, recommended 4096)")
 
 	// Other options
 	initCmd.Flags().BoolVar(&interactiveMode, "interactive", false, "Use interactive mode")
@@ -252,6 +256,27 @@ func runInit(cmd *cobra.Command) error {
 		tags,
 		keyConfig,
 	)
+
+	// Initialize RSA config if not present
+	if configuration.Sync.RSA == nil {
+		configuration.Sync.RSA = &config.RSAConfig{
+			KeySize:      4096,
+			TrustedPeers: []config.TrustedPeer{},
+		}
+	}
+
+	// Get RSA key size from flags
+	rsaBits, err := cmd.Flags().GetInt("rsa-bits")
+	if err == nil && rsaBits >= 2048 {
+		configuration.Sync.RSA.KeySize = rsaBits
+	}
+
+	// Generate RSA key pair for sync
+	err = keys.GenerateRSAKeyPair(absVaultPath, &configuration)
+	if err != nil {
+		cleanupOnError(absVaultPath)
+		return fmt.Errorf("failed to generate RSA keys for sync: %w", err)
+	}
 
 	// Print the final configuration to verify it has the key
 	fmt.Println("\nFinal Vault Configuration:")

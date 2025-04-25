@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"path/filepath"
 	"time"
 )
 
@@ -66,8 +67,30 @@ type ChunkingConfig struct {
 
 // SyncConfig contains synchronization settings
 type SyncConfig struct {
-	Mode       string   `yaml:"mode"`
-	KnownPeers []string `yaml:"known_peers,omitempty"`
+	Mode         string     `yaml:"mode"`
+	KnownPeers   []string   `yaml:"known_peers,omitempty"`
+	RSA          *RSAConfig `yaml:"rsa,omitempty"`
+	Enabled      bool       `yaml:"enabled"`
+	AutoSync     bool       `yaml:"auto_sync,omitempty"`
+	SyncInterval string     `yaml:"sync_interval,omitempty"`
+}
+
+// RSAConfig contains RSA key configuration for sync operations
+type RSAConfig struct {
+	KeySize        int           `yaml:"key_size"`
+	PublicKeyPath  string        `yaml:"public_key_path,omitempty"`
+	PrivateKeyPath string        `yaml:"private_key_path,omitempty"`
+	Fingerprint    string        `yaml:"fingerprint,omitempty"`
+	TrustedPeers   []TrustedPeer `yaml:"trusted_peers,omitempty"`
+}
+
+// TrustedPeer stores information about a trusted peer
+type TrustedPeer struct {
+	ID           string    `yaml:"id"`
+	Name         string    `yaml:"name,omitempty"`
+	PublicKey    string    `yaml:"public_key"`
+	Fingerprint  string    `yaml:"fingerprint"`
+	TrustedSince time.Time `yaml:"trusted_since"`
 }
 
 // MetadataConfig contains user metadata
@@ -151,6 +174,19 @@ func BuildVaultConfig(
 	config.Sync.Mode = syncMode
 	config.Sync.KnownPeers = []string{} // Initialize as empty array
 
+	// Initialize RSA config for sync with defaults
+	config.Sync.RSA = &RSAConfig{
+		KeySize:        4096,
+		PublicKeyPath:  filepath.Join(".sietch", "sync", "sync_public.pem"),
+		PrivateKeyPath: filepath.Join(".sietch", "sync", "sync_private.pem"),
+		TrustedPeers:   []TrustedPeer{},
+	}
+
+	// Set advanced sync settings
+	config.Sync.Enabled = true
+	config.Sync.AutoSync = false
+	config.Sync.SyncInterval = "24h"
+
 	// Set metadata
 	config.Metadata.Author = author
 	config.Metadata.Tags = tags
@@ -179,9 +215,8 @@ func BuildVaultConfig(
 	return config
 }
 
-// BuildDefaultVaultConfig creates a config with sensible defaults
 func BuildDefaultVaultConfig(vaultID, vaultName, keyPath string) VaultConfig {
-	return BuildVaultConfig(
+	config := BuildVaultConfig(
 		vaultID,
 		vaultName,
 		"nilay@dune.net", // Default author
@@ -196,6 +231,18 @@ func BuildDefaultVaultConfig(vaultID, vaultName, keyPath string) VaultConfig {
 		[]string{"research", "desert", "offline"}, // Default tags
 		nil, // No key config by default - will be generated when actually creating a vault
 	)
+
+	// Ensure default RSA configuration is set
+	if config.Sync.RSA == nil {
+		config.Sync.RSA = &RSAConfig{
+			KeySize:        4096,
+			PublicKeyPath:  filepath.Join(".sietch", "sync", "sync_public.pem"),
+			PrivateKeyPath: filepath.Join(".sietch", "sync", "sync_private.pem"),
+			TrustedPeers:   []TrustedPeer{},
+		}
+	}
+
+	return config
 }
 
 // BuildDefaultAESConfig creates a default AES configuration
