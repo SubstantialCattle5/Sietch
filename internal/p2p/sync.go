@@ -25,10 +25,11 @@ import (
 
 const (
 	// Protocol IDs for different sync operations
-	ManifestProtocolID  = "/sietch/manifest/1.0.0"
-	ChunkProtocolID     = "/sietch/chunk/1.0.0"
-	KeyExchangeProtocol = "/sietch/key-exchange/1.0.0"
-	AuthProtocol        = "/sietch/auth/1.0.0"
+	ManifestProtocolID   = "/sietch/manifest/1.0.0"
+	ManifestProtocolIDv0 = "/sietch/manifest/0.9.0" // Fallback version
+	ChunkProtocolID      = "/sietch/chunk/1.0.0"
+	KeyExchangeProtocol  = "/sietch/key-exchange/1.0.0"
+	AuthProtocol         = "/sietch/auth/1.0.0"
 
 	// RSA encryption chunk size (must be smaller than key size to account for padding)
 	RSAChunkSize = 256 // For 2048-bit keys
@@ -36,13 +37,14 @@ const (
 
 // SyncService handles vault synchronization
 type SyncService struct {
-	host         host.Host
-	vaultMgr     *config.Manager
-	privateKey   *rsa.PrivateKey
-	publicKey    *rsa.PublicKey
-	rsaConfig    *config.RSAConfig
-	trustedPeers map[peer.ID]*PeerInfo
-	vaultConfig  *config.VaultConfig
+	host          host.Host
+	vaultMgr      *config.Manager
+	privateKey    *rsa.PrivateKey
+	publicKey     *rsa.PublicKey
+	rsaConfig     *config.RSAConfig
+	trustedPeers  map[peer.ID]*PeerInfo
+	vaultConfig   *config.VaultConfig
+	trustAllPeers bool // New flag to automatically trust all peers
 }
 
 // PeerInfo contains information about a trusted peer
@@ -67,13 +69,15 @@ type SyncResult struct {
 func NewSyncService(h host.Host, vm *config.Manager) (*SyncService, error) {
 	// Basic initialization without RSA security
 	s := &SyncService{
-		host:         h,
-		vaultMgr:     vm,
-		trustedPeers: make(map[peer.ID]*PeerInfo),
+		host:          h,
+		vaultMgr:      vm,
+		trustedPeers:  make(map[peer.ID]*PeerInfo),
+		trustAllPeers: true, // Trust all peers by default
 	}
 
 	// Register basic protocol handlers
 	h.SetStreamHandler(protocol.ID(ManifestProtocolID), s.handleManifestRequest)
+	h.SetStreamHandler(protocol.ID(ManifestProtocolIDv0), s.handleManifestRequest) // Support fallback version
 	h.SetStreamHandler(protocol.ID(ChunkProtocolID), s.handleChunkRequest)
 
 	return s, nil
@@ -94,13 +98,14 @@ func NewSecureSyncService(
 	}
 
 	s := &SyncService{
-		host:         h,
-		vaultMgr:     vm,
-		privateKey:   privateKey,
-		publicKey:    publicKey,
-		rsaConfig:    rsaConfig,
-		trustedPeers: make(map[peer.ID]*PeerInfo),
-		vaultConfig:  vaultConfig,
+		host:          h,
+		vaultMgr:      vm,
+		privateKey:    privateKey,
+		publicKey:     publicKey,
+		rsaConfig:     rsaConfig,
+		trustedPeers:  make(map[peer.ID]*PeerInfo),
+		vaultConfig:   vaultConfig,
+		trustAllPeers: true, // Trust all peers by default
 	}
 
 	// Load trusted peers from config
@@ -153,6 +158,7 @@ func NewSecureSyncService(
 func (s *SyncService) RegisterProtocols(ctx context.Context) {
 	// Register basic protocol handlers
 	s.host.SetStreamHandler(protocol.ID(ManifestProtocolID), s.handleManifestRequest)
+	s.host.SetStreamHandler(protocol.ID(ManifestProtocolIDv0), s.handleManifestRequest) // Support fallback version
 	s.host.SetStreamHandler(protocol.ID(ChunkProtocolID), s.handleChunkRequest)
 
 	// Register secure protocol handlers
@@ -160,6 +166,12 @@ func (s *SyncService) RegisterProtocols(ctx context.Context) {
 		s.host.SetStreamHandler(protocol.ID(KeyExchangeProtocol), s.handleKeyExchange)
 		s.host.SetStreamHandler(protocol.ID(AuthProtocol), s.handleAuthentication)
 	}
+}
+
+// SetTrustAllPeers sets whether to automatically trust all peers
+func (s *SyncService) SetTrustAllPeers(trustAll bool) {
+	s.trustAllPeers = trustAll
+	fmt.Printf("Trust all peers set to: %v\n", trustAll)
 }
 
 // handleKeyExchange handles key exchange requests from peers
@@ -171,7 +183,8 @@ func (s *SyncService) handleKeyExchange(stream network.Stream) {
 		return
 	}
 
-	// Read peer's public key
+	// Read peer's public key with timeout
+	stream.SetReadDeadline(time.Now().Add(30 * time.Second))
 	pemData, err := io.ReadAll(stream)
 	if err != nil {
 		fmt.Printf("Error reading peer's public key: %v\n", err)
@@ -208,6 +221,7 @@ func (s *SyncService) handleKeyExchange(stream network.Stream) {
 	fingerprint := base64.StdEncoding.EncodeToString(hash[:])
 
 	// Send our public key in response
+	stream.SetWriteDeadline(time.Now().Add(30 * time.Second))
 	ourPublicKeyDER, err := x509.MarshalPKIXPublicKey(s.publicKey)
 	if err != nil {
 		fmt.Printf("Failed to marshal our public key: %v\n", err)
@@ -226,7 +240,7 @@ func (s *SyncService) handleKeyExchange(stream network.Stream) {
 		return
 	}
 
-	// Store peer info temporarily
+	// Store peer info automatically
 	peerID := stream.Conn().RemotePeer()
 	s.trustedPeers[peerID] = &PeerInfo{
 		ID:           peerID,
@@ -242,7 +256,8 @@ func (s *SyncService) handleKeyExchange(stream network.Stream) {
 func (s *SyncService) handleAuthentication(stream network.Stream) {
 	defer stream.Close()
 
-	// Read challenge
+	// Read challenge with timeout
+	stream.SetReadDeadline(time.Now().Add(30 * time.Second))
 	var challenge struct {
 		Challenge []byte `json:"challenge"`
 		Sender    string `json:"sender"`
@@ -261,7 +276,8 @@ func (s *SyncService) handleAuthentication(stream network.Stream) {
 		return
 	}
 
-	// Send response
+	// Send response with timeout
+	stream.SetWriteDeadline(time.Now().Add(30 * time.Second))
 	response := struct {
 		Signature []byte `json:"signature"`
 		VaultID   string `json:"vault_id"`
@@ -277,17 +293,16 @@ func (s *SyncService) handleAuthentication(stream network.Stream) {
 	}
 }
 
-// handleManifestRequest processes requests for vault manifests - now with authentication check
+// handleManifestRequest processes requests for vault manifests
 func (s *SyncService) handleManifestRequest(stream network.Stream) {
 	defer stream.Close()
 
 	peerID := stream.Conn().RemotePeer()
 
-	// If we have RSA keys, verify the peer is trusted
-	if s.privateKey != nil {
+	// If we have RSA keys and not trusting all peers, verify the peer is trusted
+	if s.privateKey != nil && !s.trustAllPeers {
 		if _, ok := s.trustedPeers[peerID]; !ok {
 			fmt.Printf("Rejecting manifest request from untrusted peer: %s\n", peerID.String())
-
 			// Send error response
 			errorResponse := struct {
 				Error string `json:"error"`
@@ -314,21 +329,36 @@ func (s *SyncService) handleManifestRequest(stream network.Stream) {
 		return
 	}
 
-	// Encode and send the manifest
-	if err := json.NewEncoder(stream).Encode(manifest); err != nil {
+	// Prepare response with correct structure
+	response := struct {
+		Files []*config.FileManifest `json:"files"`
+		Error string                 `json:"error,omitempty"`
+	}{
+		Files: make([]*config.FileManifest, len(manifest.Files)),
+	}
+
+	// Convert from value to pointer slices
+	for i := range manifest.Files {
+		fileCopy := manifest.Files[i] // Create a copy to avoid aliasing issues
+		response.Files[i] = &fileCopy
+	}
+
+	// Encode and send the manifest with timeout
+	stream.SetWriteDeadline(time.Now().Add(30 * time.Second))
+	if err := json.NewEncoder(stream).Encode(response); err != nil {
 		fmt.Printf("Error sending manifest: %v\n", err)
 	}
 }
 
-// handleChunkRequest processes requests for chunks - now with authentication and encryption
+// handleChunkRequest processes requests for chunks
 func (s *SyncService) handleChunkRequest(stream network.Stream) {
 	defer stream.Close()
 
 	peerID := stream.Conn().RemotePeer()
 
-	// If we have RSA keys, verify the peer is trusted
+	// If we have RSA keys and not trusting all peers, verify the peer is trusted
 	var peerInfo *PeerInfo
-	if s.privateKey != nil {
+	if s.privateKey != nil && !s.trustAllPeers {
 		var ok bool
 		peerInfo, ok = s.trustedPeers[peerID]
 		if !ok {
@@ -345,9 +375,12 @@ func (s *SyncService) handleChunkRequest(stream network.Stream) {
 		}
 	}
 
-	// Read the chunk hash
+	// Read the chunk hash with timeout
+	stream.SetReadDeadline(time.Now().Add(30 * time.Second))
 	var chunkRequest struct {
-		Hash string `json:"hash"`
+		Hash          string `json:"hash"`
+		EncryptedHash string `json:"encrypted_hash,omitempty"`
+		IsEncrypted   bool   `json:"is_encrypted"`
 	}
 
 	if err := json.NewDecoder(stream).Decode(&chunkRequest); err != nil {
@@ -355,10 +388,23 @@ func (s *SyncService) handleChunkRequest(stream network.Stream) {
 		return
 	}
 
-	// Get the chunk data
-	chunkData, err := s.vaultMgr.GetChunk(chunkRequest.Hash)
+	// First try using the primary hash
+	chunkHash := chunkRequest.Hash
+	fmt.Printf("Looking for chunk with hash: %s\n", chunkHash)
+	chunkData, err := s.vaultMgr.GetChunk(chunkHash)
+
+	// If that fails and we have an encrypted hash, try that
+	if err != nil && chunkRequest.EncryptedHash != "" {
+		fmt.Printf("Chunk not found, trying encrypted hash: %s\n", chunkRequest.EncryptedHash)
+		chunkData, err = s.vaultMgr.GetChunk(chunkRequest.EncryptedHash)
+		if err == nil {
+			fmt.Printf("Found chunk using encrypted hash\n")
+		}
+	}
+
+	// If still not found, return error
 	if err != nil {
-		// Send error response
+		fmt.Printf("Chunk not found with either hash\n")
 		response := struct {
 			Error string `json:"error"`
 		}{
@@ -376,7 +422,8 @@ func (s *SyncService) handleChunkRequest(stream network.Stream) {
 		encryptedData = chunkData
 	}
 
-	// Send the chunk data
+	// Send the chunk data with timeout
+	stream.SetWriteDeadline(time.Now().Add(30 * time.Second))
 	response := struct {
 		Size      int    `json:"size"`
 		Data      []byte `json:"data"`
@@ -451,6 +498,19 @@ func (s *SyncService) decryptLargeData(data []byte) []byte {
 
 // VerifyAndExchangeKeys performs key exchange with a peer
 func (s *SyncService) VerifyAndExchangeKeys(ctx context.Context, peerID peer.ID) (bool, error) {
+	// Always trust peers if trustAllPeers is true
+	if s.trustAllPeers {
+		fmt.Printf("Automatically trusting peer %s (all peers trusted)\n", peerID.String())
+		// If we don't have the peer's info yet, add a placeholder
+		if _, ok := s.trustedPeers[peerID]; !ok {
+			s.trustedPeers[peerID] = &PeerInfo{
+				ID:           peerID,
+				TrustedSince: time.Now(),
+			}
+		}
+		return true, nil
+	}
+
 	// Check if already trusted
 	if _, ok := s.trustedPeers[peerID]; ok {
 		return true, nil
@@ -461,14 +521,19 @@ func (s *SyncService) VerifyAndExchangeKeys(ctx context.Context, peerID peer.ID)
 		return true, nil
 	}
 
+	// Create a context with timeout
+	timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
 	// Open a stream for key exchange
-	stream, err := s.host.NewStream(ctx, peerID, protocol.ID(KeyExchangeProtocol))
+	stream, err := s.host.NewStream(timeoutCtx, peerID, protocol.ID(KeyExchangeProtocol))
 	if err != nil {
 		return false, fmt.Errorf("failed to open key exchange stream: %w", err)
 	}
 	defer stream.Close()
 
-	// Send our public key
+	// Send our public key with timeout
+	stream.SetWriteDeadline(time.Now().Add(30 * time.Second))
 	publicKeyDER, err := x509.MarshalPKIXPublicKey(s.publicKey)
 	if err != nil {
 		return false, fmt.Errorf("failed to marshal public key: %w", err)
@@ -485,7 +550,8 @@ func (s *SyncService) VerifyAndExchangeKeys(ctx context.Context, peerID peer.ID)
 		return false, fmt.Errorf("failed to send public key: %w", err)
 	}
 
-	// Receive peer's public key
+	// Receive peer's public key with timeout
+	stream.SetReadDeadline(time.Now().Add(30 * time.Second))
 	pemData, err := io.ReadAll(stream)
 	if err != nil {
 		return false, fmt.Errorf("failed to read peer's public key: %w", err)
@@ -516,12 +582,17 @@ func (s *SyncService) VerifyAndExchangeKeys(ctx context.Context, peerID peer.ID)
 	hash := sha256.Sum256(peerKeyDER)
 	fingerprint := base64.StdEncoding.EncodeToString(hash[:])
 
-	// Store peer info temporarily
+	// Store peer info
 	s.trustedPeers[peerID] = &PeerInfo{
 		ID:           peerID,
 		PublicKey:    peerPubKey,
 		Fingerprint:  fingerprint,
 		TrustedSince: time.Now(),
+	}
+
+	// Skip authentication when trusting all peers
+	if s.trustAllPeers {
+		return true, nil
 	}
 
 	// Perform authentication challenge
@@ -530,12 +601,16 @@ func (s *SyncService) VerifyAndExchangeKeys(ctx context.Context, peerID peer.ID)
 		return false, fmt.Errorf("authentication failed: %w", err)
 	}
 
-	return false, nil // Not fully trusted until user confirms
+	return true, nil
 }
 
 // authenticatePeer sends an authentication challenge to verify peer identity
 func (s *SyncService) authenticatePeer(ctx context.Context, peerID peer.ID) error {
-	stream, err := s.host.NewStream(ctx, peerID, protocol.ID(AuthProtocol))
+	// Create a context with timeout
+	timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	stream, err := s.host.NewStream(timeoutCtx, peerID, protocol.ID(AuthProtocol))
 	if err != nil {
 		return fmt.Errorf("failed to open authentication stream: %w", err)
 	}
@@ -548,7 +623,8 @@ func (s *SyncService) authenticatePeer(ctx context.Context, peerID peer.ID) erro
 		return fmt.Errorf("failed to generate challenge: %w", err)
 	}
 
-	// Send challenge
+	// Send challenge with timeout
+	stream.SetWriteDeadline(time.Now().Add(30 * time.Second))
 	request := struct {
 		Challenge []byte `json:"challenge"`
 		Sender    string `json:"sender"`
@@ -561,7 +637,8 @@ func (s *SyncService) authenticatePeer(ctx context.Context, peerID peer.ID) erro
 		return fmt.Errorf("failed to send challenge: %w", err)
 	}
 
-	// Read response
+	// Read response with timeout
+	stream.SetReadDeadline(time.Now().Add(30 * time.Second))
 	var response struct {
 		Signature []byte `json:"signature"`
 		VaultID   string `json:"vault_id"`
@@ -611,34 +688,35 @@ func (s *SyncService) AddTrustedPeer(ctx context.Context, peerID peer.ID) error 
 	// Add to permanent trusted peers in config
 	if s.rsaConfig != nil {
 		// Convert public key to PEM
-		publicKeyDER, err := x509.MarshalPKIXPublicKey(peerInfo.PublicKey)
-		if err != nil {
-			return fmt.Errorf("failed to marshal public key: %w", err)
-		}
+		if peerInfo.PublicKey != nil {
+			publicKeyDER, err := x509.MarshalPKIXPublicKey(peerInfo.PublicKey)
+			if err != nil {
+				return fmt.Errorf("failed to marshal public key: %w", err)
+			}
 
-		publicKeyBlock := &pem.Block{
-			Type:  "PUBLIC KEY",
-			Bytes: publicKeyDER,
-		}
+			publicKeyBlock := &pem.Block{
+				Type:  "PUBLIC KEY",
+				Bytes: publicKeyDER,
+			}
+			publicKeyPEM := string(pem.EncodeToMemory(publicKeyBlock))
 
-		publicKeyPEM := string(pem.EncodeToMemory(publicKeyBlock))
+			// Create trusted peer entry
+			trustedPeer := config.TrustedPeer{
+				ID:           peerID.String(),
+				Name:         peerInfo.Name,
+				PublicKey:    publicKeyPEM,
+				Fingerprint:  peerInfo.Fingerprint,
+				TrustedSince: time.Now(),
+			}
 
-		// Create trusted peer entry
-		trustedPeer := config.TrustedPeer{
-			ID:           peerID.String(),
-			Name:         peerInfo.Name,
-			PublicKey:    publicKeyPEM,
-			Fingerprint:  peerInfo.Fingerprint,
-			TrustedSince: time.Now(),
-		}
+			// Add to config
+			s.rsaConfig.TrustedPeers = append(s.rsaConfig.TrustedPeers, trustedPeer)
 
-		// Add to config
-		s.rsaConfig.TrustedPeers = append(s.rsaConfig.TrustedPeers, trustedPeer)
-
-		// Save updated config
-		err = s.vaultMgr.SaveConfig(s.vaultConfig)
-		if err != nil {
-			return fmt.Errorf("failed to save updated config: %w", err)
+			// Save updated config
+			err = s.vaultMgr.SaveConfig(s.vaultConfig)
+			if err != nil {
+				return fmt.Errorf("failed to save updated config: %w", err)
+			}
 		}
 	}
 
@@ -647,14 +725,32 @@ func (s *SyncService) AddTrustedPeer(ctx context.Context, peerID peer.ID) error 
 
 // SyncWithPeer performs a sync operation with a specific peer
 func (s *SyncService) SyncWithPeer(ctx context.Context, peerID peer.ID) (*SyncResult, error) {
+	// Create a context with timeout for the entire operation
+	timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
+
 	startTime := time.Now()
 	result := &SyncResult{}
 
+	// First verify and exchange keys with peer (will auto-trust if trustAllPeers is true)
+	fmt.Printf("Starting key verification with peer %s...\n", peerID.String())
+	trusted, err := s.VerifyAndExchangeKeys(timeoutCtx, peerID)
+	if err != nil {
+		return nil, fmt.Errorf("key exchange failed: %w", err)
+	}
+
+	if !trusted {
+		return nil, fmt.Errorf("peer %s is not trusted", peerID.String())
+	}
+	fmt.Printf("Peer %s is trusted, proceeding with sync\n", peerID.String())
+
 	// Step 1: Get remote manifest
-	remoteManifest, err := s.getRemoteManifest(ctx, peerID)
+	fmt.Printf("Retrieving manifest from peer %s...\n", peerID.String())
+	remoteManifest, err := s.getRemoteManifest(timeoutCtx, peerID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get remote manifest: %v", err)
 	}
+	fmt.Printf("Retrieved manifest from peer with %d files\n", len(remoteManifest.Files))
 
 	// Step 2: Get local manifest
 	localManifest, err := s.vaultMgr.GetManifest()
@@ -664,22 +760,42 @@ func (s *SyncService) SyncWithPeer(ctx context.Context, peerID peer.ID) (*SyncRe
 
 	// Step 3: Find missing chunks
 	missingChunks := s.findMissingChunks(localManifest, remoteManifest)
+	fmt.Printf("Found %d missing chunks to fetch\n", len(missingChunks))
 
 	// Step 4: Fetch missing chunks
-	for _, chunkHash := range missingChunks {
+	for i, chunkHash := range missingChunks {
+		if i%10 == 0 {
+			fmt.Printf("Fetching chunk %d of %d...\n", i+1, len(missingChunks))
+		}
+
 		exists, _ := s.vaultMgr.ChunkExists(chunkHash)
 		if exists {
 			result.ChunksDeduplicated++
 			continue
 		}
 
-		chunkData, size, err := s.fetchChunk(ctx, peerID, chunkHash)
+		// Find associated encrypted hash if any
+		var encryptedHash string
+		for _, file := range remoteManifest.Files {
+			for _, chunk := range file.Chunks {
+				if chunk.Hash == chunkHash && chunk.EncryptedHash != "" {
+					encryptedHash = chunk.EncryptedHash
+					break
+				}
+			}
+			if encryptedHash != "" {
+				break
+			}
+		}
+
+		// Pass the encrypted hash directly to fetchChunk
+		chunkData, size, err := s.fetchChunk(timeoutCtx, peerID, chunkHash, encryptedHash)
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch chunk %s: %v", chunkHash, err)
 		}
 
-		// Store the chunk
-		if err := s.vaultMgr.StoreChunk(chunkHash, chunkData); err != nil {
+		// Store the chunk with both hashes if needed
+		if err := s.StoreChunk(chunkHash, chunkData, encryptedHash); err != nil {
 			return nil, fmt.Errorf("failed to store chunk %s: %v", chunkHash, err)
 		}
 
@@ -696,17 +812,32 @@ func (s *SyncService) SyncWithPeer(ctx context.Context, peerID peer.ID) (*SyncRe
 	}
 
 	result.Duration = time.Since(startTime)
+	fmt.Printf("Sync completed in %v: %d files, %d chunks transferred, %d chunks reused\n",
+		result.Duration, result.FileCount, result.ChunksTransferred, result.ChunksDeduplicated)
+
 	return result, nil
 }
 
 // getRemoteManifest fetches the manifest from a remote peer
 func (s *SyncService) getRemoteManifest(ctx context.Context, peerID peer.ID) (*config.Manifest, error) {
-	// Open a stream to the peer
-	stream, err := s.host.NewStream(ctx, peerID, protocol.ID(ManifestProtocolID))
+	// Create a context with timeout
+	timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	// Try current protocol version first
+	stream, err := s.host.NewStream(timeoutCtx, peerID, protocol.ID(ManifestProtocolID))
+
+	// If current version fails, try fallback
 	if err != nil {
-		return nil, err
+		stream, err = s.host.NewStream(timeoutCtx, peerID, protocol.ID(ManifestProtocolIDv0))
+		if err != nil {
+			return nil, fmt.Errorf("failed to connect with any protocol version: %w", err)
+		}
 	}
 	defer stream.Close()
+
+	// Set read deadline
+	stream.SetReadDeadline(time.Now().Add(30 * time.Second))
 
 	// Read the manifest
 	var response struct {
@@ -715,7 +846,7 @@ func (s *SyncService) getRemoteManifest(ctx context.Context, peerID peer.ID) (*c
 	}
 
 	if err := json.NewDecoder(stream).Decode(&response); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to decode manifest: %w", err)
 	}
 
 	if response.Error != "" {
@@ -741,20 +872,44 @@ func (s *SyncService) findMissingChunks(local, remote *config.Manifest) []string
 
 	// Build a map of local chunks for quick lookup
 	localChunks := make(map[string]bool)
+	encryptedToRegularHash := make(map[string]string) // Track relationship between hashes
+
+	// Log all chunk hashes for debugging
+	fmt.Println("Local chunks:")
 	for _, file := range local.Files {
 		for _, chunk := range file.Chunks {
 			localChunks[chunk.Hash] = true
+			fmt.Printf("  - Regular hash: %s\n", chunk.Hash)
+
+			// Also add encrypted hash if available
+			if chunk.EncryptedHash != "" {
+				localChunks[chunk.EncryptedHash] = true
+				encryptedToRegularHash[chunk.EncryptedHash] = chunk.Hash
+				fmt.Printf("    Encrypted hash: %s\n", chunk.EncryptedHash)
+			}
 		}
 	}
 
 	// Find chunks in remote that don't exist locally
+	fmt.Println("Remote chunks:")
 	for _, file := range remote.Files {
 		for _, chunk := range file.Chunks {
-			if !localChunks[chunk.Hash] {
-				// Check if we already added this chunk to the missing list
-				alreadyAdded := slices.Contains(missingChunks, chunk.Hash)
+			fmt.Printf("  - Checking remote chunk: %s\n", chunk.Hash)
+			if chunk.EncryptedHash != "" {
+				fmt.Printf("    With encrypted hash: %s\n", chunk.EncryptedHash)
+			}
+
+			// Check if either regular or encrypted hash exists locally
+			regularExists := localChunks[chunk.Hash]
+			encryptedExists := chunk.EncryptedHash != "" && localChunks[chunk.EncryptedHash]
+
+			if !regularExists && !encryptedExists {
+				// This chunk is missing completely
+				chunkToFetch := chunk.Hash
+				alreadyAdded := slices.Contains(missingChunks, chunkToFetch)
 				if !alreadyAdded {
-					missingChunks = append(missingChunks, chunk.Hash)
+					fmt.Printf("  - Adding missing chunk: %s\n", chunkToFetch)
+					missingChunks = append(missingChunks, chunkToFetch)
 				}
 			}
 		}
@@ -764,24 +919,42 @@ func (s *SyncService) findMissingChunks(local, remote *config.Manifest) []string
 }
 
 // fetchChunk downloads a chunk from a remote peer
-func (s *SyncService) fetchChunk(ctx context.Context, peerID peer.ID, hash string) ([]byte, int, error) {
+func (s *SyncService) fetchChunk(ctx context.Context, peerID peer.ID, hash string, encryptedHash string) ([]byte, int, error) {
+	// Create a context with timeout
+	timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	// Use the provided encrypted hash instead of looking it up
+	isEncrypted := encryptedHash != "" && s.privateKey != nil
+
 	// Open a stream to the peer
-	stream, err := s.host.NewStream(ctx, peerID, protocol.ID(ChunkProtocolID))
+	stream, err := s.host.NewStream(timeoutCtx, peerID, protocol.ID(ChunkProtocolID))
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, fmt.Errorf("failed to open chunk stream: %w", err)
 	}
 	defer stream.Close()
 
-	// Send chunk request
+	// Set write deadline
+	stream.SetWriteDeadline(time.Now().Add(30 * time.Second))
+
+	// Send chunk request with both hash types
 	request := struct {
-		Hash string `json:"hash"`
+		Hash          string `json:"hash"`
+		EncryptedHash string `json:"encrypted_hash,omitempty"`
+		IsEncrypted   bool   `json:"is_encrypted"`
 	}{
-		Hash: hash,
+		Hash:          hash,
+		EncryptedHash: encryptedHash,
+		IsEncrypted:   isEncrypted,
 	}
 
+	fmt.Printf("Requesting chunk with hash: %s, encrypted hash: %s\n", hash, encryptedHash)
 	if err := json.NewEncoder(stream).Encode(request); err != nil {
-		return nil, 0, err
+		return nil, 0, fmt.Errorf("failed to send chunk request: %w", err)
 	}
+
+	// Set read deadline
+	stream.SetReadDeadline(time.Now().Add(30 * time.Second))
 
 	// Read response
 	var response struct {
@@ -792,7 +965,7 @@ func (s *SyncService) fetchChunk(ctx context.Context, peerID peer.ID, hash strin
 	}
 
 	if err := json.NewDecoder(stream).Decode(&response); err != nil {
-		return nil, 0, err
+		return nil, 0, fmt.Errorf("failed to decode chunk response: %w", err)
 	}
 
 	if response.Error != "" {
@@ -808,4 +981,22 @@ func (s *SyncService) fetchChunk(ctx context.Context, peerID peer.ID, hash strin
 	}
 
 	return chunkData, response.Size, nil
+}
+
+// StoreChunk stores a chunk and handles the relationship between regular and encrypted hashes
+func (s *SyncService) StoreChunk(hash string, data []byte, encryptedHash string) error {
+	// Store the chunk with the primary hash
+	if err := s.vaultMgr.StoreChunk(hash, data); err != nil {
+		return fmt.Errorf("failed to store chunk with regular hash: %w", err)
+	}
+
+	// If we have an encrypted hash, store with that too
+	if encryptedHash != "" {
+		if err := s.vaultMgr.StoreChunk(encryptedHash, data); err != nil {
+			fmt.Printf("Warning: Failed to store chunk with encrypted hash: %v\n", err)
+			// Continue anyway since we stored it with the regular hash
+		}
+	}
+
+	return nil
 }

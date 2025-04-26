@@ -65,6 +65,7 @@ func (m *Manager) GetManifest() (*Manifest, error) {
 // GetChunk retrieves a chunk by its hash
 func (m *Manager) GetChunk(hash string) ([]byte, error) {
 	chunkPath := filepath.Join(m.vaultRoot, ".sietch", "chunks", hash)
+	fmt.Printf("chunk path %v\n", chunkPath) // Added newline here
 
 	// Check if chunk exists
 	if _, err := os.Stat(chunkPath); os.IsNotExist(err) {
