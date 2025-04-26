@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 
@@ -156,24 +157,38 @@ func (m *Manager) GetConfig() (*VaultConfig, error) {
 
 // SaveConfig writes the vault configuration to disk
 func (m *Manager) SaveConfig(config *VaultConfig) error {
+	log.Printf("Saving vault configuration to %s", m.vaultRoot)
 	configPath := filepath.Join(m.vaultRoot, "vault.yaml")
 
 	// Ensure .sietch directory exists
 	sietchDir := filepath.Join(m.vaultRoot, ".sietch")
+	// log.Printf("Ensuring directory exists: %s", sietchDir)
 	if err := os.MkdirAll(sietchDir, 0755); err != nil {
+		// log.Printf("ERROR: Failed to create directory %s: %v", sietchDir, err)
 		return fmt.Errorf("failed to create .sietch directory: %v", err)
 	}
+	// log.Printf("Directory verified: %s", sietchDir)
 
 	// Marshal configuration to YAML
+	// log.Printf("Marshaling configuration to YAML")
 	data, err := yaml.Marshal(config)
 	if err != nil {
+		// log.Printf("ERROR: Failed to marshal configuration: %v", err)
 		return fmt.Errorf("failed to marshal configuration: %v", err)
 	}
 
+	// // Pretty print full YAML to logs
+	// log.Println("==== FULL CONFIG DUMP START ====")
+	// log.Println(string(data))
+	// log.Println("==== FULL CONFIG DUMP END ====")
+
 	// Write to file
+	// log.Printf("Writing configuration to %s", configPath)
 	if err := os.WriteFile(configPath, data, 0644); err != nil {
+		log.Printf("ERROR: Failed to write configuration to %s: %v", configPath, err)
 		return fmt.Errorf("failed to write configuration file: %v", err)
 	}
+	// log.Printf("Successfully saved vault configuration to %s", configPath)
 
 	return nil
 }
@@ -181,9 +196,14 @@ func (m *Manager) SaveConfig(config *VaultConfig) error {
 // SaveVaultConfig saves the vault configuration
 // This is a shorthand for backward compatibility
 func SaveVaultConfig(vaultRoot string, config *VaultConfig) error {
+	log.Printf("SaveVaultConfig: Creating manager for vault root: %s", vaultRoot)
+
 	manager, err := NewManager(vaultRoot)
 	if err != nil {
+		log.Printf("ERROR: Failed to create manager for %s: %v", vaultRoot, err)
 		return err
 	}
+
+	log.Printf("SaveVaultConfig: Delegating to Manager.SaveConfig")
 	return manager.SaveConfig(config)
 }

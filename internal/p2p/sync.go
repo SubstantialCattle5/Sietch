@@ -762,39 +762,73 @@ func (s *SyncService) AddTrustedPeer(ctx context.Context, peerID peer.ID) error 
 	if !ok {
 		return fmt.Errorf("peer not found in temporary trusted list")
 	}
+
 	// Add to permanent trusted peers in config
-	if s.rsaConfig != nil {
-		// Convert public key to PEM
-		if peerInfo.PublicKey != nil {
-			publicKeyDER, err := x509.MarshalPKIXPublicKey(peerInfo.PublicKey)
-			if err != nil {
-				return fmt.Errorf("failed to marshal public key: %w", err)
-			}
+	if s.rsaConfig != nil && peerInfo.PublicKey != nil {
+		// First, check if this peer already exists in the trusted peers list
+		if s.rsaConfig.TrustedPeers == nil {
+			s.rsaConfig.TrustedPeers = []config.TrustedPeer{}
+		}
 
-			publicKeyBlock := &pem.Block{
-				Type:  "PUBLIC KEY",
-				Bytes: publicKeyDER,
-			}
-			publicKeyPEM := string(pem.EncodeToMemory(publicKeyBlock))
-
-			// Create trusted peer entry
-			trustedPeer := config.TrustedPeer{
-				ID:           peerID.String(),
-				Name:         peerInfo.Name,
-				PublicKey:    publicKeyPEM,
-				Fingerprint:  peerInfo.Fingerprint,
-				TrustedSince: time.Now(),
-			}
-
-			// Add to config
-			s.rsaConfig.TrustedPeers = append(s.rsaConfig.TrustedPeers, trustedPeer)
-
-			// Save updated config
-			err = s.vaultMgr.SaveConfig(s.vaultConfig)
-			if err != nil {
-				return fmt.Errorf("failed to save updated config: %w", err)
+		// Check for existing peer by ID or fingerprint
+		existingPeer := false
+		for _, peer := range s.rsaConfig.TrustedPeers {
+			if peer.ID == peerID.String() || peer.Fingerprint == peerInfo.Fingerprint {
+				existingPeer = true
+				fmt.Printf("Peer already in trusted list (ID: %s, Fingerprint: %s)\n",
+					peer.ID, peer.Fingerprint)
+				break
 			}
 		}
+
+		if existingPeer {
+			// Peer already exists, no need to add again
+			return nil
+		}
+
+		// Convert public key to PEM
+		publicKeyDER, err := x509.MarshalPKIXPublicKey(peerInfo.PublicKey)
+		if err != nil {
+			return fmt.Errorf("failed to marshal public key: %w", err)
+		}
+
+		publicKeyBlock := &pem.Block{
+			Type:  "PUBLIC KEY",
+			Bytes: publicKeyDER,
+		}
+		publicKeyPEM := string(pem.EncodeToMemory(publicKeyBlock))
+
+		// Create trusted peer entry
+		trustedPeer := config.TrustedPeer{
+			ID:           peerID.String(),
+			Name:         peerInfo.Name,
+			PublicKey:    publicKeyPEM,
+			Fingerprint:  peerInfo.Fingerprint,
+			TrustedSince: time.Now(),
+		}
+
+		// Add to config
+		s.rsaConfig.TrustedPeers = append(s.rsaConfig.TrustedPeers, trustedPeer)
+
+		// Make sure vaultConfig is updated with the latest rsaConfig
+		if s.vaultConfig != nil {
+			s.vaultConfig.Sync.RSA = s.rsaConfig
+		}
+
+		// Save updated config
+		if err := s.vaultMgr.SaveConfig(s.vaultConfig); err != nil {
+			return fmt.Errorf("failed to save updated config: %w", err)
+		}
+
+		// // Pretty print newly trusted peer
+		// data, err := yaml.Marshal(trustedPeer)
+		// if err != nil {
+		// 	fmt.Printf("ERROR: Failed to marshal trusted peer: %v\n", err)
+		// } else {
+		// 	fmt.Println("=========== NEW TRUSTED PEER ===========")
+		// 	fmt.Println(string(data))
+		// 	fmt.Println("=========== END TRUSTED PEER ===========")
+		// }
 	}
 
 	return nil
