@@ -5,14 +5,19 @@ package cmd
 
 import (
 	"context"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
 	"github.com/libp2p/go-libp2p"
 	"github.com/spf13/cobra"
+	"github.com/substantialcattle5/sietch/internal/config"
 	"github.com/substantialcattle5/sietch/internal/p2p"
 )
 
@@ -37,6 +42,16 @@ Example:
 		continuous, _ := cmd.Flags().GetBool("continuous")
 		port, _ := cmd.Flags().GetInt("port")
 		verbose, _ := cmd.Flags().GetBool("verbose")
+		vaultPath, _ := cmd.Flags().GetString("vault-path")
+
+		// If no vault path specified, use current directory
+		if vaultPath == "" {
+			var err error
+			vaultPath, err = os.Getwd()
+			if err != nil {
+				return fmt.Errorf("failed to get current directory: %v", err)
+			}
+		}
 
 		// Create a context with cancellation
 		ctx, cancel := context.WithCancel(context.Background())
@@ -72,6 +87,89 @@ Example:
 			for _, addr := range host.Addrs() {
 				fmt.Printf("  %s/p2p/%s\n", addr, host.ID().String())
 			}
+		}
+
+		// Create a vault manager
+		vaultMgr, err := config.NewManager(vaultPath)
+		if err != nil {
+			return fmt.Errorf("failed to create vault manager: %v", err)
+		}
+
+		// Get vault config
+		vaultConfig, err := vaultMgr.GetConfig()
+		if err != nil {
+			return fmt.Errorf("failed to load vault configuration: %v", err)
+		}
+
+		// Check if RSA is enabled
+		var syncService *p2p.SyncService
+		if vaultConfig.Sync.Enabled && vaultConfig.Sync.RSA != nil {
+			// Load private key
+			privateKeyPath := filepath.Join(vaultPath, vaultConfig.Sync.RSA.PrivateKeyPath)
+			privateKeyData, err := os.ReadFile(privateKeyPath)
+			if err != nil {
+				return fmt.Errorf("failed to read private key: %v", err)
+			}
+
+			// Parse private key
+			block, _ := pem.Decode(privateKeyData)
+			if block == nil || block.Type != "RSA PRIVATE KEY" {
+				return fmt.Errorf("failed to decode private key")
+			}
+
+			privateKey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+			if err != nil {
+				return fmt.Errorf("failed to parse private key: %v", err)
+			}
+
+			// Load public key
+			publicKeyPath := filepath.Join(vaultPath, vaultConfig.Sync.RSA.PublicKeyPath)
+			publicKeyData, err := os.ReadFile(publicKeyPath)
+			if err != nil {
+				return fmt.Errorf("failed to read public key: %v", err)
+			}
+
+			// Parse public key
+			pubBlock, _ := pem.Decode(publicKeyData)
+			if pubBlock == nil || pubBlock.Type != "PUBLIC KEY" {
+				return fmt.Errorf("failed to decode public key")
+			}
+
+			pub, err := x509.ParsePKIXPublicKey(pubBlock.Bytes)
+			if err != nil {
+				return fmt.Errorf("failed to parse public key: %v", err)
+			}
+
+			publicKey, ok := pub.(*rsa.PublicKey)
+			if !ok {
+				return fmt.Errorf("public key is not an RSA key")
+			}
+
+			// Create RSA config
+			rsaConfig := &config.RSAConfig{
+				KeySize:        vaultConfig.Sync.RSA.KeySize,
+				TrustedPeers:   vaultConfig.Sync.RSA.TrustedPeers,
+				PublicKeyPath:  vaultConfig.Sync.RSA.PublicKeyPath,
+				PrivateKeyPath: vaultConfig.Sync.RSA.PrivateKeyPath,
+				Fingerprint:    vaultConfig.Sync.RSA.Fingerprint,
+			}
+
+			fmt.Printf("====================RSA config%+v\n", rsaConfig)
+
+			// Create secure sync service
+			syncService, err = p2p.NewSecureSyncService(host, vaultMgr, privateKey, publicKey, rsaConfig)
+			if err != nil {
+				return fmt.Errorf("failed to create sync service: %v", err)
+			}
+
+			fmt.Println("🔐 RSA key exchange enabled with fingerprint:", rsaConfig.Fingerprint)
+		} else {
+			// Create basic sync service without RSA
+			syncService, err = p2p.NewSyncService(host, vaultMgr)
+			if err != nil {
+				return fmt.Errorf("failed to create sync service: %v", err)
+			}
+			fmt.Println("⚠️ Warning: RSA key exchange not enabled in vault config")
 		}
 
 		// Create the discovery factory
@@ -133,18 +231,37 @@ Example:
 					fmt.Printf("     - %s\n", addr.String())
 				}
 
-				// Try connecting to the peer if in verbose mode
-				if verbose {
-					fmt.Printf("   Attempting connection... ")
-					connectCtx, connectCancel := context.WithTimeout(ctx, 5*time.Second)
-					if err := host.Connect(connectCtx, peer); err != nil {
-						fmt.Printf("failed: %v\n", err)
-					} else {
-						fmt.Printf("success!\n")
-					}
+				// Connect to the peer and exchange keys
+				fmt.Printf("   Connecting and exchanging keys... ")
+				connectCtx, connectCancel := context.WithTimeout(ctx, 10*time.Second)
+				if err := host.Connect(connectCtx, peer); err != nil {
+					fmt.Printf("connection failed: %v\n", err)
 					connectCancel()
+					continue
 				}
-				fmt.Println()
+
+				// Exchange keys
+				trusted, err := syncService.VerifyAndExchangeKeys(connectCtx, peer.ID)
+				connectCancel()
+
+				if err != nil {
+					fmt.Printf("key exchange failed: %v\n", err)
+				} else if trusted {
+					fmt.Println("key exchange successful ✓")
+
+					// Add to permanent trusted peers list
+					fingerprint, _ := syncService.GetPeerFingerprint(peer.ID)
+					fmt.Printf("   Peer fingerprint: %s\n", fingerprint)
+
+					// Save peer to manifest/config
+					if err := syncService.AddTrustedPeer(ctx, peer.ID); err != nil {
+						fmt.Printf("   Failed to save trusted peer: %v\n", err)
+					} else {
+						fmt.Println("   Peer added to trusted peers list ✓")
+					}
+				} else {
+					fmt.Println("peer not trusted")
+				}
 
 			case <-timeoutChan:
 				// Timeout reached
@@ -177,4 +294,5 @@ func init() {
 	discoverCmd.Flags().BoolP("continuous", "c", false, "Run discovery continuously until interrupted")
 	discoverCmd.Flags().IntP("port", "p", 0, "Port to use for libp2p (0 for random port)")
 	discoverCmd.Flags().BoolP("verbose", "v", false, "Enable verbose output")
+	discoverCmd.Flags().StringP("vault-path", "V", "", "Path to the vault directory (defaults to current directory)")
 }
