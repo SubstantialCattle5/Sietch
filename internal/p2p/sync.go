@@ -175,6 +175,7 @@ func (s *SyncService) SetTrustAllPeers(trustAll bool) {
 }
 
 // handleKeyExchange handles key exchange requests from peers
+// handleKeyExchange handles key exchange requests from peers
 func (s *SyncService) handleKeyExchange(stream network.Stream) {
 	defer stream.Close()
 
@@ -183,30 +184,64 @@ func (s *SyncService) handleKeyExchange(stream network.Stream) {
 		return
 	}
 
-	// Read peer's public key with timeout
+	// Use connection deadline instead of separate read/write deadlines
 	stream.SetReadDeadline(time.Now().Add(30 * time.Second))
-	pemData, err := io.ReadAll(stream)
-	if err != nil {
-		fmt.Printf("Error reading peer's public key: %v\n", err)
-		return
+	stream.SetWriteDeadline(time.Now().Add(30 * time.Second))
+	// Read peer's public key in chunks
+	var pemData []byte
+	buffer := make([]byte, 1024)
+	for {
+		n, err := stream.Read(buffer)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			fmt.Printf("Error reading peer's public key: %v\n", err)
+			return
+		}
+		pemData = append(pemData, buffer[:n]...)
+
+		// Check if we have a complete PEM block
+		if block, _ := pem.Decode(pemData); block != nil {
+			// If we got a complete block, we can stop reading
+			break
+		}
 	}
 
 	// Parse peer's public key
 	block, _ := pem.Decode(pemData)
-	if block == nil || block.Type != "PUBLIC KEY" {
-		fmt.Println("Failed to decode peer's public key")
+	if block == nil {
+		fmt.Println("Failed to decode peer's public key: empty block")
 		return
 	}
 
-	pub, err := x509.ParsePKIXPublicKey(block.Bytes)
-	if err != nil {
-		fmt.Printf("Failed to parse peer's public key: %v\n", err)
-		return
-	}
+	// Support different key formats
+	var peerPubKey *rsa.PublicKey
+	var err error
 
-	peerPubKey, ok := pub.(*rsa.PublicKey)
-	if !ok {
-		fmt.Println("Peer's key is not an RSA public key")
+	if block.Type == "RSA PUBLIC KEY" {
+		// Try PKCS1 format
+		directKey, err := x509.ParsePKCS1PublicKey(block.Bytes)
+		if err != nil {
+			fmt.Printf("Failed to parse as PKCS1: %v\n", err)
+		} else {
+			peerPubKey = directKey
+		}
+	} else if block.Type == "PUBLIC KEY" {
+		// Try PKIX format
+		pub, err := x509.ParsePKIXPublicKey(block.Bytes)
+		if err != nil {
+			fmt.Printf("Failed to parse peer's public key: %v\n", err)
+			return
+		}
+		var ok bool
+		peerPubKey, ok = pub.(*rsa.PublicKey)
+		if !ok {
+			fmt.Println("Peer's key is not an RSA public key")
+			return
+		}
+	} else {
+		fmt.Printf("Unknown key format: %s\n", block.Type)
 		return
 	}
 
@@ -221,7 +256,6 @@ func (s *SyncService) handleKeyExchange(stream network.Stream) {
 	fingerprint := base64.StdEncoding.EncodeToString(hash[:])
 
 	// Send our public key in response
-	stream.SetWriteDeadline(time.Now().Add(30 * time.Second))
 	ourPublicKeyDER, err := x509.MarshalPKIXPublicKey(s.publicKey)
 	if err != nil {
 		fmt.Printf("Failed to marshal our public key: %v\n", err)
@@ -498,22 +532,17 @@ func (s *SyncService) decryptLargeData(data []byte) []byte {
 
 // VerifyAndExchangeKeys performs key exchange with a peer
 func (s *SyncService) VerifyAndExchangeKeys(ctx context.Context, peerID peer.ID) (bool, error) {
-	// Always trust peers if trustAllPeers is true
-	if s.trustAllPeers {
-		fmt.Printf("Automatically trusting peer %s (all peers trusted)\n", peerID.String())
-		// If we don't have the peer's info yet, add a placeholder
-		if _, ok := s.trustedPeers[peerID]; !ok {
-			s.trustedPeers[peerID] = &PeerInfo{
-				ID:           peerID,
-				TrustedSince: time.Now(),
-			}
-		}
-		return true, nil
-	}
+	// Don't return early with trustAllPeers, just mark for later
+	needsKeyExchange := true
+	autoTrust := s.trustAllPeers
 
 	// Check if already trusted
 	if _, ok := s.trustedPeers[peerID]; ok {
-		return true, nil
+		autoTrust = true
+		// We might still need to exchange keys if fingerprint is missing
+		if s.trustedPeers[peerID].Fingerprint != "" && s.trustedPeers[peerID].PublicKey != nil {
+			needsKeyExchange = false
+		}
 	}
 
 	// If no RSA keys, return true (no verification needed)
@@ -521,77 +550,126 @@ func (s *SyncService) VerifyAndExchangeKeys(ctx context.Context, peerID peer.ID)
 		return true, nil
 	}
 
-	// Create a context with timeout
-	timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
+	// Do key exchange if needed
+	if needsKeyExchange {
+		// Create stream and exchange keys as in original code
+		timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
 
-	// Open a stream for key exchange
-	stream, err := s.host.NewStream(timeoutCtx, peerID, protocol.ID(KeyExchangeProtocol))
-	if err != nil {
-		return false, fmt.Errorf("failed to open key exchange stream: %w", err)
+		stream, err := s.host.NewStream(timeoutCtx, peerID, protocol.ID(KeyExchangeProtocol))
+		if err != nil {
+			// Check if we already have peer info from reverse connection
+			if peerInfo, ok := s.trustedPeers[peerID]; ok && peerInfo.Fingerprint != "" {
+				fmt.Printf("Failed to open stream, but have fingerprint from reverse connection: %s\n", peerInfo.Fingerprint)
+				return true, nil
+			}
+			return false, fmt.Errorf("failed to open key exchange stream: %w", err)
+		}
+		defer stream.Close()
+
+		// Use connection deadline instead of separate read/write deadlines
+		stream.SetReadDeadline(time.Now().Add(30 * time.Second))
+		stream.SetWriteDeadline(time.Now().Add(30 * time.Second))
+		// Send our public key
+		publicKeyDER, err := x509.MarshalPKIXPublicKey(s.publicKey)
+		if err != nil {
+			return false, fmt.Errorf("failed to marshal public key: %w", err)
+		}
+
+		publicKeyBlock := &pem.Block{
+			Type:  "PUBLIC KEY",
+			Bytes: publicKeyDER,
+		}
+
+		publicKeyPEM := pem.EncodeToMemory(publicKeyBlock)
+		_, err = stream.Write(publicKeyPEM)
+		if err != nil {
+			return false, fmt.Errorf("failed to send public key: %w", err)
+		}
+
+		// Read peer's public key in chunks
+		var pemData []byte
+		buffer := make([]byte, 1024)
+		for {
+			n, err := stream.Read(buffer)
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				// Check if we already have peer info from reverse connection
+				if peerInfo, ok := s.trustedPeers[peerID]; ok && peerInfo.Fingerprint != "" {
+					fmt.Printf("Read error, but have fingerprint from reverse connection: %s\n", peerInfo.Fingerprint)
+					return true, nil
+				}
+				return false, fmt.Errorf("failed reading key data: %w", err)
+			}
+			pemData = append(pemData, buffer[:n]...)
+
+			// Check if we have a complete PEM block
+			if block, _ := pem.Decode(pemData); block != nil {
+				// If we got a complete block, we can stop reading
+				break
+			}
+		}
+
+		// Parse peer's public key
+		block, _ := pem.Decode(pemData)
+		if block == nil {
+			// Check if we already have peer info from reverse connection
+			if peerInfo, ok := s.trustedPeers[peerID]; ok && peerInfo.Fingerprint != "" {
+				fmt.Printf("Failed to decode PEM block, but have fingerprint from reverse connection: %s\n", peerInfo.Fingerprint)
+				return true, nil
+			}
+			return false, fmt.Errorf("failed to decode peer's public key: empty block")
+		}
+
+		// Support different key formats
+		var peerPubKey *rsa.PublicKey
+		var pub interface{}
+
+		if block.Type == "RSA PUBLIC KEY" {
+			// Try PKCS1 format
+			directKey, err := x509.ParsePKCS1PublicKey(block.Bytes)
+			if err != nil {
+				fmt.Printf("Failed to parse as PKCS1: %v\n", err)
+			} else {
+				peerPubKey = directKey
+			}
+		} else if block.Type == "PUBLIC KEY" {
+			// Try PKIX format
+			pub, err = x509.ParsePKIXPublicKey(block.Bytes)
+			if err != nil {
+				return false, fmt.Errorf("failed to parse PKIX public key: %w", err)
+			}
+			var ok bool
+			peerPubKey, ok = pub.(*rsa.PublicKey)
+			if !ok {
+				return false, fmt.Errorf("peer's key is not an RSA public key")
+			}
+		} else {
+			return false, fmt.Errorf("unknown key format: %s", block.Type)
+		}
+
+		// Calculate fingerprint
+		peerKeyDER, err := x509.MarshalPKIXPublicKey(peerPubKey)
+		if err != nil {
+			return false, fmt.Errorf("failed to marshal peer's public key: %w", err)
+		}
+
+		hash := sha256.Sum256(peerKeyDER)
+		fingerprint := base64.StdEncoding.EncodeToString(hash[:])
+
+		// Store peer info
+		s.trustedPeers[peerID] = &PeerInfo{
+			ID:           peerID,
+			PublicKey:    peerPubKey,
+			Fingerprint:  fingerprint,
+			TrustedSince: time.Now(),
+		}
 	}
-	defer stream.Close()
 
-	// Send our public key with timeout
-	stream.SetWriteDeadline(time.Now().Add(30 * time.Second))
-	publicKeyDER, err := x509.MarshalPKIXPublicKey(s.publicKey)
-	if err != nil {
-		return false, fmt.Errorf("failed to marshal public key: %w", err)
-	}
-
-	publicKeyBlock := &pem.Block{
-		Type:  "PUBLIC KEY",
-		Bytes: publicKeyDER,
-	}
-
-	publicKeyPEM := pem.EncodeToMemory(publicKeyBlock)
-	_, err = stream.Write(publicKeyPEM)
-	if err != nil {
-		return false, fmt.Errorf("failed to send public key: %w", err)
-	}
-
-	// Receive peer's public key with timeout
-	stream.SetReadDeadline(time.Now().Add(30 * time.Second))
-	pemData, err := io.ReadAll(stream)
-	if err != nil {
-		return false, fmt.Errorf("failed to read peer's public key: %w", err)
-	}
-
-	// Parse peer's public key
-	block, _ := pem.Decode(pemData)
-	if block == nil || block.Type != "PUBLIC KEY" {
-		return false, fmt.Errorf("failed to decode peer's public key")
-	}
-
-	pub, err := x509.ParsePKIXPublicKey(block.Bytes)
-	if err != nil {
-		return false, fmt.Errorf("failed to parse peer's public key: %w", err)
-	}
-
-	peerPubKey, ok := pub.(*rsa.PublicKey)
-	if !ok {
-		return false, fmt.Errorf("peer's key is not an RSA public key")
-	}
-
-	// Calculate fingerprint
-	peerKeyDER, err := x509.MarshalPKIXPublicKey(peerPubKey)
-	if err != nil {
-		return false, fmt.Errorf("failed to marshal peer's public key: %w", err)
-	}
-
-	hash := sha256.Sum256(peerKeyDER)
-	fingerprint := base64.StdEncoding.EncodeToString(hash[:])
-
-	// Store peer info
-	s.trustedPeers[peerID] = &PeerInfo{
-		ID:           peerID,
-		PublicKey:    peerPubKey,
-		Fingerprint:  fingerprint,
-		TrustedSince: time.Now(),
-	}
-
-	// Skip authentication when trusting all peers
-	if s.trustAllPeers {
+	// Auto-trust if configured to do so
+	if autoTrust {
 		return true, nil
 	}
 
@@ -684,7 +762,6 @@ func (s *SyncService) AddTrustedPeer(ctx context.Context, peerID peer.ID) error 
 	if !ok {
 		return fmt.Errorf("peer not found in temporary trusted list")
 	}
-
 	// Add to permanent trusted peers in config
 	if s.rsaConfig != nil {
 		// Convert public key to PEM
