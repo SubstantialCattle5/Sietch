@@ -65,9 +65,9 @@ Each sietch maintains an encrypted manifest (Merkle DAG) mapping chunk hashes to
 Full installation scripts and cross-platform builds will be provided in releases.
 
 ```
-git clone git@github.com:SubstantialCattle5/Sietch.git
+git clone https://github.com/SubstantialCattle5/Sietch.git
 cd Sietch
-go build -o sietch ./cmd/sietch
+go build
 ```
 
 ## Usage
