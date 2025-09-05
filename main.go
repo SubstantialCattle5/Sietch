@@ -1,5 +1,5 @@
 /*
-Copyright © 2025 SubstantialCattle5, nilaysharan.com
+Copyright © 2025 nilay HERE <nilaysharan.com>
 */
 package main
 
