@@ -20,6 +20,23 @@ import (
 	"github.com/substantialcattle5/sietch/internal/vault"
 )
 
+// Constants for cryptographic and configuration defaults
+const (
+	// Default KDF parameters
+	defaultScryptN     = 32768 // CPU/memory cost parameter
+	defaultScryptR     = 8     // Block size parameter
+	defaultScryptP     = 1     // Parallelization parameter
+	defaultPBKDF2Iters = 10000 // Default PBKDF2 iteration count
+
+	// RSA key sizes
+	defaultRSAKeySize = 4096 // Default RSA key size for secure operations
+	minRSAKeySize     = 2048 // Minimum acceptable RSA key size
+
+	// File permissions
+	secureDirPerms  = 0700 // Owner read/write/execute only
+	secureFilePerms = 0600 // Owner read/write only
+)
+
 var (
 	vaultName string
 	vaultPath string
@@ -111,9 +128,9 @@ func init() {
 	// AES specific parameters
 	initCmd.Flags().StringVar(&aesMode, "aes-mode", "gcm", "AES encryption mode (gcm, cbc)")
 	initCmd.Flags().BoolVar(&useScrypt, "use-scrypt", false, "Use scrypt for key derivation")
-	initCmd.Flags().IntVar(&scryptN, "scrypt-n", 32768, "scrypt N parameter")
-	initCmd.Flags().IntVar(&scryptR, "scrypt-r", 8, "scrypt r parameter")
-	initCmd.Flags().IntVar(&scryptP, "scrypt-p", 1, "scrypt p parameter")
+	initCmd.Flags().IntVar(&scryptN, "scrypt-n", defaultScryptN, "scrypt N parameter")
+	initCmd.Flags().IntVar(&scryptR, "scrypt-r", defaultScryptR, "scrypt r parameter")
+	initCmd.Flags().IntVar(&scryptP, "scrypt-p", defaultScryptP, "scrypt p parameter")
 
 	// Chunking vars
 	initCmd.Flags().StringVar(&chunkingStrategy, "chunking-strategy", "fixed", "Strategy for chunking (fixed, cdc)")
@@ -131,7 +148,7 @@ func init() {
 	initCmd.Flags().StringSliceVar(&tags, "tags", []string{}, "Tags for vault")
 
 	// RSA Keys
-	initCmd.Flags().Int("rsa-bits", 4096, "Bit size for the RSA key pair (min 2048, recommended 4096)")
+	initCmd.Flags().Int("rsa-bits", defaultRSAKeySize, "Bit size for the RSA key pair (min 2048, recommended 4096)")
 
 	// Other options
 	initCmd.Flags().BoolVar(&interactiveMode, "interactive", false, "Use interactive mode")
@@ -177,7 +194,7 @@ func runInit(cmd *cobra.Command) error {
 		ScryptN:          scryptN,
 		ScryptR:          scryptR,
 		ScryptP:          scryptP,
-		PBKDF2Iterations: 10000, // Default PBKDF2 iterations
+		PBKDF2Iterations: defaultPBKDF2Iters, // Default PBKDF2 iterations
 	}
 
 	keyConfig, err := validation.HandleKeyGeneration(cmd, absVaultPath, keyParams)
@@ -195,6 +212,7 @@ func runInit(cmd *cobra.Command) error {
 	}
 
 	// Print the key config to verify it contains the key
+	//TODO: think we should remove this
 	if keyConfig != nil && keyConfig.AESConfig != nil {
 		fmt.Println("\nKey Configuration:")
 		fmt.Printf("  Key exists: %v\n", keyConfig.AESConfig.Key != "")
@@ -226,13 +244,13 @@ func runInit(cmd *cobra.Command) error {
 
 		// Create directory structure for the key if it doesn't exist
 		keyDir := filepath.Dir(keyPath)
-		if err := os.MkdirAll(keyDir, 0700); err != nil {
+		if err := os.MkdirAll(keyDir, secureDirPerms); err != nil {
 			cleanupOnError(absVaultPath)
 			return fmt.Errorf("failed to create key directory %s: %w", keyDir, err)
 		}
 
 		// Write the key with secure permissions (only owner can read/write)
-		if err := os.WriteFile(keyPath, keyMaterial, 0600); err != nil {
+		if err := os.WriteFile(keyPath, keyMaterial, secureFilePerms); err != nil {
 			cleanupOnError(absVaultPath)
 			return fmt.Errorf("failed to write key to %s: %w", keyPath, err)
 		}
@@ -260,14 +278,14 @@ func runInit(cmd *cobra.Command) error {
 	// Initialize RSA config if not present
 	if configuration.Sync.RSA == nil {
 		configuration.Sync.RSA = &config.RSAConfig{
-			KeySize:      4096,
+			KeySize:      defaultRSAKeySize,
 			TrustedPeers: []config.TrustedPeer{},
 		}
 	}
 
 	// Get RSA key size from flags
 	rsaBits, err := cmd.Flags().GetInt("rsa-bits")
-	if err == nil && rsaBits >= 2048 {
+	if err == nil && rsaBits >= minRSAKeySize {
 		configuration.Sync.RSA.KeySize = rsaBits
 	}
 

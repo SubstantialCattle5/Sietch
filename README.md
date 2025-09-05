@@ -23,6 +23,13 @@ It imagines what a file system would look like in a world more like Arrakis than
 | Gossip Discovery | Lightweight peer discovery protocol for LAN environments |
 | CLI First UX | Fast and minimal CLI to manage vaults and syncs |
 
+## CI/CD Status
+
+[![CI](https://github.com/substantialcattle5/sietch/actions/workflows/ci.yml/badge.svg)](https://github.com/substantialcattle5/sietch/actions/workflows/ci.yml)
+[![Release](https://github.com/substantialcattle5/sietch/actions/workflows/release.yml/badge.svg)](https://github.com/substantialcattle5/sietch/actions/workflows/release.yml)
+[![codecov](https://codecov.io/gh/substantialcattle5/sietch/branch/main/graph/badge.svg)](https://codecov.io/gh/substantialcattle5/sietch)
+[![Go Report Card](https://goreportcard.com/badge/github.com/substantialcattle5/sietch)](https://goreportcard.com/report/github.com/substantialcattle5/sietch)
+
 ## How It Works
 
 **Chunking**

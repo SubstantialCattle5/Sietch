@@ -17,6 +17,33 @@ import (
 	"golang.org/x/crypto/scrypt"
 )
 
+// Cryptographic constants
+const (
+	// Key sizes in bytes
+	AESKeySize    = 32 // AES-256 key size
+	AESKeySize128 = 16 // AES-128 key size
+	AESKeySize192 = 24 // AES-192 key size
+
+	// Nonce and IV sizes
+	GCMNonceSize    = 12 // Standard GCM nonce size
+	CBCIVSize       = 16 // CBC initialization vector size
+	SaltSize        = 16 // Salt size for key derivation
+	LegacyNonceSize = 16 // Legacy nonce size for backward compatibility
+
+	// Default KDF parameters
+	DefaultScryptN     = 32768 // CPU/memory cost parameter
+	DefaultScryptR     = 8     // Block size parameter
+	DefaultScryptP     = 1     // Parallelization parameter
+	DefaultPBKDF2Iters = 10000 // Default PBKDF2 iteration count
+
+	// File permissions
+	SecureDirPerms  = 0700 // Owner read/write/execute only
+	SecureFilePerms = 0600 // Owner read/write only
+
+	// Validation string for key verification
+	KeyValidationString = "sietch-key-validation"
+)
+
 // GenerateAESKey creates a key configuration based on vault settings
 // and optionally stores the key in memory rather than writing to file
 func GenerateAESKey(cfg *config.VaultConfig, passphrase string) (*config.KeyConfig, error) {
@@ -32,8 +59,11 @@ func GenerateAESKey(cfg *config.VaultConfig, passphrase string) (*config.KeyConf
 		cfg.Encryption.AESConfig = config.BuildDefaultAESConfig()
 	}
 
+	// gcm vs cbc question - https://security.stackexchange.com/questions/184305/why-would-i-ever-use-aes-256-cbc-if-aes-256-gcm-is-more-secure
+
 	// Generate nonce/IV based on the selected encryption mode
-	if cfg.Encryption.AESConfig.Mode == "gcm" || cfg.Encryption.AESConfig.Mode == "" {
+	switch cfg.Encryption.AESConfig.Mode {
+	case "gcm", "":
 		nonce, err := generateNonce()
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate nonce: %w", err)
@@ -43,13 +73,13 @@ func GenerateAESKey(cfg *config.VaultConfig, passphrase string) (*config.KeyConf
 		if cfg.Encryption.AESConfig.Mode == "" {
 			cfg.Encryption.AESConfig.Mode = "gcm"
 		}
-	} else if cfg.Encryption.AESConfig.Mode == "cbc" {
+	case "cbc":
 		iv, err := generateIV()
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate IV: %w", err)
 		}
 		keyConfig.AESConfig.IV = iv
-	} else {
+	default:
 		return nil, fmt.Errorf("unsupported AES mode: %s", cfg.Encryption.AESConfig.Mode)
 	}
 
@@ -81,16 +111,17 @@ func GenerateAESKey(cfg *config.VaultConfig, passphrase string) (*config.KeyConf
 		var derivedKey []byte
 
 		// Generate key using selected KDF
-		if cfg.Encryption.AESConfig.KDF == "scrypt" {
+		switch cfg.Encryption.AESConfig.KDF {
+		case "scrypt":
 			// Set default scrypt parameters if not specified
 			if cfg.Encryption.AESConfig.ScryptN == 0 {
-				cfg.Encryption.AESConfig.ScryptN = 32768
+				cfg.Encryption.AESConfig.ScryptN = DefaultScryptN
 			}
 			if cfg.Encryption.AESConfig.ScryptR == 0 {
-				cfg.Encryption.AESConfig.ScryptR = 8
+				cfg.Encryption.AESConfig.ScryptR = DefaultScryptR
 			}
 			if cfg.Encryption.AESConfig.ScryptP == 0 {
-				cfg.Encryption.AESConfig.ScryptP = 1
+				cfg.Encryption.AESConfig.ScryptP = DefaultScryptP
 			}
 
 			// Copy parameters to key config
@@ -105,15 +136,15 @@ func GenerateAESKey(cfg *config.VaultConfig, passphrase string) (*config.KeyConf
 				cfg.Encryption.AESConfig.ScryptN,
 				cfg.Encryption.AESConfig.ScryptR,
 				cfg.Encryption.AESConfig.ScryptP,
-				32, // 32 bytes for AES-256
+				AESKeySize, // 32 bytes for AES-256
 			)
 			if err != nil {
 				return nil, fmt.Errorf("failed to derive key using scrypt: %w", err)
 			}
-		} else if cfg.Encryption.AESConfig.KDF == "pbkdf2" {
+		case "pbkdf2":
 			// Set default PBKDF2 iterations if not specified
 			if cfg.Encryption.AESConfig.PBKDF2I == 0 {
-				cfg.Encryption.AESConfig.PBKDF2I = 10000
+				cfg.Encryption.AESConfig.PBKDF2I = DefaultPBKDF2Iters
 			}
 
 			keyConfig.AESConfig.PBKDF2I = cfg.Encryption.AESConfig.PBKDF2I
@@ -123,10 +154,10 @@ func GenerateAESKey(cfg *config.VaultConfig, passphrase string) (*config.KeyConf
 				[]byte(passphrase),
 				[]byte(salt),
 				cfg.Encryption.AESConfig.PBKDF2I,
-				32, // 32 bytes for AES-256
+				AESKeySize, // 32 bytes for AES-256
 				sha256.New,
 			)
-		} else {
+		default:
 			return nil, fmt.Errorf("unsupported KDF algorithm: %s", cfg.Encryption.AESConfig.KDF)
 		}
 
@@ -158,8 +189,8 @@ func GenerateAESKey(cfg *config.VaultConfig, passphrase string) (*config.KeyConf
 
 			// Verify the key is valid for AES (must be 16, 24, or 32 bytes)
 			keyLen := len(keyMaterial)
-			if keyLen != 16 && keyLen != 24 && keyLen != 32 {
-				return nil, fmt.Errorf("invalid key length %d bytes - must be 16, 24, or 32 bytes for AES", keyLen)
+			if keyLen != AESKeySize128 && keyLen != AESKeySize192 && keyLen != AESKeySize {
+				return nil, fmt.Errorf("invalid key length %d bytes - must be %d, %d, or %d bytes for AES", keyLen, AESKeySize128, AESKeySize192, AESKeySize)
 			}
 		} else {
 			// Generate random key
@@ -185,12 +216,12 @@ func GenerateAESKey(cfg *config.VaultConfig, passphrase string) (*config.KeyConf
 	if cfg.Encryption.KeyPath != "" && cfg.Encryption.KeyFile {
 		// Create directory structure for the key if it doesn't exist
 		keyDir := filepath.Dir(cfg.Encryption.KeyPath)
-		if err := os.MkdirAll(keyDir, 0700); err != nil {
+		if err := os.MkdirAll(keyDir, SecureDirPerms); err != nil {
 			return nil, fmt.Errorf("failed to create key directory %s: %w", keyDir, err)
 		}
 
 		// Write the key with secure permissions
-		if err := os.WriteFile(cfg.Encryption.KeyPath, keyMaterial, 0600); err != nil {
+		if err := os.WriteFile(cfg.Encryption.KeyPath, keyMaterial, SecureFilePerms); err != nil {
 			return nil, fmt.Errorf("failed to write key to %s: %w", cfg.Encryption.KeyPath, err)
 		}
 
@@ -232,7 +263,7 @@ func LoadEncryptionKey(cfg *config.VaultConfig, passphrase string) ([]byte, erro
 			cfg.Encryption.AESConfig.ScryptN,
 			cfg.Encryption.AESConfig.ScryptR,
 			cfg.Encryption.AESConfig.ScryptP,
-			32, // 32 bytes for AES-256
+			AESKeySize, // 32 bytes for AES-256
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to derive key using scrypt: %w", err)
@@ -242,7 +273,7 @@ func LoadEncryptionKey(cfg *config.VaultConfig, passphrase string) ([]byte, erro
 			[]byte(passphrase),
 			[]byte(salt),
 			cfg.Encryption.AESConfig.PBKDF2I,
-			32, // 32 bytes for AES-256
+			AESKeySize, // 32 bytes for AES-256
 			sha256.New,
 		)
 	default:
@@ -464,7 +495,7 @@ func verifyPassphrase(keyCheck string, derivedKey []byte) error {
 	}
 
 	// Confirm expected string
-	if string(plaintext) != "sietch-key-validation" {
+	if string(plaintext) != KeyValidationString {
 		fmt.Printf("DEBUG: Got unexpected validation content: %s\n", string(plaintext))
 		return fmt.Errorf("key validation failed: unexpected content")
 	}
@@ -498,7 +529,7 @@ func verifyLegacyPassphrase(keyCheck string, derivedKey []byte) error {
 	}
 
 	// Force 16-byte nonce size for legacy vaults
-	nonceSize := 16
+	nonceSize := LegacyNonceSize
 
 	if len(checkData) < nonceSize {
 		return fmt.Errorf("key check too short even for legacy format")
@@ -521,7 +552,7 @@ func verifyLegacyPassphrase(keyCheck string, derivedKey []byte) error {
 	}
 
 	// Confirm expected string
-	if string(plaintext) != "sietch-key-validation" {
+	if string(plaintext) != KeyValidationString {
 		return fmt.Errorf("key validation failed: unexpected content")
 	}
 
@@ -584,7 +615,7 @@ func printKeyDetails(cfg *config.VaultConfig) {
 
 // Utility functions
 func generateNonce() (string, error) {
-	nonce := make([]byte, 12) // 12 bytes for GCM
+	nonce := make([]byte, GCMNonceSize) // 12 bytes for GCM
 	if _, err := rand.Read(nonce); err != nil {
 		return "", err
 	}
@@ -592,7 +623,7 @@ func generateNonce() (string, error) {
 }
 
 func generateIV() (string, error) {
-	iv := make([]byte, 16) // 16 bytes for CBC
+	iv := make([]byte, CBCIVSize) // 16 bytes for CBC
 	if _, err := rand.Read(iv); err != nil {
 		return "", err
 	}
@@ -600,7 +631,7 @@ func generateIV() (string, error) {
 }
 
 func generateSalt() (string, error) {
-	salt := make([]byte, 16)
+	salt := make([]byte, SaltSize)
 	if _, err := rand.Read(salt); err != nil {
 		return "", err
 	}
@@ -608,7 +639,7 @@ func generateSalt() (string, error) {
 }
 
 func generateRandomKey() ([]byte, error) {
-	key := make([]byte, 32) // 32 bytes for AES-256
+	key := make([]byte, AESKeySize) // 32 bytes for AES-256
 	if _, err := rand.Read(key); err != nil {
 		return nil, err
 	}
@@ -618,11 +649,11 @@ func generateRandomKey() ([]byte, error) {
 func backupKeyToFile(key []byte, path string) error {
 	// Create directory if it doesn't exist
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0700); err != nil {
+	if err := os.MkdirAll(dir, SecureDirPerms); err != nil {
 		return err
 	}
 	// Write file with restrictive permissions
-	return os.WriteFile(path, key, 0600)
+	return os.WriteFile(path, key, SecureFilePerms)
 }
 
 func expandPath(path string) string {
@@ -645,7 +676,7 @@ func calculateKeyHash(key []byte) string {
 // generateKeyCheck creates a validation string to verify the key during decryption
 func generateKeyCheck(key []byte) (string, error) {
 	// Create a simple string that can be encrypted and later verified
-	plaintext := []byte("sietch-key-validation")
+	plaintext := []byte(KeyValidationString)
 
 	// Encrypt with the key
 	block, err := aes.NewCipher(key)
