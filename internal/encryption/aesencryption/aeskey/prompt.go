@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/manifoldco/promptui"
-
 	"github.com/substantialcattle5/sietch/internal/config"
 )
 
