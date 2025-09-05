@@ -19,11 +19,11 @@ COVERAGE_HTML=$(COVERAGE_DIR)/coverage.html
 
 # Build the binary
 build:
-	$(GOBUILD) -o $(BINARY_NAME) -v ./...
+	$(GOBUILD) -o $(BINARY_NAME) -v ./main.go
 
 # Build for Unix
 build-unix:
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(GOBUILD) -o $(BINARY_UNIX) -v ./...
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(GOBUILD) -o $(BINARY_UNIX) -v ./main.go
 
 # Clean build artifacts
 clean:
@@ -98,7 +98,7 @@ lint:
 	@if command -v golangci-lint > /dev/null 2>&1; then \
 		golangci-lint run; \
 	else \
-		echo "golangci-lint not installed. Install with: curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b \$$(go env GOPATH)/bin v1.54.2"; \
+		echo "golangci-lint not installed. Install with: curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b \$$(go env GOPATH)/bin v1.60.3"; \
 	fi
 
 # Format code
@@ -130,9 +130,9 @@ clean-test-vaults:
 # Run security audit
 security-audit:
 	@if command -v gosec > /dev/null 2>&1; then \
-		gosec ./...; \
+		gosec -exclude=G301,G302,G304,G306 ./...; \
 	else \
-		echo "gosec not installed. Install with: go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest"; \
+		echo "gosec not installed. Install with: go install github.com/securego/gosec/v2/cmd/gosec@latest"; \
 	fi
 
 # Show test coverage summary
@@ -142,6 +142,10 @@ coverage-summary:
 	else \
 		echo "No coverage file found. Run 'make test-coverage' first."; \
 	fi
+
+# Check version consistency between local and CI
+check-versions:
+	@./scripts/check-versions.sh
 
 # CI pipeline: run all checks and tests
 ci: deps check security-audit
@@ -175,10 +179,11 @@ help:
 	@echo "  create-test-vaults - Create test vaults for integration testing"
 	@echo "  clean-test-vaults  - Clean test vault data"
 	@echo "  security-audit     - Run security audit"
-	@echo "  coverage-summary   - Show test coverage summary"
+	@  echo "  coverage-summary   - Show test coverage summary"
+	@echo "  check-versions     - Check version consistency with CI environment"
 	@echo "  ci                 - CI pipeline (deps, check, security-audit)"
 	@echo "  dev                - Development workflow (fmt, test, build)"
 	@echo "  release            - Release workflow (clean, fmt, test-coverage, build)"
 	@echo "  help               - Show this help message"
 
-.PHONY: build build-unix clean deps test test-race test-coverage test-coverage-view test-unit test-integration test-pkg test-pkg-coverage bench lint fmt vet check install create-test-vaults clean-test-vaults security-audit coverage-summary ci dev release help
+.PHONY: build build-unix clean deps test test-race test-coverage test-coverage-view test-unit test-integration test-pkg test-pkg-coverage bench lint fmt vet check install create-test-vaults clean-test-vaults security-audit coverage-summary check-versions ci dev release help

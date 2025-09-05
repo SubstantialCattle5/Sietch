@@ -1,0 +1,33 @@
+{
+  "name": "sietch-vault",
+  "version": "1.0.0",
+  "description": "Decentralized file system for secure offline sync",
+  "private": true,
+  "scripts": {
+    "prepare": "husky install",
+    "lint": "make lint",
+    "test": "make test",
+    "test-unit": "make test-unit",
+    "build": "make build",
+    "fmt": "make fmt",
+    "vet": "make vet",
+    "check": "make check"
+  },
+  "devDependencies": {
+    "husky": "^8.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/substantialcattle5/sietch.git"
+  },
+  "keywords": [
+    "encryption",
+    "p2p",
+    "file-sync",
+    "offline",
+    "vault",
+    "decentralized"
+  ],
+  "author": "substantialcattle5",
+  "license": "MIT"
+}

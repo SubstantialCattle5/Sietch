@@ -13,9 +13,9 @@ import (
 	"os"
 
 	"golang.org/x/crypto/pbkdf2"
+	"golang.org/x/crypto/scrypt"
 
 	"github.com/substantialcattle5/sietch/internal/config"
-	"golang.org/x/crypto/scrypt"
 )
 
 func AesEncryption(data string, vaultPath string) (string, error) {
@@ -152,7 +152,6 @@ func AesEncryptWithPassphrase(data string, vaultRoot string, passphrase string) 
 }
 
 func AesDecryption(encryptedData string, vaultPath string) (string, error) {
-
 	vaultConfig, err := config.LoadVaultConfig(vaultPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to load vault config: %w", err)

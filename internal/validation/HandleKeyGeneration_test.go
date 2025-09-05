@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+
 	"github.com/substantialcattle5/sietch/internal/config"
 	"github.com/substantialcattle5/sietch/testutil"
 )
@@ -241,7 +242,7 @@ func TestImportKeyFromFile(t *testing.T) {
 				if err != nil {
 					t.Fatalf("Failed to stat destination file: %v", err)
 				}
-				expectedPerms := os.FileMode(0600)
+				expectedPerms := os.FileMode(0o600)
 				if info.Mode().Perm() != expectedPerms {
 					t.Errorf("Expected file permissions %v, got %v", expectedPerms, info.Mode().Perm())
 				}
@@ -423,7 +424,7 @@ func TestGenerateNewKey(t *testing.T) {
 			keyPath := filepath.Join(tempDir, ".sietch", "keys", "secret.key")
 
 			// Ensure the directory exists
-			if err := os.MkdirAll(filepath.Dir(keyPath), 0755); err != nil {
+			if err := os.MkdirAll(filepath.Dir(keyPath), 0o755); err != nil {
 				t.Fatalf("Failed to create key directory: %v", err)
 			}
 
@@ -551,7 +552,6 @@ func TestHandleKeyGenerationEdgeCases(t *testing.T) {
 
 		cmd := &cobra.Command{}
 		result, err := HandleKeyGeneration(cmd, vaultPath, params)
-
 		if err != nil {
 			t.Errorf("Expected no error when key file is provided, got: %v", err)
 		}
@@ -630,7 +630,7 @@ func BenchmarkHandleKeyGeneration(b *testing.B) {
 	}
 	for _, dir := range dirs {
 		dirPath := filepath.Join(vaultPath, dir)
-		if err := os.MkdirAll(dirPath, 0755); err != nil {
+		if err := os.MkdirAll(dirPath, 0o755); err != nil {
 			b.Fatalf("Failed to create vault directory %s: %v", dirPath, err)
 		}
 	}
@@ -649,7 +649,7 @@ func BenchmarkHandleKeyGeneration(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		// Use different vault paths to avoid conflicts
 		testVaultPath := filepath.Join(vaultPath, "test", fmt.Sprintf("%d", i))
-		os.MkdirAll(filepath.Join(testVaultPath, ".sietch", "keys"), 0755)
+		os.MkdirAll(filepath.Join(testVaultPath, ".sietch", "keys"), 0o755)
 
 		_, err := HandleKeyGeneration(cmd, testVaultPath, params)
 		if err != nil {
@@ -670,7 +670,7 @@ func BenchmarkImportKeyFromFile(b *testing.B) {
 
 	// Create source key file manually
 	sourceFile := filepath.Join(tempDir, "source.key")
-	if err := os.WriteFile(sourceFile, []byte("benchmark-key-data-1234567890123456"), 0644); err != nil {
+	if err := os.WriteFile(sourceFile, []byte("benchmark-key-data-1234567890123456"), 0o644); err != nil {
 		b.Fatalf("Failed to create source key file: %v", err)
 	}
 
@@ -707,7 +707,7 @@ func BenchmarkGenerateNewKey(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		keyPath := filepath.Join(tempDir, "keys", fmt.Sprintf("%d", i), "secret.key")
-		os.MkdirAll(filepath.Dir(keyPath), 0755)
+		os.MkdirAll(filepath.Dir(keyPath), 0o755)
 
 		_, err := generateNewKey(cmd, keyPath, params)
 		if err != nil {

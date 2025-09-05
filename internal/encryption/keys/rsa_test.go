@@ -357,6 +357,7 @@ func TestGenerateTestRSAKeyPair(t *testing.T) {
 
 			if privateKey == nil {
 				t.Error("GenerateTestRSAKeyPair() returned nil private key")
+				return
 			}
 			if publicKey == nil {
 				t.Error("GenerateTestRSAKeyPair() returned nil public key")

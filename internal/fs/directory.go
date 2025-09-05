@@ -18,7 +18,7 @@ func CreateVaultStructure(basePath string) error {
 
 	// Create each directory with proper permissions
 	for _, dir := range dirs {
-		if err := os.MkdirAll(dir, 0755); err != nil {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return fmt.Errorf("failed to create directory %s: %w", dir, err)
 		}
 	}

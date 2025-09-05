@@ -1,0 +1,60 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+echo "🔍 Running pre-commit checks..."
+
+# Check if Go is installed
+if ! command -v go >/dev/null 2>&1; then
+    echo "❌ Go is not installed or not in PATH"
+    exit 1
+fi
+
+# Format check
+echo "📝 Checking Go formatting..."
+if [ -n "$(go fmt ./...)" ]; then
+    echo "❌ Code is not properly formatted. Please run 'make fmt' or 'go fmt ./...'"
+    exit 1
+fi
+echo "✅ Code formatting is correct"
+
+# Go vet
+echo "🔍 Running go vet..."
+if ! make vet; then
+    echo "❌ go vet found issues. Please fix them before committing."
+    exit 1
+fi
+echo "✅ go vet passed"
+
+# Lint check (if golangci-lint is available)
+if command -v golangci-lint >/dev/null 2>&1; then
+    echo "🧹 Running golangci-lint..."
+    
+    # Check version consistency (non-blocking warning)
+    EXPECTED_VERSION="v1.60.3"
+    CURRENT_VERSION=$(golangci-lint version | grep -o 'v[0-9]\+\.[0-9]\+\.[0-9]\+' | head -1)
+    if [ "$CURRENT_VERSION" != "$EXPECTED_VERSION" ]; then
+        echo "⚠️  Warning: golangci-lint version mismatch"
+        echo "   Local: $CURRENT_VERSION, CI expects: $EXPECTED_VERSION"
+        echo "   Run './scripts/setup-hooks.sh' to sync versions"
+    fi
+    
+    if ! make lint; then
+        echo "❌ Linting failed. Please fix the issues before committing."
+        echo "💡 Run 'make lint' to see detailed errors"
+        exit 1
+    fi
+    echo "✅ Linting passed"
+else
+    echo "⚠️  golangci-lint not found, skipping lint checks"
+    echo "💡 Install golangci-lint for better code quality checks"
+fi
+
+# Unit tests
+echo "🧪 Running unit tests..."
+if ! make test-unit; then
+    echo "❌ Unit tests failed. Please fix failing tests before committing."
+    exit 1
+fi
+echo "✅ Unit tests passed"
+
+echo "🎉 All pre-commit checks passed!"

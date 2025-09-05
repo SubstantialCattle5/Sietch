@@ -8,7 +8,7 @@ import (
 )
 
 // PrintSuccessMessage displays a formatted success message after vault initialization
-func PrintSuccessMessage(config *config.VaultConfig, vaultID, vaultPath string) {
+func PrintSuccessMessage(cfg *config.VaultConfig, vaultID, vaultPath string) {
 	// Create a visual separator
 	separator := strings.Repeat("─", 50)
 
@@ -18,28 +18,28 @@ func PrintSuccessMessage(config *config.VaultConfig, vaultID, vaultPath string) 
 
 	// Vault details section
 	fmt.Println("📦 Vault Details:")
-	fmt.Printf("  • Name:      %s\n", config.Name)
+	fmt.Printf("  • Name:      %s\n", cfg.Name)
 	fmt.Printf("  • ID:        %s\n", vaultID)
 	fmt.Printf("  • Location:  %s\n", vaultPath)
 
 	// Security details
 	fmt.Println("\n🔒 Security:")
-	fmt.Printf("  • Encryption: %s", config.Encryption.Type)
-	if config.Encryption.PassphraseProtected {
+	fmt.Printf("  • Encryption: %s", cfg.Encryption.Type)
+	if cfg.Encryption.PassphraseProtected {
 		fmt.Print(" (passphrase protected)")
 	}
 	fmt.Println()
 
 	// Storage configuration
 	fmt.Println("\n💾 Storage:")
-	fmt.Printf("  • Chunking:    %s (size: %s)\n", config.Chunking.Strategy, config.Chunking.ChunkSize)
-	fmt.Printf("  • Hash:        %s\n", config.Chunking.HashAlgorithm)
-	fmt.Printf("  • Compression: %s\n", config.Compression)
+	fmt.Printf("  • Chunking:    %s (size: %s)\n", cfg.Chunking.Strategy, cfg.Chunking.ChunkSize)
+	fmt.Printf("  • Hash:        %s\n", cfg.Chunking.HashAlgorithm)
+	fmt.Printf("  • Compression: %s\n", cfg.Compression)
 
 	// Metadata
 	fmt.Println("\n📋 Metadata:")
-	fmt.Printf("  • Author: %s\n", config.Metadata.Author)
-	fmt.Printf("  • Tags:   %s\n", strings.Join(config.Metadata.Tags, ", "))
+	fmt.Printf("  • Author: %s\n", cfg.Metadata.Author)
+	fmt.Printf("  • Tags:   %s\n", strings.Join(cfg.Metadata.Tags, ", "))
 
 	// Next steps and commands
 	fmt.Println("\n" + separator)

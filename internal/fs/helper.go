@@ -9,7 +9,7 @@ import (
 // EnsureDirectory ensures a directory exists, creating it if necessary
 func EnsureDirectory(path string) error {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return os.MkdirAll(path, 0755)
+		return os.MkdirAll(path, 0o755)
 	} else if err != nil {
 		return err
 	}

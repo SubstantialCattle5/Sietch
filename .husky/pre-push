@@ -1,0 +1,55 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+echo "🚀 Running pre-push checks..."
+
+# Check if Go is installed
+if ! command -v go >/dev/null 2>&1; then
+    echo "❌ Go is not installed or not in PATH"
+    exit 1
+fi
+
+# Get the remote and branch being pushed to
+remote="$1"
+url="$2"
+
+echo "📡 Pushing to: $remote ($url)"
+
+# Run all tests including integration tests
+echo "🧪 Running comprehensive tests..."
+if ! make test; then
+    echo "❌ Tests failed. Please fix failing tests before pushing."
+    echo "💡 Run 'make test' to see detailed test results"
+    exit 1
+fi
+echo "✅ All tests passed"
+
+# Build check
+echo "🔨 Verifying build..."
+if ! make build; then
+    echo "❌ Build failed. Please fix build issues before pushing."
+    echo "💡 Run 'make build' to see build errors"
+    exit 1
+fi
+echo "✅ Build successful"
+
+# Security audit (if available)
+if command -v gosec >/dev/null 2>&1; then
+    echo "🔒 Running security audit..."
+    if ! make security-audit; then
+        echo "⚠️  Security audit found issues, but not blocking push"
+        echo "💡 Review security findings and consider fixing them"
+    else
+        echo "✅ Security audit passed"
+    fi
+else
+    echo "⚠️  gosec not found, skipping security audit"
+fi
+
+# Check for any uncommitted changes that might affect the build
+if ! git diff --quiet; then
+    echo "⚠️  Warning: You have uncommitted changes"
+    echo "💡 Consider committing all changes before pushing"
+fi
+
+echo "🎉 All pre-push checks passed! Ready to push."

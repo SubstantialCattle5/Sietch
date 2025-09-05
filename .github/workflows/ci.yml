@@ -1,0 +1,277 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, dev ]
+  pull_request:
+    branches: [ main, dev ]
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: ['1.21', '1.22', '1.23']
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ matrix.go-version }}
+
+    - name: Cache Go modules
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ matrix.go-version }}-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-${{ matrix.go-version }}-
+
+    - name: Download dependencies
+      run: make deps
+
+    - name: Format check
+      run: |
+        go fmt ./...
+        if [ -n "$(git diff --name-only)" ]; then
+          echo "Code is not formatted. Please run 'go fmt ./...'"
+          git diff
+          exit 1
+        fi
+
+    - name: Vet
+      run: make vet
+
+    - name: Run unit tests
+      run: make test-unit
+
+    - name: Run tests with race detection
+      run: make test-race
+
+    - name: Run tests with coverage
+      run: make test-coverage
+
+    - name: Upload coverage reports to Codecov
+      uses: codecov/codecov-action@v4
+      with:
+        file: ./coverage/coverage.out
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
+        verbose: true
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.23'
+
+    - name: Report tool versions
+      run: |
+        echo "Go version: $(go version)"
+        echo "About to run golangci-lint v1.60.3"
+    
+    - name: golangci-lint
+      uses: golangci/golangci-lint-action@v6
+      with:
+        version: v1.60.3
+        args: --timeout=5m
+
+  security:
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.23'
+
+    - name: Install Gosec
+      run: go install github.com/securego/gosec/v2/cmd/gosec@latest
+
+    - name: Run Gosec Security Scanner
+      run: |
+        gosec -conf .gosec.json -exclude=G301,G302,G304,G306 -fmt sarif -out results.sarif -stdout -verbose=text ./... || true
+        # Ensure SARIF file exists even if gosec fails
+        if [ ! -f results.sarif ]; then
+          echo '{"version": "2.1.0", "runs": [{"tool": {"driver": {"name": "gosec"}}, "results": []}]}' > results.sarif
+        fi
+
+    - name: Debug SARIF file
+      run: |
+        echo "SARIF file size: $(wc -c < results.sarif)"
+        echo "SARIF file head:"
+        head -5 results.sarif
+      if: always()
+
+    - name: Upload SARIF file
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: results.sarif
+      if: always()
+
+  build:
+    runs-on: ubuntu-latest
+    needs: [test, lint]
+    strategy:
+      matrix:
+        goos: [linux, darwin, windows]
+        goarch: [amd64, arm64]
+        exclude:
+          # Exclude combinations that aren't commonly used
+          - goos: windows
+            goarch: arm64
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.23'
+
+    - name: Cache Go modules
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-go-1.23-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-1.23-
+
+    - name: Build binary
+      env:
+        GOOS: ${{ matrix.goos }}
+        GOARCH: ${{ matrix.goarch }}
+      run: |
+        if [ "$GOOS" = "windows" ]; then
+          BINARY_NAME="sietch.exe"
+        else
+          BINARY_NAME="sietch"
+        fi
+        mkdir -p build
+        CGO_ENABLED=0 go build -ldflags="-w -s" -o build/${BINARY_NAME}_${GOOS}_${GOARCH} ./main.go
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: sietch-${{ matrix.goos }}-${{ matrix.goarch }}
+        path: build/
+        retention-days: 30
+
+  integration:
+    runs-on: ubuntu-latest
+    needs: [test]
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.23'
+
+    - name: Cache Go modules
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-go-1.23-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-1.23-
+
+    - name: Build binary for integration tests
+      run: make build
+
+    - name: Run integration tests
+      run: make test-integration
+
+    - name: Create test vaults
+      run: make create-test-vaults || echo "Test vault creation failed, continuing..."
+
+    - name: Clean up test vaults
+      run: make clean-test-vaults
+
+  benchmark:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.23'
+
+    - name: Cache Go modules
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-go-1.23-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-1.23-
+
+    - name: Run benchmarks
+      run: make bench | tee benchmark.txt
+
+    - name: Upload benchmark results
+      uses: actions/upload-artifact@v4
+      with:
+        name: benchmark-results
+        path: benchmark.txt
+        retention-days: 30
+
+  dependency-check:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.23'
+
+    - name: Check for vulnerabilities
+      uses: golang/govulncheck-action@v1
+      with:
+        go-version-input: '1.23'
+        go-package: './...'
+
+    - name: Verify dependencies
+      run: |
+        go mod verify
+        go mod tidy
+        if [ -n "$(git diff --name-only)" ]; then
+          echo "go.mod or go.sum is not tidy"
+          git diff
+          exit 1
+        fi

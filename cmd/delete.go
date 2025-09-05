@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+
 	"github.com/substantialcattle5/sietch/internal/config"
 	"github.com/substantialcattle5/sietch/internal/fs"
 )
@@ -76,7 +77,7 @@ Examples:
 			response = strings.TrimSpace(strings.ToLower(response))
 
 			if response != "y" && response != "yes" {
-				fmt.Println("Operation cancelled")
+				fmt.Println("Operation canceled")
 				return nil
 			}
 		}

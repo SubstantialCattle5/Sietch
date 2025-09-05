@@ -21,6 +21,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/spf13/cobra"
+
 	"github.com/substantialcattle5/sietch/internal/config"
 	"github.com/substantialcattle5/sietch/internal/fs"
 	"github.com/substantialcattle5/sietch/internal/p2p"
@@ -160,7 +161,7 @@ Examples:
 				}
 
 				if !promptForTrust() {
-					return fmt.Errorf("sync cancelled - peer not trusted")
+					return fmt.Errorf("sync canceled - peer not trusted")
 				}
 
 				// Add peer to trusted list
@@ -198,7 +199,7 @@ Examples:
 		if err := discovery.Start(ctx); err != nil {
 			return fmt.Errorf("failed to start mDNS discovery: %v", err)
 		}
-		defer discovery.Stop()
+		defer func() { _ = discovery.Stop() }()
 
 		fmt.Println("📡 Searching for peers on local network...")
 
@@ -248,7 +249,7 @@ Examples:
 				}
 
 				if !promptForTrust() {
-					return fmt.Errorf("sync cancelled - peer not trusted")
+					return fmt.Errorf("sync canceled - peer not trusted")
 				}
 
 				// Add peer to trusted list
@@ -316,7 +317,7 @@ func rsaToLibp2pPrivateKey(privateKey *rsa.PrivateKey) (crypto.PrivKey, error) {
 func promptForTrust() bool {
 	fmt.Print("\nDo you want to trust this peer? (y/n): ")
 	var response string
-	fmt.Scanln(&response)
+	_, _ = fmt.Scanln(&response)
 	return response == "y" || response == "Y" || response == "yes" || response == "Yes"
 }
 

@@ -33,7 +33,7 @@ func TestPrepareVaultPath(t *testing.T) {
 				sietchDir := filepath.Join(vaultPath, ".sietch")
 
 				// Create existing vault structure
-				if err := os.MkdirAll(sietchDir, 0755); err != nil {
+				if err := os.MkdirAll(sietchDir, 0o755); err != nil {
 					t.Fatalf("Failed to create existing vault: %v", err)
 				}
 
@@ -52,7 +52,7 @@ func TestPrepareVaultPath(t *testing.T) {
 				sietchDir := filepath.Join(vaultPath, ".sietch")
 
 				// Create existing vault structure
-				if err := os.MkdirAll(sietchDir, 0755); err != nil {
+				if err := os.MkdirAll(sietchDir, 0o755); err != nil {
 					t.Fatalf("Failed to create existing vault: %v", err)
 				}
 
@@ -242,7 +242,7 @@ func TestPrepareVaultPathWithExistingFile(t *testing.T) {
 
 	// Create a file with the same name as the intended vault
 	conflictFile := filepath.Join(tempDir, vaultName)
-	if err := os.WriteFile(conflictFile, []byte("conflict"), 0644); err != nil {
+	if err := os.WriteFile(conflictFile, []byte("conflict"), 0o644); err != nil {
 		t.Fatalf("Failed to create conflict file: %v", err)
 	}
 
@@ -276,13 +276,13 @@ func TestPrepareVaultPathPermissions(t *testing.T) {
 
 	// Create a directory with restrictive permissions
 	restrictedDir := filepath.Join(tempDir, "restricted")
-	if err := os.MkdirAll(restrictedDir, 0000); err != nil {
+	if err := os.MkdirAll(restrictedDir, 0o000); err != nil {
 		t.Fatalf("Failed to create restricted directory: %v", err)
 	}
 
 	// Restore permissions for cleanup
 	t.Cleanup(func() {
-		os.Chmod(restrictedDir, 0755)
+		os.Chmod(restrictedDir, 0o755)
 	})
 
 	// PrepareVaultPath should still work as it doesn't create directories
@@ -338,7 +338,7 @@ func BenchmarkPrepareVaultPathWithExistingVault(b *testing.B) {
 	// Create existing vault
 	vaultPath := filepath.Join(tempDir, vaultName)
 	sietchDir := filepath.Join(vaultPath, ".sietch")
-	if err := os.MkdirAll(sietchDir, 0755); err != nil {
+	if err := os.MkdirAll(sietchDir, 0o755); err != nil {
 		b.Fatalf("Failed to create existing vault: %v", err)
 	}
 

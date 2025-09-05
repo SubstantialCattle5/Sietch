@@ -11,7 +11,7 @@ func GenerateGPGKey(keyPath string) error {
 	gpgKey := []byte("-----BEGIN PGP PUBLIC KEY-----\nExampleGPGKeyData\n-----END PGP PUBLIC KEY-----")
 
 	// Write the GPG key to the specified file path
-	if err := os.WriteFile(keyPath, gpgKey, 0600); err != nil {
+	if err := os.WriteFile(keyPath, gpgKey, 0o600); err != nil {
 		return fmt.Errorf("failed to write key file: %w", err)
 	}
 

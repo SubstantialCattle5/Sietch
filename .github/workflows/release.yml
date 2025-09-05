@@ -1,0 +1,106 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.23'
+
+    - name: Cache Go modules
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-go-1.23-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-1.23-
+
+    - name: Run tests
+      run: make test-coverage
+
+    - name: Build binaries
+      run: |
+        mkdir -p dist
+        
+        # Build for different platforms
+        platforms=(
+          "linux/amd64"
+          "linux/arm64"
+          "darwin/amd64"
+          "darwin/arm64"
+          "windows/amd64"
+        )
+        
+        for platform in "${platforms[@]}"; do
+          GOOS=${platform%/*}
+          GOARCH=${platform#*/}
+          
+          if [ "$GOOS" = "windows" ]; then
+            BINARY_NAME="sietch.exe"
+          else
+            BINARY_NAME="sietch"
+          fi
+          
+          echo "Building for $GOOS/$GOARCH..."
+          CGO_ENABLED=0 GOOS=$GOOS GOARCH=$GOARCH go build \
+            -ldflags="-w -s -X main.version=${{ github.ref_name }} -X main.commit=${{ github.sha }} -X main.date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            -o dist/${BINARY_NAME}_${GOOS}_${GOARCH} \
+            ./main.go
+          
+          # Create archive
+          if [ "$GOOS" = "windows" ]; then
+            cd dist && zip sietch_${GOOS}_${GOARCH}.zip ${BINARY_NAME}_${GOOS}_${GOARCH} && cd ..
+          else
+            cd dist && tar -czf sietch_${GOOS}_${GOARCH}.tar.gz ${BINARY_NAME}_${GOOS}_${GOARCH} && cd ..
+          fi
+        done
+
+    - name: Generate changelog
+      id: changelog
+      run: |
+        if [ -f CHANGELOG.md ]; then
+          # Extract changelog for this version
+          awk '/^## \[?'${GITHUB_REF_NAME#v}'\]?/{flag=1; next} /^## /{flag=0} flag' CHANGELOG.md > current_changelog.md
+        else
+          echo "Release ${{ github.ref_name }}" > current_changelog.md
+          echo "" >> current_changelog.md
+          echo "See commits for changes in this release." >> current_changelog.md
+        fi
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      with:
+        body_path: current_changelog.md
+        files: |
+          dist/*.tar.gz
+          dist/*.zip
+        generate_release_notes: true
+        prerelease: ${{ contains(github.ref_name, '-') }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4
+      with:
+        file: ./coverage/coverage.out
+        flags: release
+        name: release-coverage
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}

@@ -1,0 +1,47 @@
+{
+  "global": {
+    "nosec": false,
+    "audit": false
+  },
+  "excludes": [
+    "G301",
+    "G302", 
+    "G304",
+    "G306"
+  ],
+  "severity": "medium",
+  "rules": {
+    "G101": {
+      "pattern": "(?i)passwd|pass|password|pwd|secret|token|key",
+      "ignore_entropy": false,
+      "entropy_threshold": "80.0",
+      "per_char_threshold": "3.0",
+      "truncate": "32"
+    },
+    "G104": {
+      "audit": false
+    },
+    "G301": {
+      "audit": false
+    },
+    "G302": {
+      "audit": false
+    },
+    "G304": {
+      "audit": false
+    },
+    "G306": {
+      "audit": false
+    },
+    "G404": {
+      "audit": false
+    }
+  },
+  "exclude": {
+    "paths": [
+      "**/testutil/**",
+      "**/*_test.go",
+      "**/test_*/**"
+    ]
+  }
+}

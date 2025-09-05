@@ -6,6 +6,7 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/multiformats/go-multiaddr"
+
 	"github.com/substantialcattle5/sietch/internal/config"
 )
 

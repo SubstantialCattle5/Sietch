@@ -1,0 +1,19 @@
+# Husky configuration for Sietch Vault
+# This file is sourced before running Git hooks
+
+# Set PATH to include Go binaries
+export PATH="$PATH:$(go env GOPATH)/bin:$(go env GOROOT)/bin"
+
+# Environment variables for development
+export HUSKY_DEBUG=0  # Set to 1 for verbose hook output
+export GO111MODULE=on
+
+# Skip hooks in CI (they run separately there)
+if [ "$CI" = "true" ]; then
+    export HUSKY=0
+fi
+
+# Skip hooks during rebase/merge operations
+if [ -d ".git/rebase-merge" ] || [ -d ".git/rebase-apply" ] || [ -f ".git/MERGE_HEAD" ]; then
+    export HUSKY=0
+fi

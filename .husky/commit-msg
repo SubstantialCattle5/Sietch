@@ -1,0 +1,56 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+# Read the commit message
+commit_msg=$(cat "$1")
+
+# Conventional Commits pattern
+# Format: type(scope): description
+# Types: feat, fix, docs, style, refactor, test, chore, ci, perf, build
+conventional_pattern="^(feat|fix|docs|style|refactor|test|chore|ci|perf|build)(\(.+\))?: .{1,72}"
+
+# Check if commit message follows conventional commits
+if echo "$commit_msg" | grep -qE "$conventional_pattern"; then
+    echo "✅ Commit message follows conventional commits format"
+    exit 0
+fi
+
+# Allow merge commits
+if echo "$commit_msg" | grep -q "^Merge "; then
+    echo "✅ Merge commit detected, skipping format check"
+    exit 0
+fi
+
+# Allow revert commits
+if echo "$commit_msg" | grep -q "^Revert "; then
+    echo "✅ Revert commit detected, skipping format check"
+    exit 0
+fi
+
+# Fail with helpful message
+echo "❌ Commit message does not follow conventional commits format!"
+echo ""
+echo "Expected format: type(scope): description"
+echo ""
+echo "Valid types:"
+echo "  feat:     A new feature"
+echo "  fix:      A bug fix"
+echo "  docs:     Documentation only changes"
+echo "  style:    Changes that do not affect the meaning of the code"
+echo "  refactor: A code change that neither fixes a bug nor adds a feature"
+echo "  test:     Adding missing tests or correcting existing tests"
+echo "  chore:    Changes to the build process or auxiliary tools"
+echo "  ci:       Changes to CI configuration files and scripts"
+echo "  perf:     A code change that improves performance"
+echo "  build:    Changes that affect the build system or external dependencies"
+echo ""
+echo "Examples:"
+echo "  feat(auth): add user authentication system"
+echo "  fix(api): resolve memory leak in chunk processing"
+echo "  docs: update installation instructions"
+echo "  test(vault): add unit tests for vault creation"
+echo ""
+echo "Your commit message:"
+echo "  $commit_msg"
+
+exit 1

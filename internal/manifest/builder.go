@@ -5,19 +5,20 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/substantialcattle5/sietch/internal/config"
 	"gopkg.in/yaml.v3"
+
+	"github.com/substantialcattle5/sietch/internal/config"
 )
 
 // WriteManifest writes the vault configuration to vault.yaml
 // ensuring that any encryption keys in the config are properly stored
-func WriteManifest(basePath string, config config.VaultConfig) error {
+func WriteManifest(basePath string, cfg config.VaultConfig) error {
 	manifestPath := filepath.Join(basePath, "vault.yaml")
 
 	// Verify if the encryption key is present in the config
-	if config.Encryption.Type == "aes" && config.Encryption.AESConfig != nil {
+	if cfg.Encryption.Type == "aes" && cfg.Encryption.AESConfig != nil {
 		// Log that we're storing a key in the manifest
-		if config.Encryption.AESConfig.Key != "" {
+		if cfg.Encryption.AESConfig.Key != "" {
 			fmt.Println("Storing encryption key in vault configuration")
 		} else {
 			fmt.Println("Warning: No encryption key found in AESConfig")
@@ -26,7 +27,7 @@ func WriteManifest(basePath string, config config.VaultConfig) error {
 
 	// Create manifest file with restricted permissions (0600) to secure the key
 	// Only owner can read/write the file since it will contain sensitive key material
-	manifestFile, err := os.OpenFile(manifestPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
+	manifestFile, err := os.OpenFile(manifestPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
 		return fmt.Errorf("failed to create manifest file: %w", err)
 	}
@@ -36,7 +37,7 @@ func WriteManifest(basePath string, config config.VaultConfig) error {
 	encoder := yaml.NewEncoder(manifestFile)
 	encoder.SetIndent(2)
 
-	if err := encoder.Encode(config); err != nil {
+	if err := encoder.Encode(cfg); err != nil {
 		return fmt.Errorf("failed to encode vault configuration: %w", err)
 	}
 
@@ -48,7 +49,7 @@ func WriteManifest(basePath string, config config.VaultConfig) error {
 func StoreFileManifest(vaultRoot string, fileName string, manifest *config.FileManifest) error {
 	// Ensure manifests directory exists
 	manifestsDir := filepath.Join(vaultRoot, ".sietch", "manifests")
-	if err := os.MkdirAll(manifestsDir, 0755); err != nil {
+	if err := os.MkdirAll(manifestsDir, 0o755); err != nil {
 		return fmt.Errorf("failed to create manifests directory: %v", err)
 	}
 
@@ -124,30 +125,30 @@ func LoadVaultConfig(vaultRoot string) (*config.VaultConfig, error) {
 		return nil, fmt.Errorf("failed to read vault configuration: %w", err)
 	}
 
-	var config config.VaultConfig
-	if err := yaml.Unmarshal(data, &config); err != nil {
+	var cfg config.VaultConfig
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse vault configuration: %w", err)
 	}
 
 	// Check if encryption key is present
-	if config.Encryption.Type == "aes" && config.Encryption.AESConfig != nil {
-		if config.Encryption.AESConfig.Key != "" {
+	if cfg.Encryption.Type == "aes" && cfg.Encryption.AESConfig != nil {
+		if cfg.Encryption.AESConfig.Key != "" {
 			fmt.Println("Found encryption key in vault configuration")
 		}
 	}
 
-	return &config, nil
+	return &cfg, nil
 }
 
 func WriteKeyToFile(keyMaterial []byte, keyPath string) error {
 	// Create directory structure for the key if it doesn't exist
 	keyDir := filepath.Dir(keyPath)
-	if err := os.MkdirAll(keyDir, 0700); err != nil {
+	if err := os.MkdirAll(keyDir, 0o700); err != nil {
 		return fmt.Errorf("failed to create key directory %s: %w", keyDir, err)
 	}
 
 	// Write the key with secure permissions (only owner can read/write)
-	if err := os.WriteFile(keyPath, keyMaterial, 0600); err != nil {
+	if err := os.WriteFile(keyPath, keyMaterial, 0o600); err != nil {
 		return fmt.Errorf("failed to write key to %s: %w", keyPath, err)
 	}
 

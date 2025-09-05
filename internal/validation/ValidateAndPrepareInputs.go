@@ -15,13 +15,13 @@ func ValidateAndPrepareInputs(author string, tags []string, templateName string,
 	// Apply template configuration if specified
 	if templateName != "" {
 		fmt.Printf("Applying template: %s\n", templateName)
-		//TODO Implement template functionality
+		// TODO Implement template functionality
 	}
 
 	// Load configuration from file if specified
 	if configFile != "" {
 		fmt.Printf("Loading configuration from: %s\n", configFile)
-		//TODO Implement config loading functionality
+		// TODO Implement config loading functionality
 	}
 
 	return author, tags, nil
