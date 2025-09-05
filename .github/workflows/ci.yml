@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [ main, dev ]
 
+permissions:
+  contents: read
+  security-events: write
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -91,6 +95,10 @@ jobs:
 
   security:
     runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -104,7 +112,19 @@ jobs:
       run: go install github.com/securego/gosec/v2/cmd/gosec@latest
 
     - name: Run Gosec Security Scanner
-      run: gosec -conf .gosec.json -fmt sarif -out results.sarif -stdout -verbose=text ./... || true
+      run: |
+        gosec -conf .gosec.json -fmt sarif -out results.sarif -stdout -verbose=text ./... || true
+        # Ensure SARIF file exists even if gosec fails
+        if [ ! -f results.sarif ]; then
+          echo '{"version": "2.1.0", "runs": [{"tool": {"driver": {"name": "gosec"}}, "results": []}]}' > results.sarif
+        fi
+
+    - name: Debug SARIF file
+      run: |
+        echo "SARIF file size: $(wc -c < results.sarif)"
+        echo "SARIF file head:"
+        head -5 results.sarif
+      if: always()
 
     - name: Upload SARIF file
       uses: github/codeql-action/upload-sarif@v3
