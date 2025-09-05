@@ -81,9 +81,15 @@ go build
 
 ### Prerequisites
 
-- **Go 1.21+** - [Download](https://golang.org/dl/)
+- **Go 1.23** - [Download](https://golang.org/dl/) (matches CI environment)
 - **Node.js 16+** - [Download](https://nodejs.org/) (for Git hooks)
 - **Git** - For version control
+
+### Development Tools (Auto-installed)
+
+- **golangci-lint v1.60.3** - Code linting and formatting
+- **gosec** - Security vulnerability scanner
+- **Husky** - Git hooks for code quality
 
 ### Quick Start
 
@@ -101,15 +107,17 @@ go build
    This will:
    - Install npm dependencies (Husky)
    - Install Go dependencies
-   - Install development tools (golangci-lint, gosec)
+   - Install development tools (golangci-lint v1.60.3, gosec)
+   - Verify tool versions match CI environment
    - Set up Git hooks for code quality
    - Run initial checks
 
 3. **Verify setup:**
    ```bash
-   make build    # Build the binary
-   make test     # Run tests
-   make lint     # Run linter
+   make check-versions  # Check tool versions match CI
+   make build          # Build the binary
+   make test           # Run tests
+   make lint           # Run linter
    ```
 
 ### Git Hooks

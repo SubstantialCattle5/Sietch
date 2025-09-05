@@ -7,6 +7,12 @@ linters-settings:
     simplify: true
   goimports:
     local-prefixes: github.com/substantialcattle5/sietch
+  gci:
+    sections:
+      - standard
+      - default
+      - prefix(github.com/substantialcattle5/sietch)
+    skip-generated: true
   govet:
     disable:
       - shadow

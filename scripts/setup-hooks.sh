@@ -27,11 +27,22 @@ if ! command -v npm >/dev/null 2>&1; then
     exit 1
 fi
 
-# Check if Go is installed
+# Check if Go is installed and version
+EXPECTED_GO_VERSION="1.23"
 if ! command -v go >/dev/null 2>&1; then
     echo "❌ Go is required but not installed"
-    echo "💡 Please install Go from https://golang.org/dl/"
+    echo "💡 Please install Go $EXPECTED_GO_VERSION from https://golang.org/dl/"
     exit 1
+fi
+
+CURRENT_GO_VERSION=$(go version | grep -o 'go[0-9]\+\.[0-9]\+' | sed 's/go//')
+if [ "$CURRENT_GO_VERSION" != "$EXPECTED_GO_VERSION" ]; then
+    echo "⚠️  Go version mismatch: found $CURRENT_GO_VERSION, CI uses $EXPECTED_GO_VERSION"
+    echo "💡 Consider updating Go to match CI environment for consistency"
+    echo "   Current: go$CURRENT_GO_VERSION"
+    echo "   CI uses: go$EXPECTED_GO_VERSION"
+else
+    echo "✅ Go version $CURRENT_GO_VERSION matches CI environment"
 fi
 
 echo "✅ Prerequisites check passed"
@@ -47,13 +58,22 @@ make deps
 # Install development tools
 echo "🔧 Installing development tools..."
 
-# Install golangci-lint if not present
+# Install golangci-lint if not present or wrong version
+EXPECTED_GOLANGCI_VERSION="v1.60.3"
 if ! command -v golangci-lint >/dev/null 2>&1; then
-    echo "📥 Installing golangci-lint..."
-    curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.60.3
+    echo "📥 Installing golangci-lint $EXPECTED_GOLANGCI_VERSION..."
+    curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin $EXPECTED_GOLANGCI_VERSION
     echo "✅ golangci-lint installed"
 else
-    echo "✅ golangci-lint already installed"
+    CURRENT_VERSION=$(golangci-lint version | grep -o 'v[0-9]\+\.[0-9]\+\.[0-9]\+' | head -1)
+    if [ "$CURRENT_VERSION" != "$EXPECTED_GOLANGCI_VERSION" ]; then
+        echo "⚠️  golangci-lint version mismatch: found $CURRENT_VERSION, expected $EXPECTED_GOLANGCI_VERSION"
+        echo "📥 Updating to $EXPECTED_GOLANGCI_VERSION..."
+        curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin $EXPECTED_GOLANGCI_VERSION
+        echo "✅ golangci-lint updated"
+    else
+        echo "✅ golangci-lint $CURRENT_VERSION already installed"
+    fi
 fi
 
 # Install gosec if not present
@@ -91,6 +111,11 @@ fi
 
 # Run initial checks
 echo "🔍 Running initial code quality checks..."
+echo "📊 Verifying tool versions..."
+echo "  Go: $(go version)"
+echo "  golangci-lint: $(golangci-lint version | head -1)"
+echo "  gosec: $(gosec -version 2>/dev/null || echo 'installed')"
+
 echo "📝 Checking formatting..."
 make fmt
 

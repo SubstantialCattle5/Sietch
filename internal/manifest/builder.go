@@ -5,8 +5,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/substantialcattle5/sietch/internal/config"
 	"gopkg.in/yaml.v3"
+
+	"github.com/substantialcattle5/sietch/internal/config"
 )
 
 // WriteManifest writes the vault configuration to vault.yaml
