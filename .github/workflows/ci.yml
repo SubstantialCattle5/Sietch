@@ -88,7 +88,7 @@ jobs:
         echo "About to run golangci-lint v1.60.3"
     
     - name: golangci-lint
-      uses: golangci/golangci-lint-action@v6
+      uses: golangci/golangci-lint-action@v8
       with:
         version: v1.60.3
         args: --timeout=5m
