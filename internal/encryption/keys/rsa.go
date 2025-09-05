@@ -15,8 +15,8 @@ import (
 )
 
 // GenerateRSAKeyPair generates an RSA key pair and saves it to the specified directory
-func GenerateRSAKeyPair(vaultRoot string, config *config.VaultConfig) error {
-	bits := config.Sync.RSA.KeySize
+func GenerateRSAKeyPair(vaultRoot string, cfg *config.VaultConfig) error {
+	bits := cfg.Sync.RSA.KeySize
 	if bits < 2048 {
 		return fmt.Errorf("RSA key size too small, minimum recommended is 2048 bits")
 	}
@@ -91,9 +91,9 @@ func GenerateRSAKeyPair(vaultRoot string, config *config.VaultConfig) error {
 	}
 
 	// Update config with key information
-	config.Sync.RSA.PublicKeyPath = relPublicKeyPath
-	config.Sync.RSA.PrivateKeyPath = relPrivateKeyPath
-	config.Sync.RSA.Fingerprint = fingerprint
+	cfg.Sync.RSA.PublicKeyPath = relPublicKeyPath
+	cfg.Sync.RSA.PrivateKeyPath = relPrivateKeyPath
+	cfg.Sync.RSA.Fingerprint = fingerprint
 
 	fmt.Printf("RSA key pair generated for sync operations:\n")
 	fmt.Printf("  - Private key: %s\n", privateKeyPath)

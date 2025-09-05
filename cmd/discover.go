@@ -106,10 +106,10 @@ Example:
 }
 
 // displayHostAddresses prints the addresses the host is listening on
-func displayHostAddresses(host host.Host) {
+func displayHostAddresses(h host.Host) {
 	fmt.Println("Listening on:")
-	for _, addr := range host.Addrs() {
-		fmt.Printf("  %s/p2p/%s\n", addr, host.ID().String())
+	for _, addr := range h.Addrs() {
+		fmt.Printf("  %s/p2p/%s\n", addr, h.ID().String())
 	}
 }
 
