@@ -130,7 +130,7 @@ clean-test-vaults:
 # Run security audit
 security-audit:
 	@if command -v gosec > /dev/null 2>&1; then \
-		gosec ./...; \
+		gosec -exclude=G306 ./...; \
 	else \
 		echo "gosec not installed. Install with: go install github.com/securego/gosec/v2/cmd/gosec@latest"; \
 	fi

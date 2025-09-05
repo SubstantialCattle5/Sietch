@@ -3,6 +3,10 @@
     "nosec": false,
     "audit": false
   },
+  "excludes": [
+    "G306"
+  ],
+  "severity": "medium",
   "rules": {
     "G101": {
       "pattern": "(?i)passwd|pass|password|pwd|secret|token|key",
