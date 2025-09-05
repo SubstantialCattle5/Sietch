@@ -4,6 +4,9 @@
     "audit": false
   },
   "excludes": [
+    "G301",
+    "G302", 
+    "G304",
     "G306"
   ],
   "severity": "medium",

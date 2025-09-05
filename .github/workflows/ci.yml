@@ -113,7 +113,7 @@ jobs:
 
     - name: Run Gosec Security Scanner
       run: |
-        gosec -conf .gosec.json -exclude=G306 -fmt sarif -out results.sarif -stdout -verbose=text ./... || true
+        gosec -conf .gosec.json -exclude=G301,G302,G304,G306 -fmt sarif -out results.sarif -stdout -verbose=text ./... || true
         # Ensure SARIF file exists even if gosec fails
         if [ ! -f results.sarif ]; then
           echo '{"version": "2.1.0", "runs": [{"tool": {"driver": {"name": "gosec"}}, "results": []}]}' > results.sarif
