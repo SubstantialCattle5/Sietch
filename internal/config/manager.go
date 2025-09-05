@@ -83,12 +83,12 @@ func (m *Manager) StoreChunk(hash string, data []byte) error {
 
 	// Ensure chunks directory exists
 	chunksDir := filepath.Join(m.vaultRoot, ".sietch", "chunks")
-	if err := os.MkdirAll(chunksDir, 0755); err != nil {
+	if err := os.MkdirAll(chunksDir, 0o755); err != nil {
 		return fmt.Errorf("failed to create chunks directory: %v", err)
 	}
 
 	// Write the chunk data
-	return os.WriteFile(chunkPath, data, 0644)
+	return os.WriteFile(chunkPath, data, 0o644)
 }
 
 // ChunkExists checks if a chunk exists in the vault
@@ -163,7 +163,7 @@ func (m *Manager) SaveConfig(config *VaultConfig) error {
 	// Ensure .sietch directory exists
 	sietchDir := filepath.Join(m.vaultRoot, ".sietch")
 	// log.Printf("Ensuring directory exists: %s", sietchDir)
-	if err := os.MkdirAll(sietchDir, 0755); err != nil {
+	if err := os.MkdirAll(sietchDir, 0o755); err != nil {
 		// log.Printf("ERROR: Failed to create directory %s: %v", sietchDir, err)
 		return fmt.Errorf("failed to create .sietch directory: %v", err)
 	}
@@ -184,7 +184,7 @@ func (m *Manager) SaveConfig(config *VaultConfig) error {
 
 	// Write to file
 	// log.Printf("Writing configuration to %s", configPath)
-	if err := os.WriteFile(configPath, data, 0644); err != nil {
+	if err := os.WriteFile(configPath, data, 0o644); err != nil {
 		log.Printf("ERROR: Failed to write configuration to %s: %v", configPath, err)
 		return fmt.Errorf("failed to write configuration file: %v", err)
 	}

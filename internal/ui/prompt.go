@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/manifoldco/promptui"
+
 	"github.com/substantialcattle5/sietch/internal/chunk"
 	"github.com/substantialcattle5/sietch/internal/config"
 	"github.com/substantialcattle5/sietch/internal/encryption"
@@ -59,7 +60,7 @@ func PromptForInputs() (*config.VaultConfig, error) {
 	_, err := confirmPrompt.Run()
 	if err != nil {
 		if err == promptui.ErrAbort {
-			return nil, errors.New("operation cancelled")
+			return nil, errors.New("operation canceled")
 		}
 		return nil, fmt.Errorf("prompt failed: %w", err)
 	}

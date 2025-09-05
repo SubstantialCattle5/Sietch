@@ -5,8 +5,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/substantialcattle5/sietch/internal/config"
 	"gopkg.in/yaml.v3"
+
+	"github.com/substantialcattle5/sietch/internal/config"
 )
 
 // WriteManifest writes the vault configuration to vault.yaml
@@ -26,7 +27,7 @@ func WriteManifest(basePath string, config config.VaultConfig) error {
 
 	// Create manifest file with restricted permissions (0600) to secure the key
 	// Only owner can read/write the file since it will contain sensitive key material
-	manifestFile, err := os.OpenFile(manifestPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
+	manifestFile, err := os.OpenFile(manifestPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
 		return fmt.Errorf("failed to create manifest file: %w", err)
 	}
@@ -48,7 +49,7 @@ func WriteManifest(basePath string, config config.VaultConfig) error {
 func StoreFileManifest(vaultRoot string, fileName string, manifest *config.FileManifest) error {
 	// Ensure manifests directory exists
 	manifestsDir := filepath.Join(vaultRoot, ".sietch", "manifests")
-	if err := os.MkdirAll(manifestsDir, 0755); err != nil {
+	if err := os.MkdirAll(manifestsDir, 0o755); err != nil {
 		return fmt.Errorf("failed to create manifests directory: %v", err)
 	}
 
@@ -142,12 +143,12 @@ func LoadVaultConfig(vaultRoot string) (*config.VaultConfig, error) {
 func WriteKeyToFile(keyMaterial []byte, keyPath string) error {
 	// Create directory structure for the key if it doesn't exist
 	keyDir := filepath.Dir(keyPath)
-	if err := os.MkdirAll(keyDir, 0700); err != nil {
+	if err := os.MkdirAll(keyDir, 0o700); err != nil {
 		return fmt.Errorf("failed to create key directory %s: %w", keyDir, err)
 	}
 
 	// Write the key with secure permissions (only owner can read/write)
-	if err := os.WriteFile(keyPath, keyMaterial, 0600); err != nil {
+	if err := os.WriteFile(keyPath, keyMaterial, 0o600); err != nil {
 		return fmt.Errorf("failed to write key to %s: %w", keyPath, err)
 	}
 

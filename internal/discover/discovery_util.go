@@ -7,6 +7,7 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
+
 	"github.com/substantialcattle5/sietch/internal/config"
 	"github.com/substantialcattle5/sietch/internal/encryption/keys"
 	"github.com/substantialcattle5/sietch/internal/p2p"
@@ -60,7 +61,8 @@ func SetupDiscovery(ctx context.Context, host host.Host) (*p2p.MDNSDiscovery, <-
 
 // runDiscoveryLoop processes discovered peers until timeout or interrupted
 func RunDiscoveryLoop(ctx context.Context, host host.Host, syncService *p2p.SyncService,
-	peerChan <-chan peer.AddrInfo, timeout int, continuous bool) error {
+	peerChan <-chan peer.AddrInfo, timeout int, continuous bool,
+) error {
 	var timeoutChan <-chan time.Time
 	if !continuous {
 		timeoutChan = time.After(time.Duration(timeout) * time.Second)
@@ -111,7 +113,8 @@ func RunDiscoveryLoop(ctx context.Context, host host.Host, syncService *p2p.Sync
 
 // handleDiscoveredPeer processes a newly discovered peer
 func handleDiscoveredPeer(ctx context.Context, host host.Host, syncService *p2p.SyncService,
-	peer peer.AddrInfo, peerCount int) {
+	peer peer.AddrInfo, peerCount int,
+) {
 	fmt.Printf("✅ Discovered peer #%d\n", peerCount)
 	fmt.Printf("   ID: %s\n", peer.ID.String())
 	fmt.Println("   Addresses:")

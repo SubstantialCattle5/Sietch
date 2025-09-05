@@ -38,11 +38,11 @@ func CreateTestFile(t *testing.T, dir, filename, content string) string {
 	filePath := filepath.Join(dir, filename)
 
 	// Create directory if it doesn't exist
-	if err := os.MkdirAll(filepath.Dir(filePath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(filePath), 0o755); err != nil {
 		t.Fatalf("Failed to create directory for test file: %v", err)
 	}
 
-	err := os.WriteFile(filePath, []byte(content), 0644)
+	err := os.WriteFile(filePath, []byte(content), 0o644)
 	if err != nil {
 		t.Fatalf("Failed to create test file %s: %v", filePath, err)
 	}
@@ -56,7 +56,7 @@ func CreateTestFileWithSize(t *testing.T, dir, filename string, size int64) stri
 	filePath := filepath.Join(dir, filename)
 
 	// Create directory if it doesn't exist
-	if err := os.MkdirAll(filepath.Dir(filePath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(filePath), 0o755); err != nil {
 		t.Fatalf("Failed to create directory for test file: %v", err)
 	}
 
@@ -271,7 +271,7 @@ func CreateTestVaultStructure(t *testing.T, vaultPath string) {
 
 	for _, dir := range dirs {
 		dirPath := filepath.Join(vaultPath, dir)
-		if err := os.MkdirAll(dirPath, 0755); err != nil {
+		if err := os.MkdirAll(dirPath, 0o755); err != nil {
 			t.Fatalf("Failed to create vault directory %s: %v", dirPath, err)
 		}
 	}
@@ -280,7 +280,7 @@ func CreateTestVaultStructure(t *testing.T, vaultPath string) {
 // GenerateTestData generates test data of specified size for benchmarking
 func GenerateTestData(size int) []byte {
 	data := make([]byte, size)
-	rand.Read(data)
+	_, _ = rand.Read(data)
 	return data
 }
 
@@ -357,7 +357,7 @@ sync:
 		mc.Config.Sync.Mode,
 	)
 
-	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+	if err := os.WriteFile(configPath, []byte(configContent), 0o644); err != nil {
 		t.Fatalf("Failed to write vault config: %v", err)
 	}
 }

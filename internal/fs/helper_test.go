@@ -87,8 +87,8 @@ func TestCreateVaultStructure(t *testing.T) {
 			}
 
 			// Check permissions (on Unix-like systems)
-			if info.Mode().Perm() != 0755 {
-				t.Errorf(".sietch directory permissions = %o, want %o", info.Mode().Perm(), 0755)
+			if info.Mode().Perm() != 0o755 {
+				t.Errorf(".sietch directory permissions = %o, want %o", info.Mode().Perm(), 0o755)
 			}
 		})
 	}
@@ -135,7 +135,7 @@ func TestCreateVaultStructureWithExistingFiles(t *testing.T) {
 	// Create parent directories and files
 	for filePath, content := range conflictingFiles {
 		fullPath := filepath.Join(vaultPath, filePath)
-		if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
 			t.Fatalf("Failed to create parent dir for %s: %v", fullPath, err)
 		}
 		testutil.CreateTestFile(t, vaultPath, filePath, content)
@@ -185,11 +185,11 @@ func TestCreateVaultStructurePermissions(t *testing.T) {
 
 	// Check permissions on critical directories
 	criticalDirs := map[string]os.FileMode{
-		".sietch":           0755,
-		".sietch/keys":      0755, // Might be 0700 for security
-		".sietch/manifests": 0755,
-		".sietch/chunks":    0755,
-		"data":              0755,
+		".sietch":           0o755,
+		".sietch/keys":      0o755, // Might be 0700 for security
+		".sietch/manifests": 0o755,
+		".sietch/chunks":    0o755,
+		"data":              0o755,
 	}
 
 	for dir, expectedPerm := range criticalDirs {
@@ -202,7 +202,7 @@ func TestCreateVaultStructurePermissions(t *testing.T) {
 
 		actualPerm := info.Mode().Perm()
 		// Allow some flexibility in permissions (keys directory might be more restrictive)
-		if dir == ".sietch/keys" && (actualPerm == 0700 || actualPerm == 0755) {
+		if dir == ".sietch/keys" && (actualPerm == 0o700 || actualPerm == 0o755) {
 			continue // Either permission is acceptable for keys
 		}
 
@@ -222,13 +222,13 @@ func TestCreateVaultStructureInRestrictedLocation(t *testing.T) {
 	restrictedDir := filepath.Join(parentDir, "restricted")
 
 	// Create a directory with no write permissions
-	if err := os.MkdirAll(restrictedDir, 0555); err != nil {
+	if err := os.MkdirAll(restrictedDir, 0o555); err != nil {
 		t.Fatalf("Failed to create restricted directory: %v", err)
 	}
 
 	// Restore permissions for cleanup
 	t.Cleanup(func() {
-		os.Chmod(restrictedDir, 0755)
+		os.Chmod(restrictedDir, 0o755)
 	})
 
 	vaultPath := filepath.Join(restrictedDir, "vault")

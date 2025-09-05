@@ -12,6 +12,7 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/spf13/cobra"
+
 	"github.com/substantialcattle5/sietch/internal/config"
 	"github.com/substantialcattle5/sietch/internal/discover"
 	"github.com/substantialcattle5/sietch/internal/p2p"
@@ -97,7 +98,7 @@ Example:
 		if err != nil {
 			return err
 		}
-		defer discovery.Stop()
+		defer func() { _ = discovery.Stop() }()
 
 		// Run the discovery loop
 		return discover.RunDiscoveryLoop(ctx, host, syncService, peerChan, timeout, continuous)

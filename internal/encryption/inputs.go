@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/manifoldco/promptui"
+
 	"github.com/substantialcattle5/sietch/internal/config"
 	"github.com/substantialcattle5/sietch/internal/encryption/aesencryption"
 	"github.com/substantialcattle5/sietch/internal/encryption/gpgencyption/gpgkey"

@@ -10,8 +10,9 @@ import (
 
 	"github.com/manifoldco/promptui"
 	"github.com/spf13/cobra"
-	"github.com/substantialcattle5/sietch/internal/config"
 	"golang.org/x/term"
+
+	"github.com/substantialcattle5/sietch/internal/config"
 )
 
 // GetPassphraseForVault retrieves the passphrase for an encrypted vault from multiple sources

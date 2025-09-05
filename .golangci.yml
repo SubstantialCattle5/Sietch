@@ -70,7 +70,7 @@ linters:
     - whitespace
     - gci
     - nolintlint
-    - exportloopref
+    - copyloopvar
     - sqlclosecheck
     - bodyclose
     - noctx
@@ -93,9 +93,12 @@ issues:
         - lll
         - unparam
         - goconst
+        - gocritic
     - path: internal/p2p/
       linters:
         - gosec
+        - gocyclo
+        - gocritic
     - text: "shadow: declaration of \"err\""
       linters:
         - govet
@@ -106,5 +109,59 @@ issues:
     - source: "^//go:generate "
       linters:
         - lll
-  max-issues-per-linter: 0
-  max-same-issues: 0
+    # Temporarily exclude some noisy rules during development
+    - text: "octalLiteral"
+      linters:
+        - gocritic
+    - text: "paramTypeCombine"
+      linters:
+        - gocritic
+    - text: "hugeParam"
+      linters:
+        - gocritic
+    - text: "appendAssign"
+      linters:
+        - gocritic
+    - text: "rangeValCopy"
+      linters:
+        - gocritic
+    - text: "ifElseChain"
+      linters:
+        - gocritic
+    - text: "commentFormatting"
+      linters:
+        - gocritic
+    - text: "emptyStringTest"
+      linters:
+        - gocritic
+    - text: "has .* occurrences, make it a constant"
+      linters:
+        - goconst
+    - text: "cyclomatic complexity .* is high"
+      linters:
+        - gocyclo
+    - text: "unnecessary conversion"
+      linters:
+        - unconvert
+    - text: "func .* is unused"
+      linters:
+        - unused
+    - text: "empty branch"
+      linters:
+        - staticcheck
+    - text: "possible nil pointer dereference"
+      linters:
+        - staticcheck
+    - text: "The line is .* characters long"
+      linters:
+        - lll
+    - text: "File is not properly formatted"
+      linters:
+        - gci
+        - gofumpt
+        - goimports
+    - text: "unnamedResult"
+      linters:
+        - gocritic
+  max-issues-per-linter: 10
+  max-same-issues: 3

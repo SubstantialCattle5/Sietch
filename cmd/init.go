@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
+
 	"github.com/substantialcattle5/sietch/internal/config"
 	"github.com/substantialcattle5/sietch/internal/encryption/keys"
 	"github.com/substantialcattle5/sietch/internal/fs"
@@ -33,8 +34,8 @@ const (
 	minRSAKeySize     = 2048 // Minimum acceptable RSA key size
 
 	// File permissions
-	secureDirPerms  = 0700 // Owner read/write/execute only
-	secureFilePerms = 0600 // Owner read/write only
+	secureDirPerms  = 0o700 // Owner read/write/execute only
+	secureFilePerms = 0o600 // Owner read/write only
 )
 
 var (
@@ -212,7 +213,7 @@ func runInit(cmd *cobra.Command) error {
 	}
 
 	// Print the key config to verify it contains the key
-	//TODO: think we should remove this
+	// TODO: think we should remove this
 	if keyConfig != nil && keyConfig.AESConfig != nil {
 		fmt.Println("\nKey Configuration:")
 		fmt.Printf("  Key exists: %v\n", keyConfig.AESConfig.Key != "")

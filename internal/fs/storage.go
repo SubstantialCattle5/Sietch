@@ -11,7 +11,7 @@ func StoreChunk(basePath string, chunkHash string, data []byte) error {
 	chunkPath := filepath.Join(GetChunkDirectory(basePath), chunkHash)
 
 	// Write the chunk data to file
-	if err := os.WriteFile(chunkPath, data, 0644); err != nil {
+	if err := os.WriteFile(chunkPath, data, 0o644); err != nil {
 		return fmt.Errorf("failed to write chunk %s: %w", chunkHash, err)
 	}
 

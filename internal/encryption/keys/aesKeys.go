@@ -12,9 +12,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/substantialcattle5/sietch/internal/config"
 	"golang.org/x/crypto/pbkdf2"
 	"golang.org/x/crypto/scrypt"
+
+	"github.com/substantialcattle5/sietch/internal/config"
+	"github.com/substantialcattle5/sietch/internal/constants"
 )
 
 // Cryptographic constants
@@ -37,8 +39,8 @@ const (
 	DefaultPBKDF2Iters = 10000 // Default PBKDF2 iteration count
 
 	// File permissions
-	SecureDirPerms  = 0700 // Owner read/write/execute only
-	SecureFilePerms = 0600 // Owner read/write only
+	SecureDirPerms  = 0o700 // Owner read/write/execute only
+	SecureFilePerms = 0o600 // Owner read/write only
 
 	// Validation string for key verification
 	KeyValidationString = "sietch-key-validation"
@@ -63,7 +65,7 @@ func GenerateAESKey(cfg *config.VaultConfig, passphrase string) (*config.KeyConf
 
 	// Generate nonce/IV based on the selected encryption mode
 	switch cfg.Encryption.AESConfig.Mode {
-	case "gcm", "":
+	case constants.AESModeGCM, "":
 		nonce, err := generateNonce()
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate nonce: %w", err)
@@ -104,7 +106,7 @@ func GenerateAESKey(cfg *config.VaultConfig, passphrase string) (*config.KeyConf
 
 		// Set KDF algorithm type from config or default to scrypt
 		if cfg.Encryption.AESConfig.KDF == "" {
-			cfg.Encryption.AESConfig.KDF = "scrypt"
+			cfg.Encryption.AESConfig.KDF = constants.KDFScrypt
 		}
 		keyConfig.AESConfig.KDF = cfg.Encryption.AESConfig.KDF
 

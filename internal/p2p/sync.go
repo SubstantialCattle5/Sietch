@@ -12,14 +12,14 @@ import (
 	"encoding/pem"
 	"fmt"
 	"io"
-	"time"
-
 	"slices"
+	"time"
 
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
+
 	"github.com/substantialcattle5/sietch/internal/config"
 )
 
@@ -185,8 +185,8 @@ func (s *SyncService) handleKeyExchange(stream network.Stream) {
 	}
 
 	// Use connection deadline instead of separate read/write deadlines
-	stream.SetReadDeadline(time.Now().Add(30 * time.Second))
-	stream.SetWriteDeadline(time.Now().Add(30 * time.Second))
+	_ = stream.SetReadDeadline(time.Now().Add(30 * time.Second))
+	_ = stream.SetWriteDeadline(time.Now().Add(30 * time.Second))
 	// Read peer's public key in chunks
 	var pemData []byte
 	buffer := make([]byte, 1024)
@@ -291,7 +291,7 @@ func (s *SyncService) handleAuthentication(stream network.Stream) {
 	defer stream.Close()
 
 	// Read challenge with timeout
-	stream.SetReadDeadline(time.Now().Add(30 * time.Second))
+	_ = stream.SetReadDeadline(time.Now().Add(30 * time.Second))
 	var challenge struct {
 		Challenge []byte `json:"challenge"`
 		Sender    string `json:"sender"`
@@ -311,7 +311,7 @@ func (s *SyncService) handleAuthentication(stream network.Stream) {
 	}
 
 	// Send response with timeout
-	stream.SetWriteDeadline(time.Now().Add(30 * time.Second))
+	_ = stream.SetWriteDeadline(time.Now().Add(30 * time.Second))
 	response := struct {
 		Signature []byte `json:"signature"`
 		VaultID   string `json:"vault_id"`
@@ -343,7 +343,7 @@ func (s *SyncService) handleManifestRequest(stream network.Stream) {
 			}{
 				Error: "Unauthorized: Peer not trusted",
 			}
-			json.NewEncoder(stream).Encode(errorResponse)
+			_ = json.NewEncoder(stream).Encode(errorResponse)
 			return
 		}
 	}
@@ -359,7 +359,7 @@ func (s *SyncService) handleManifestRequest(stream network.Stream) {
 		}{
 			Error: "Internal error getting manifest",
 		}
-		json.NewEncoder(stream).Encode(errorResponse)
+		_ = json.NewEncoder(stream).Encode(errorResponse)
 		return
 	}
 
@@ -378,7 +378,7 @@ func (s *SyncService) handleManifestRequest(stream network.Stream) {
 	}
 
 	// Encode and send the manifest with timeout
-	stream.SetWriteDeadline(time.Now().Add(30 * time.Second))
+	_ = stream.SetWriteDeadline(time.Now().Add(30 * time.Second))
 	if err := json.NewEncoder(stream).Encode(response); err != nil {
 		fmt.Printf("Error sending manifest: %v\n", err)
 	}
@@ -404,13 +404,13 @@ func (s *SyncService) handleChunkRequest(stream network.Stream) {
 			}{
 				Error: "Unauthorized: Peer not trusted",
 			}
-			json.NewEncoder(stream).Encode(errorResponse)
+			_ = json.NewEncoder(stream).Encode(errorResponse)
 			return
 		}
 	}
 
 	// Read the chunk hash with timeout
-	stream.SetReadDeadline(time.Now().Add(30 * time.Second))
+	_ = stream.SetReadDeadline(time.Now().Add(30 * time.Second))
 	var chunkRequest struct {
 		Hash          string `json:"hash"`
 		EncryptedHash string `json:"encrypted_hash,omitempty"`
@@ -444,7 +444,7 @@ func (s *SyncService) handleChunkRequest(stream network.Stream) {
 		}{
 			Error: "Chunk not found",
 		}
-		json.NewEncoder(stream).Encode(response)
+		_ = json.NewEncoder(stream).Encode(response)
 		return
 	}
 
@@ -457,7 +457,7 @@ func (s *SyncService) handleChunkRequest(stream network.Stream) {
 	}
 
 	// Send the chunk data with timeout
-	stream.SetWriteDeadline(time.Now().Add(30 * time.Second))
+	_ = stream.SetWriteDeadline(time.Now().Add(30 * time.Second))
 	response := struct {
 		Size      int    `json:"size"`
 		Data      []byte `json:"data"`
@@ -568,8 +568,8 @@ func (s *SyncService) VerifyAndExchangeKeys(ctx context.Context, peerID peer.ID)
 		defer stream.Close()
 
 		// Use connection deadline instead of separate read/write deadlines
-		stream.SetReadDeadline(time.Now().Add(30 * time.Second))
-		stream.SetWriteDeadline(time.Now().Add(30 * time.Second))
+		_ = stream.SetReadDeadline(time.Now().Add(30 * time.Second))
+		_ = stream.SetWriteDeadline(time.Now().Add(30 * time.Second))
 		// Send our public key
 		publicKeyDER, err := x509.MarshalPKIXPublicKey(s.publicKey)
 		if err != nil {
@@ -702,7 +702,7 @@ func (s *SyncService) authenticatePeer(ctx context.Context, peerID peer.ID) erro
 	}
 
 	// Send challenge with timeout
-	stream.SetWriteDeadline(time.Now().Add(30 * time.Second))
+	_ = stream.SetWriteDeadline(time.Now().Add(30 * time.Second))
 	request := struct {
 		Challenge []byte `json:"challenge"`
 		Sender    string `json:"sender"`
@@ -716,7 +716,7 @@ func (s *SyncService) authenticatePeer(ctx context.Context, peerID peer.ID) erro
 	}
 
 	// Read response with timeout
-	stream.SetReadDeadline(time.Now().Add(30 * time.Second))
+	_ = stream.SetReadDeadline(time.Now().Add(30 * time.Second))
 	var response struct {
 		Signature []byte `json:"signature"`
 		VaultID   string `json:"vault_id"`
@@ -937,7 +937,6 @@ func (s *SyncService) getRemoteManifest(ctx context.Context, peerID peer.ID) (*c
 
 	// Try current protocol version first
 	stream, err := s.host.NewStream(timeoutCtx, peerID, protocol.ID(ManifestProtocolID))
-
 	// If current version fails, try fallback
 	if err != nil {
 		stream, err = s.host.NewStream(timeoutCtx, peerID, protocol.ID(ManifestProtocolIDv0))
@@ -948,7 +947,7 @@ func (s *SyncService) getRemoteManifest(ctx context.Context, peerID peer.ID) (*c
 	defer stream.Close()
 
 	// Set read deadline
-	stream.SetReadDeadline(time.Now().Add(30 * time.Second))
+	_ = stream.SetReadDeadline(time.Now().Add(30 * time.Second))
 
 	// Read the manifest
 	var response struct {
@@ -1046,7 +1045,7 @@ func (s *SyncService) fetchChunk(ctx context.Context, peerID peer.ID, hash strin
 	defer stream.Close()
 
 	// Set write deadline
-	stream.SetWriteDeadline(time.Now().Add(30 * time.Second))
+	_ = stream.SetWriteDeadline(time.Now().Add(30 * time.Second))
 
 	// Send chunk request with both hash types
 	request := struct {
@@ -1065,7 +1064,7 @@ func (s *SyncService) fetchChunk(ctx context.Context, peerID peer.ID, hash strin
 	}
 
 	// Set read deadline
-	stream.SetReadDeadline(time.Now().Add(30 * time.Second))
+	_ = stream.SetReadDeadline(time.Now().Add(30 * time.Second))
 
 	// Read response
 	var response struct {

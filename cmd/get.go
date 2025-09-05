@@ -11,6 +11,7 @@ import (
 
 	"github.com/manifoldco/promptui"
 	"github.com/spf13/cobra"
+
 	"github.com/substantialcattle5/sietch/internal/config"
 	"github.com/substantialcattle5/sietch/internal/encryption"
 	"github.com/substantialcattle5/sietch/internal/fs"
@@ -72,7 +73,7 @@ Example:
 
 		// Ensure destination directory exists
 		destDir := filepath.Dir(outputPath)
-		if err := os.MkdirAll(destDir, 0755); err != nil {
+		if err := os.MkdirAll(destDir, 0o755); err != nil {
 			return fmt.Errorf("failed to create destination directory: %v", err)
 		}
 

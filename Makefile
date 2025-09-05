@@ -19,11 +19,11 @@ COVERAGE_HTML=$(COVERAGE_DIR)/coverage.html
 
 # Build the binary
 build:
-	$(GOBUILD) -o $(BINARY_NAME) -v ./...
+	$(GOBUILD) -o $(BINARY_NAME) -v ./main.go
 
 # Build for Unix
 build-unix:
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(GOBUILD) -o $(BINARY_UNIX) -v ./...
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 $(GOBUILD) -o $(BINARY_UNIX) -v ./main.go
 
 # Clean build artifacts
 clean:

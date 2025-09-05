@@ -31,7 +31,7 @@ func ChunkFile(filePath string, chunkSize int64, vaultRoot string) ([]config.Chu
 
 	// Ensure chunks directory exists
 	chunksDir := fs.GetChunkDirectory(vaultRoot)
-	if err := os.MkdirAll(chunksDir, 0755); err != nil {
+	if err := os.MkdirAll(chunksDir, 0o755); err != nil {
 		return nil, fmt.Errorf("failed to create chunks directory: %v", err)
 	}
 
@@ -89,7 +89,6 @@ func ChunkFile(filePath string, chunkSize int64, vaultRoot string) ([]config.Chu
 				chunkData,
 				vaultRoot,
 			)
-
 			if err != nil {
 				return nil, fmt.Errorf("failed to encrypt chunk %d: %v", chunkCount, err)
 			}
@@ -105,13 +104,13 @@ func ChunkFile(filePath string, chunkSize int64, vaultRoot string) ([]config.Chu
 
 			// Save the encrypted chunk
 			chunkPath := filepath.Join(chunksDir, encryptedHash)
-			if err := os.WriteFile(chunkPath, []byte(encryptedData), 0644); err != nil {
+			if err := os.WriteFile(chunkPath, []byte(encryptedData), 0o644); err != nil {
 				return nil, fmt.Errorf("failed to write encrypted chunk file: %v", err)
 			}
 		} else {
 			// If no encryption, save the raw chunk
 			chunkPath := filepath.Join(chunksDir, chunkHash)
-			if err := os.WriteFile(chunkPath, buffer[:bytesRead], 0644); err != nil {
+			if err := os.WriteFile(chunkPath, buffer[:bytesRead], 0o644); err != nil {
 				return nil, fmt.Errorf("failed to write chunk file: %v", err)
 			}
 		}
@@ -156,7 +155,7 @@ func ChunkFileWithPassphrase(filePath string, chunkSize int64, vaultRoot string,
 
 	// Ensure chunks directory exists
 	chunksDir := fs.GetChunkDirectory(vaultRoot)
-	if err := os.MkdirAll(chunksDir, 0755); err != nil {
+	if err := os.MkdirAll(chunksDir, 0o755); err != nil {
 		return nil, fmt.Errorf("failed to create chunks directory: %v", err)
 	}
 
@@ -224,7 +223,7 @@ func ChunkFileWithPassphrase(filePath string, chunkSize int64, vaultRoot string,
 
 			// Save the encrypted chunk
 			chunkPath := filepath.Join(chunksDir, encryptedHash)
-			if err := os.WriteFile(chunkPath, []byte(encryptedData), 0644); err != nil {
+			if err := os.WriteFile(chunkPath, []byte(encryptedData), 0o644); err != nil {
 				return nil, fmt.Errorf("failed to write encrypted chunk file: %v", err)
 			}
 
@@ -235,7 +234,7 @@ func ChunkFileWithPassphrase(filePath string, chunkSize int64, vaultRoot string,
 		} else {
 			// If no encryption, save the raw chunk
 			chunkPath := filepath.Join(chunksDir, chunkHash)
-			if err := os.WriteFile(chunkPath, buffer[:bytesRead], 0644); err != nil {
+			if err := os.WriteFile(chunkPath, buffer[:bytesRead], 0o644); err != nil {
 				return nil, fmt.Errorf("failed to write chunk file: %v", err)
 			}
 

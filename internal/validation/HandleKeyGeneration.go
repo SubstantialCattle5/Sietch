@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/cobra"
+
 	"github.com/substantialcattle5/sietch/internal/config"
 	"github.com/substantialcattle5/sietch/internal/encryption/keys"
 	"github.com/substantialcattle5/sietch/internal/ui"
@@ -56,12 +57,12 @@ func importKeyFromFile(sourceKeyFile, destKeyPath string) error {
 
 	// Ensure directory exists
 	keyDir := filepath.Dir(destKeyPath)
-	if err := os.MkdirAll(keyDir, 0700); err != nil {
+	if err := os.MkdirAll(keyDir, 0o700); err != nil {
 		return fmt.Errorf("failed to create key directory: %w", err)
 	}
 
 	// Write key file with secure permissions
-	if err := os.WriteFile(destKeyPath, keyData, 0600); err != nil {
+	if err := os.WriteFile(destKeyPath, keyData, 0o600); err != nil {
 		return fmt.Errorf("failed to write key to %s: %w", destKeyPath, err)
 	}
 

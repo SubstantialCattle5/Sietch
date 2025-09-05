@@ -77,6 +77,74 @@ cd Sietch
 go build
 ```
 
+## Development Setup
+
+### Prerequisites
+
+- **Go 1.21+** - [Download](https://golang.org/dl/)
+- **Node.js 16+** - [Download](https://nodejs.org/) (for Git hooks)
+- **Git** - For version control
+
+### Quick Start
+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/substantialcattle5/sietch.git
+   cd sietch
+   ```
+
+2. **Run the setup script:**
+   ```bash
+   ./scripts/setup-hooks.sh
+   ```
+
+   This will:
+   - Install npm dependencies (Husky)
+   - Install Go dependencies
+   - Install development tools (golangci-lint, gosec)
+   - Set up Git hooks for code quality
+   - Run initial checks
+
+3. **Verify setup:**
+   ```bash
+   make build    # Build the binary
+   make test     # Run tests
+   make lint     # Run linter
+   ```
+
+### Git Hooks
+
+The setup includes pre-commit and pre-push hooks that automatically:
+
+**Pre-commit checks:**
+- ✅ Go code formatting (`go fmt`)
+- ✅ Code linting (`golangci-lint`)
+- ✅ Static analysis (`go vet`)
+- ✅ Unit tests
+- ✅ Conventional commit format
+
+**Pre-push checks:**
+- ✅ Full test suite (including integration tests)
+- ✅ Build verification
+- ✅ Security audit (`gosec`)
+
+**Bypass hooks temporarily:**
+```bash
+HUSKY=0 git commit -m "bypass hooks"
+git commit --no-verify -m "skip pre-commit"
+git push --no-verify  # skip pre-push
+```
+
+### Available Commands
+
+```bash
+make help          # Show all available commands
+make dev           # Development workflow (fmt, test, build)
+make check         # Full quality checks (fmt, vet, lint, test)
+make test-coverage # Run tests with coverage report
+make security-audit # Run security checks
+```
+
 ## Usage
 
 **Create a new encrypted vault**
