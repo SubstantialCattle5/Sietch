@@ -66,12 +66,8 @@ linters:
     - staticcheck
     - unused
     - gosimple
-    - structcheck
-    - varcheck
     - ineffassign
-    - deadcode
     - typecheck
-    - golint
     - misspell
     - lll
     - unparam
@@ -85,9 +81,7 @@ linters:
     - unconvert
     - gofumpt
     - whitespace
-    - wsl
     - gci
-    - godot
     - nolintlint
     - exportloopref
     - sqlclosecheck
@@ -95,9 +89,16 @@ linters:
     - noctx
     - rowserrcheck
   disable:
-    - interfacer # deprecated
-    - maligned  # deprecated
-    - scopelint # deprecated
+    # Deprecated linters
+    - interfacer
+    - maligned
+    - scopelint
+    - structcheck
+    - varcheck
+    - deadcode
+    - golint
+    - wsl
+    - godot
 
 issues:
   exclude-rules:
