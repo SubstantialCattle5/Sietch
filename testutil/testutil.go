@@ -312,11 +312,11 @@ func NewMockConfig(t *testing.T, vaultName string) *MockConfig {
 	t.Helper()
 
 	vaultPath := TempDir(t, "mock-vault-"+vaultName)
-	config := CreateTestVaultConfig(t, vaultName)
+	cfg := CreateTestVaultConfig(t, vaultName)
 
 	return &MockConfig{
 		VaultPath: vaultPath,
-		Config:    config,
+		Config:    cfg,
 	}
 }
 

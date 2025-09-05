@@ -12,13 +12,13 @@ import (
 
 // WriteManifest writes the vault configuration to vault.yaml
 // ensuring that any encryption keys in the config are properly stored
-func WriteManifest(basePath string, config config.VaultConfig) error {
+func WriteManifest(basePath string, cfg config.VaultConfig) error {
 	manifestPath := filepath.Join(basePath, "vault.yaml")
 
 	// Verify if the encryption key is present in the config
-	if config.Encryption.Type == "aes" && config.Encryption.AESConfig != nil {
+	if cfg.Encryption.Type == "aes" && cfg.Encryption.AESConfig != nil {
 		// Log that we're storing a key in the manifest
-		if config.Encryption.AESConfig.Key != "" {
+		if cfg.Encryption.AESConfig.Key != "" {
 			fmt.Println("Storing encryption key in vault configuration")
 		} else {
 			fmt.Println("Warning: No encryption key found in AESConfig")
@@ -37,7 +37,7 @@ func WriteManifest(basePath string, config config.VaultConfig) error {
 	encoder := yaml.NewEncoder(manifestFile)
 	encoder.SetIndent(2)
 
-	if err := encoder.Encode(config); err != nil {
+	if err := encoder.Encode(cfg); err != nil {
 		return fmt.Errorf("failed to encode vault configuration: %w", err)
 	}
 
@@ -125,19 +125,19 @@ func LoadVaultConfig(vaultRoot string) (*config.VaultConfig, error) {
 		return nil, fmt.Errorf("failed to read vault configuration: %w", err)
 	}
 
-	var config config.VaultConfig
-	if err := yaml.Unmarshal(data, &config); err != nil {
+	var cfg config.VaultConfig
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse vault configuration: %w", err)
 	}
 
 	// Check if encryption key is present
-	if config.Encryption.Type == "aes" && config.Encryption.AESConfig != nil {
-		if config.Encryption.AESConfig.Key != "" {
+	if cfg.Encryption.Type == "aes" && cfg.Encryption.AESConfig != nil {
+		if cfg.Encryption.AESConfig.Key != "" {
 			fmt.Println("Found encryption key in vault configuration")
 		}
 	}
 
-	return &config, nil
+	return &cfg, nil
 }
 
 func WriteKeyToFile(keyMaterial []byte, keyPath string) error {

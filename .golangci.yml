@@ -109,7 +109,7 @@ issues:
     - source: "^//go:generate "
       linters:
         - lll
-    # Temporarily exclude some noisy rules during development
+    # Exclude specific noisy gocritic rules but keep important ones like importShadow
     - text: "octalLiteral"
       linters:
         - gocritic
@@ -134,6 +134,7 @@ issues:
     - text: "emptyStringTest"
       linters:
         - gocritic
+    # Keep importShadow enabled - it catches important naming conflicts
     - text: "has .* occurrences, make it a constant"
       linters:
         - goconst

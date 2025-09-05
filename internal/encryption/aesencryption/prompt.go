@@ -31,12 +31,12 @@ func PromptAESOptions(configuration *config.VaultConfig) error {
 		}
 
 		// Prompt for passphrase
-		passphrase, err := passphrase.PromptForPassphrase(true)
+		pass, err := passphrase.PromptForPassphrase(true)
 		if err != nil {
 			return fmt.Errorf("failed to get passphrase: %w", err)
 		}
 		// Generate key configuration
-		keyConfig, err := keys.GenerateAESKey(configuration, passphrase)
+		keyConfig, err := keys.GenerateAESKey(configuration, pass)
 		if err != nil {
 			return fmt.Errorf("failed to generate AES key: %w", err)
 		}
