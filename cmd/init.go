@@ -13,29 +13,13 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/substantialcattle5/sietch/internal/config"
+	"github.com/substantialcattle5/sietch/internal/constants"
 	"github.com/substantialcattle5/sietch/internal/encryption/keys"
 	"github.com/substantialcattle5/sietch/internal/fs"
 	"github.com/substantialcattle5/sietch/internal/manifest"
 	"github.com/substantialcattle5/sietch/internal/ui"
 	"github.com/substantialcattle5/sietch/internal/validation"
 	"github.com/substantialcattle5/sietch/internal/vault"
-)
-
-// Constants for cryptographic and configuration defaults
-const (
-	// Default KDF parameters
-	defaultScryptN     = 32768 // CPU/memory cost parameter
-	defaultScryptR     = 8     // Block size parameter
-	defaultScryptP     = 1     // Parallelization parameter
-	defaultPBKDF2Iters = 10000 // Default PBKDF2 iteration count
-
-	// RSA key sizes
-	defaultRSAKeySize = 4096 // Default RSA key size for secure operations
-	minRSAKeySize     = 2048 // Minimum acceptable RSA key size
-
-	// File permissions
-	secureDirPerms  = 0o700 // Owner read/write/execute only
-	secureFilePerms = 0o600 // Owner read/write only
 )
 
 var (
@@ -129,9 +113,9 @@ func init() {
 	// AES specific parameters
 	initCmd.Flags().StringVar(&aesMode, "aes-mode", "gcm", "AES encryption mode (gcm, cbc)")
 	initCmd.Flags().BoolVar(&useScrypt, "use-scrypt", false, "Use scrypt for key derivation")
-	initCmd.Flags().IntVar(&scryptN, "scrypt-n", defaultScryptN, "scrypt N parameter")
-	initCmd.Flags().IntVar(&scryptR, "scrypt-r", defaultScryptR, "scrypt r parameter")
-	initCmd.Flags().IntVar(&scryptP, "scrypt-p", defaultScryptP, "scrypt p parameter")
+	initCmd.Flags().IntVar(&scryptN, "scrypt-n", constants.DefaultScryptN, "scrypt N parameter")
+	initCmd.Flags().IntVar(&scryptR, "scrypt-r", constants.DefaultScryptR, "scrypt r parameter")
+	initCmd.Flags().IntVar(&scryptP, "scrypt-p", constants.DefaultScryptP, "scrypt p parameter")
 
 	// Chunking vars
 	initCmd.Flags().StringVar(&chunkingStrategy, "chunking-strategy", "fixed", "Strategy for chunking (fixed, cdc)")
@@ -149,7 +133,7 @@ func init() {
 	initCmd.Flags().StringSliceVar(&tags, "tags", []string{}, "Tags for vault")
 
 	// RSA Keys
-	initCmd.Flags().Int("rsa-bits", defaultRSAKeySize, "Bit size for the RSA key pair (min 2048, recommended 4096)")
+	initCmd.Flags().Int("rsa-bits", constants.DefaultRSAKeySize, "Bit size for the RSA key pair (min 2048, recommended 4096)")
 
 	// Other options
 	initCmd.Flags().BoolVar(&interactiveMode, "interactive", false, "Use interactive mode")
@@ -195,7 +179,7 @@ func runInit(cmd *cobra.Command) error {
 		ScryptN:          scryptN,
 		ScryptR:          scryptR,
 		ScryptP:          scryptP,
-		PBKDF2Iterations: defaultPBKDF2Iters, // Default PBKDF2 iterations
+		PBKDF2Iterations: constants.DefaultPBKDF2Iters, // Default PBKDF2 iterations
 	}
 
 	keyConfig, err := validation.HandleKeyGeneration(cmd, absVaultPath, keyParams)
@@ -206,7 +190,7 @@ func runInit(cmd *cobra.Command) error {
 	}
 
 	// If we didn't generate key config but have one from interactive mode
-	if keyConfig == nil && keyType == "aes" && interactiveVaultConfig != nil && interactiveVaultConfig.Encryption.AESConfig != nil {
+	if keyConfig == nil && keyType == constants.EncryptionTypeAES && interactiveVaultConfig != nil && interactiveVaultConfig.Encryption.AESConfig != nil {
 		keyConfig = &config.KeyConfig{
 			AESConfig: interactiveVaultConfig.Encryption.AESConfig,
 		}
@@ -235,7 +219,7 @@ func runInit(cmd *cobra.Command) error {
 	keyPath := filepath.Join(absVaultPath, ".sietch", "keys", "secret.key")
 
 	// Write the key to file if it exists
-	if keyType == "aes" && keyConfig != nil && keyConfig.AESConfig != nil && keyConfig.AESConfig.Key != "" {
+	if keyType == constants.EncryptionTypeAES && keyConfig != nil && keyConfig.AESConfig != nil && keyConfig.AESConfig.Key != "" {
 		// Decode the base64-encoded key
 		keyMaterial, err := base64.StdEncoding.DecodeString(keyConfig.AESConfig.Key)
 		if err != nil {
@@ -245,13 +229,13 @@ func runInit(cmd *cobra.Command) error {
 
 		// Create directory structure for the key if it doesn't exist
 		keyDir := filepath.Dir(keyPath)
-		if err := os.MkdirAll(keyDir, secureDirPerms); err != nil {
+		if err := os.MkdirAll(keyDir, constants.SecureDirPerms); err != nil {
 			cleanupOnError(absVaultPath)
 			return fmt.Errorf("failed to create key directory %s: %w", keyDir, err)
 		}
 
 		// Write the key with secure permissions (only owner can read/write)
-		if err := os.WriteFile(keyPath, keyMaterial, secureFilePerms); err != nil {
+		if err := os.WriteFile(keyPath, keyMaterial, constants.SecureFilePerms); err != nil {
 			cleanupOnError(absVaultPath)
 			return fmt.Errorf("failed to write key to %s: %w", keyPath, err)
 		}
@@ -279,14 +263,14 @@ func runInit(cmd *cobra.Command) error {
 	// Initialize RSA config if not present
 	if configuration.Sync.RSA == nil {
 		configuration.Sync.RSA = &config.RSAConfig{
-			KeySize:      defaultRSAKeySize,
+			KeySize:      constants.DefaultRSAKeySize,
 			TrustedPeers: []config.TrustedPeer{},
 		}
 	}
 
 	// Get RSA key size from flags
 	rsaBits, err := cmd.Flags().GetInt("rsa-bits")
-	if err == nil && rsaBits >= minRSAKeySize {
+	if err == nil && rsaBits >= constants.MinRSAKeySize {
 		configuration.Sync.RSA.KeySize = rsaBits
 	}
 
@@ -330,12 +314,12 @@ func handleInteractiveMode() (*config.VaultConfig, error) {
 	usePassphrase = vaultConfig.Encryption.PassphraseProtected
 
 	// Handle AES-specific encryption configuration
-	if keyType == "aes" && vaultConfig.Encryption.AESConfig != nil {
+	if keyType == constants.EncryptionTypeAES && vaultConfig.Encryption.AESConfig != nil {
 		// Set AES mode (GCM or CBC)
 		aesMode = vaultConfig.Encryption.AESConfig.Mode
 
 		// Handle KDF settings
-		if vaultConfig.Encryption.AESConfig.KDF == "scrypt" {
+		if vaultConfig.Encryption.AESConfig.KDF == constants.KDFScrypt {
 			useScrypt = true
 			scryptN = vaultConfig.Encryption.AESConfig.ScryptN
 			scryptR = vaultConfig.Encryption.AESConfig.ScryptR
