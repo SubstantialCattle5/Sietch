@@ -8,7 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/substantialcattle5/sietch/internal/config"
-	"github.com/substantialcattle5/sietch/internal/encryption/keys"
+	"github.com/substantialcattle5/sietch/internal/encryption/aesencryption/aeskey"
 	"github.com/substantialcattle5/sietch/internal/ui"
 )
 
@@ -105,7 +105,7 @@ func generateNewKey(cmd *cobra.Command, keyPath string, params KeyGenParams) (*c
 	}
 
 	// Generate the key configuration
-	keyConfig, err := keys.GenerateAESKey(encConfig, userPassphrase)
+	keyConfig, err := aeskey.GenerateAESKey(encConfig, userPassphrase)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate encryption key: %w", err)
 	}

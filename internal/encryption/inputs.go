@@ -6,6 +6,7 @@ import (
 	"github.com/manifoldco/promptui"
 
 	"github.com/substantialcattle5/sietch/internal/config"
+	"github.com/substantialcattle5/sietch/internal/constants"
 	"github.com/substantialcattle5/sietch/internal/encryption/aesencryption"
 	"github.com/substantialcattle5/sietch/internal/encryption/gpgencyption/gpgkey"
 )
@@ -21,15 +22,16 @@ func PromptSecurityConfig(configuration *config.VaultConfig) error {
 		return err
 	}
 
-	if configuration.Encryption.Type == "aes" {
+	switch configuration.Encryption.Type {
+	case constants.EncryptionTypeAES:
 		if err := aesencryption.PromptAESOptions(configuration); err != nil {
 			return err
 		}
-	} else if configuration.Encryption.Type == "gpg" {
+	case constants.EncryptionTypeGPG:
 		if err := gpgkey.PromptGPGOptions(configuration); err != nil {
 			return err
 		}
-	} else {
+	default:
 		fmt.Println("⚠️  Warning: No encryption will be used. Only suitable for testing.")
 	}
 	return nil
