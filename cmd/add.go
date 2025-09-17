@@ -59,8 +59,6 @@ Example:
 		}
 
 		// Check if file exists and that it is not a directory or symlink
-		//TODO: Add support for directories and symlinks
-		//TODO: Need to check how symlinks will be handled
 		fileInfo, err := fs.VerifyFileAndReturnFileInfo(filePath)
 		if err != nil {
 			return err
@@ -145,3 +143,8 @@ func init() {
 	addCmd.Flags().StringP("tags", "t", "", "Comma-separated tags to associate with the file")
 	addCmd.Flags().StringP("passphrase-value", "p", "", "Passphrase for encrypted vault (if required)")
 }
+
+//TODO: Add support for directories and symlinks
+//TODO: Need to check how symlinks will be handled
+//TODO: Multiple file support - sietch add file1 file2
+//TODO: Interactive mode with real time progress indicators
