@@ -1,7 +1,9 @@
 package constants
 
-// vault basic config
 const (
+	//** Vault basic config
+
+	// Vault name
 	VaultNameLabel     = "Vault name"
 	VaultNameDefault   = "my-sietch"
 	VaultNameMinLength = 3
@@ -16,10 +18,8 @@ const (
 	TagsLabel     = "Tags (comma-separated)"
 	TagsDefault   = "research,desert,offline"
 	TagsAllowEdit = true
-)
 
-// Encryption types and modes
-const (
+	// Encryption types and modes
 	EncryptionTypeAES  = "aes"
 	EncryptionTypeNone = "none"
 	EncryptionTypeGPG  = "gpg"
@@ -29,18 +29,16 @@ const (
 
 	KDFScrypt = "scrypt"
 	KDFPBKDF2 = "pbkdf2"
-)
 
-// File permissions
-const (
+	//** File permissions
+
 	SecureDirPerms    = 0o700 // Owner read/write/execute only
 	SecureFilePerms   = 0o600 // Owner read/write only
 	StandardDirPerms  = 0o755 // Standard directory permissions
 	StandardFilePerms = 0o644 // Standard file permissions
-)
 
-// Constants for cryptographic and configuration defaults
-const (
+	//** Constants for cryptographic and configuration defaults
+
 	// Default KDF parameters
 	DefaultScryptN     = 32768 // CPU/memory cost parameter
 	DefaultScryptR     = 8     // Block size parameter
@@ -64,4 +62,8 @@ const (
 
 	// Validation string for key verification
 	KeyValidationString = "sietch-key-validation"
+
+	//** Constants for chunking
+
+	DefaultChunkSize = 4 * 1024 * 1024 // 4MB
 )

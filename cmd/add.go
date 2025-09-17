@@ -5,7 +5,6 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -14,6 +13,7 @@ import (
 
 	"github.com/substantialcattle5/sietch/internal/chunk"
 	"github.com/substantialcattle5/sietch/internal/config"
+	"github.com/substantialcattle5/sietch/internal/constants"
 	"github.com/substantialcattle5/sietch/internal/fs"
 	"github.com/substantialcattle5/sietch/internal/manifest"
 	"github.com/substantialcattle5/sietch/internal/ui"
@@ -52,23 +52,18 @@ Example:
 		if err != nil {
 			return fmt.Errorf("not inside a vault: %v", err)
 		}
+
 		// Check if vault is initialized
 		if !fs.IsVaultInitialized(vaultRoot) {
 			return fmt.Errorf("vault not initialized, run 'sietch init' first")
 		}
 
-		// Check if file exists
-		fileInfo, err := os.Stat(filePath)
+		// Check if file exists and that it is not a directory or symlink
+		//TODO: Add support for directories and symlinks
+		//TODO: Need to check how symlinks will be handled
+		fileInfo, err := fs.VerifyFileAndReturnFileInfo(filePath)
 		if err != nil {
-			if os.IsNotExist(err) {
-				return fmt.Errorf("file does not exist: %s", filePath)
-			}
-			return fmt.Errorf("error accessing file: %v", err)
-		}
-
-		// Verify it's a regular file, not a directory or symlink
-		if !fileInfo.Mode().IsRegular() {
-			return fmt.Errorf("%s is not a regular file", filePath)
+			return err
 		}
 
 		// Load vault configuration
@@ -77,12 +72,13 @@ Example:
 			return fmt.Errorf("failed to load vault configuration: %v", err)
 		}
 
+		// Parse chunk size
 		chunkSize, err := util.ParseChunkSize(vaultConfig.Chunking.ChunkSize)
 		if err != nil {
 			// Fallback to default if parsing fails
 			fmt.Printf("Warning: Invalid chunk size in configuration (%s). Using default (4MB).\n",
 				vaultConfig.Chunking.ChunkSize)
-			chunkSize = int64(4 * 1024 * 1024) // Default to 4MB
+			chunkSize = int64(constants.DefaultChunkSize) // Default to 4MB
 		}
 
 		// Get file size in human-readable format
@@ -109,13 +105,7 @@ Example:
 
 		// Process the file and store chunks - using the appropriate chunking function
 		var chunkRefs []config.ChunkRef
-		if vaultConfig.Encryption.Type != "none" && vaultConfig.Encryption.PassphraseProtected {
-			// Use passphrase-aware chunking
-			chunkRefs, err = chunk.ChunkFileWithPassphrase(filePath, chunkSize, vaultRoot, passphrase)
-		} else {
-			// Use regular chunking
-			chunkRefs, err = chunk.ChunkFile(filePath, chunkSize, vaultRoot)
-		}
+		chunkRefs, err = chunk.ChunkFile(filePath, chunkSize, vaultRoot, passphrase)
 
 		if err != nil {
 			return fmt.Errorf("chunking failed: %v", err)

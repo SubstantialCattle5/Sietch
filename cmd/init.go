@@ -196,21 +196,21 @@ func runInit(cmd *cobra.Command) error {
 		}
 	}
 
-	// Print the key config to verify it contains the key
-	// TODO: think we should remove this
-	if keyConfig != nil && keyConfig.AESConfig != nil {
-		fmt.Println("\nKey Configuration:")
-		fmt.Printf("  Key exists: %v\n", keyConfig.AESConfig.Key != "")
-		// Print first few chars of the key if it exists (for debugging)
-		if keyConfig.AESConfig.Key != "" {
-			keyLen := len(keyConfig.AESConfig.Key)
-			if keyLen > 10 {
-				fmt.Printf("  Key (first 10 chars): %s...\n", keyConfig.AESConfig.Key[:10])
-			} else {
-				fmt.Printf("  Key: %s\n", keyConfig.AESConfig.Key)
-			}
-		}
-	}
+	// // Print the key config to verify it contains the key
+	// // TODO: think we should remove this
+	// if keyConfig != nil && keyConfig.AESConfig != nil {
+	// 	fmt.Println("\nKey Configuration:")
+	// 	fmt.Printf("  Key exists: %v\n", keyConfig.AESConfig.Key != "")
+	// 	// Print first few chars of the key if it exists (for debugging)
+	// 	if keyConfig.AESConfig.Key != "" {
+	// 		keyLen := len(keyConfig.AESConfig.Key)
+	// 		if keyLen > 10 {
+	// 			fmt.Printf("  Key (first 10 chars): %s...\n", keyConfig.AESConfig.Key[:10])
+	// 		} else {
+	// 			fmt.Printf("  Key: %s\n", keyConfig.AESConfig.Key)
+	// 		}
+	// 	}
+	// }
 
 	// Generate vault ID
 	vaultID := uuid.New().String()

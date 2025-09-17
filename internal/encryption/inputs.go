@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/manifoldco/promptui"
-
 	"github.com/substantialcattle5/sietch/internal/config"
 	"github.com/substantialcattle5/sietch/internal/constants"
 	"github.com/substantialcattle5/sietch/internal/encryption/aesencryption"
@@ -31,6 +30,7 @@ func PromptSecurityConfig(configuration *config.VaultConfig) error {
 		if err := gpgkey.PromptGPGOptions(configuration); err != nil {
 			return err
 		}
+	//TODO: Add ChaCha20-Poly1305 encryption
 	default:
 		fmt.Println("⚠️  Warning: No encryption will be used. Only suitable for testing.")
 	}
@@ -41,7 +41,7 @@ func PromptSecurityConfig(configuration *config.VaultConfig) error {
 func promptEncryptionType(configuration *config.VaultConfig) error {
 	keyTypePrompt := promptui.Select{
 		Label: "Encryption type",
-		Items: []string{"aes", "gpg", "none"},
+		Items: []string{"aes", "gpg", "chacha20", "none"},
 		Templates: &promptui.SelectTemplates{
 			Selected: "Encryption type: {{ . }}",
 			Active:   "▸ {{ . }}",
@@ -50,6 +50,7 @@ func promptEncryptionType(configuration *config.VaultConfig) error {
 {{ "Details:" | faint }}
 {{ if eq . "aes" }}AES-256 encryption (recommended for most users)
 {{ else if eq . "gpg" }}GPG encryption (use your existing GPG keys)
+ {{ else if eq . "chacha20" }} ChaCha20-Poly1305 encryption (used for systems without dedicated AES hardware acceleration.)
 {{ else if eq . "none" }}No encryption (not recommended for sensitive data){{ end }}
 `,
 		},

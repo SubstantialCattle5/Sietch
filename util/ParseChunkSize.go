@@ -8,6 +8,6 @@ func ParseChunkSize(chunkSize string) (int64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("invalid size format: %s", chunkSize)
 	}
-
-	return size * 1024 * 1024, nil
+	// we're not verifying the size here, because we're not sure if the user is using the correct units
+	return size * 1024 * 1024, nil // Convert to bytes
 }

@@ -28,7 +28,7 @@ func GetPassphraseForVault(cmd *cobra.Command, vaultConfig *config.VaultConfig) 
 	passphrase := ""
 	var err error
 
-	// Try "passphrase" flag first (for backward compatibility)
+	// Try "passphrase" flag first
 	if cmd.Flags().Lookup("passphrase") != nil {
 		// Only try to get string value if the flag exists and is a string
 		if flag := cmd.Flags().Lookup("passphrase"); flag != nil && flag.Value.Type() == "string" {
@@ -66,6 +66,7 @@ func GetPassphraseForVault(cmd *cobra.Command, vaultConfig *config.VaultConfig) 
 				Label: "Enter encryption passphrase",
 				Mask:  '*',
 				Validate: func(input string) error {
+					//TODO: Add a common validation for passphrase length and the rest.
 					if len(input) < 8 {
 						return fmt.Errorf("passphrase must be at least 8 characters")
 					}

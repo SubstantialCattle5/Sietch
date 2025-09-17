@@ -62,3 +62,30 @@ func FindVaultRoot() (string, error) {
 		currentDir = parentDir
 	}
 }
+
+func VerifyFileAndReturnFileInfo(filePath string) (os.FileInfo, error) {
+	fileInfo, err := os.Stat(filePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("file does not exist: %s", filePath)
+		}
+		return nil, fmt.Errorf("error accessing file: %v", err)
+	}
+
+	// Verify it's a regular file, not a directory or symlink
+	if !fileInfo.Mode().IsRegular() {
+		return nil, fmt.Errorf("%s is not a regular file", filePath)
+	}
+	return fileInfo, nil
+}
+
+func VerifyFileAndReturnFile(filePath string) (*os.File, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("file not found at %s", filePath)
+		}
+		return nil, fmt.Errorf("error opening file: %v", err)
+	}
+	return file, nil
+}

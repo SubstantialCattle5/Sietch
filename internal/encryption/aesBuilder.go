@@ -16,15 +16,10 @@ import (
 	"golang.org/x/crypto/scrypt"
 
 	"github.com/substantialcattle5/sietch/internal/config"
+	"github.com/substantialcattle5/sietch/internal/constants"
 )
 
-func AesEncryption(data string, vaultPath string) (string, error) {
-	// Load vault configuration
-	vaultConfig, err := config.LoadVaultConfig(vaultPath)
-	if err != nil {
-		return "", fmt.Errorf("failed to load vault config: %w", err)
-	}
-
+func AesEncryption(data string, vaultConfig config.VaultConfig) (string, error) {
 	// Validate encryption type is AES
 	if vaultConfig.Encryption.Type != "aes" {
 		return "", fmt.Errorf("vault is not configured for AES encryption (using %s)",
@@ -70,15 +65,9 @@ func AesEncryption(data string, vaultPath string) (string, error) {
 
 // AesEncryptWithPassphrase encrypts data using the vault's encryption key
 // The passphrase is used to decrypt the encryption key if the vault is passphrase protected
-func AesEncryptWithPassphrase(data string, vaultRoot string, passphrase string) (string, error) {
-	// Load vault configuration
-	vaultConfig, err := config.LoadVaultConfig(vaultRoot)
-	if err != nil {
-		return "", fmt.Errorf("failed to load vault config: %w", err)
-	}
-
+func AesEncryptWithPassphrase(data string, vaultConfig config.VaultConfig, passphrase string) (string, error) {
 	// Validate encryption type is AES
-	if vaultConfig.Encryption.Type != "aes" {
+	if vaultConfig.Encryption.Type != constants.EncryptionTypeAES {
 		return "", fmt.Errorf("vault is not configured for AES encryption (using %s)",
 			vaultConfig.Encryption.Type)
 	}
