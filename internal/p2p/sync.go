@@ -219,7 +219,8 @@ func (s *SyncService) handleKeyExchange(stream network.Stream) {
 	var peerPubKey *rsa.PublicKey
 	var err error
 
-	if block.Type == "RSA PUBLIC KEY" {
+	switch block.Type {
+	case "RSA PUBLIC KEY":
 		// Try PKCS1 format
 		directKey, err := x509.ParsePKCS1PublicKey(block.Bytes)
 		if err != nil {
@@ -227,7 +228,7 @@ func (s *SyncService) handleKeyExchange(stream network.Stream) {
 		} else {
 			peerPubKey = directKey
 		}
-	} else if block.Type == "PUBLIC KEY" {
+	case "PUBLIC KEY":
 		// Try PKIX format
 		pub, err := x509.ParsePKIXPublicKey(block.Bytes)
 		if err != nil {
@@ -240,7 +241,7 @@ func (s *SyncService) handleKeyExchange(stream network.Stream) {
 			fmt.Println("Peer's key is not an RSA public key")
 			return
 		}
-	} else {
+	default:
 		fmt.Printf("Unknown key format: %s\n", block.Type)
 		return
 	}
@@ -627,7 +628,8 @@ func (s *SyncService) VerifyAndExchangeKeys(ctx context.Context, peerID peer.ID)
 		var peerPubKey *rsa.PublicKey
 		var pub interface{}
 
-		if block.Type == "RSA PUBLIC KEY" {
+		switch block.Type {
+		case "RSA PUBLIC KEY":
 			// Try PKCS1 format
 			directKey, err := x509.ParsePKCS1PublicKey(block.Bytes)
 			if err != nil {
@@ -635,7 +637,7 @@ func (s *SyncService) VerifyAndExchangeKeys(ctx context.Context, peerID peer.ID)
 			} else {
 				peerPubKey = directKey
 			}
-		} else if block.Type == "PUBLIC KEY" {
+		case "PUBLIC KEY":
 			// Try PKIX format
 			pub, err = x509.ParsePKIXPublicKey(block.Bytes)
 			if err != nil {
@@ -646,7 +648,7 @@ func (s *SyncService) VerifyAndExchangeKeys(ctx context.Context, peerID peer.ID)
 			if !ok {
 				return false, fmt.Errorf("peer's key is not an RSA public key")
 			}
-		} else {
+		default:
 			return false, fmt.Errorf("unknown key format: %s", block.Type)
 		}
 

@@ -117,10 +117,7 @@ func TestPrepareVaultPath(t *testing.T) {
 
 			// Verify the path is accessible (can get file info)
 			parentDir := filepath.Dir(absVaultPath)
-			if _, err := os.Stat(parentDir); err != nil {
-				// Parent directory doesn't exist, which is fine for this function
-				// The actual vault creation will happen later
-			}
+			_, _ = os.Stat(parentDir) // Check if parent directory exists (ignore result for this test)
 		})
 	}
 }

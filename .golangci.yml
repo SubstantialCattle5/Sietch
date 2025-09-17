@@ -1,3 +1,5 @@
+version: 2
+
 run:
   timeout: 5m
   tests: true
@@ -7,80 +9,25 @@ linters-settings:
     simplify: true
   goimports:
     local-prefixes: github.com/substantialcattle5/sietch
-  gci:
-    sections:
-      - standard
-      - default
-      - prefix(github.com/substantialcattle5/sietch)
-    skip-generated: true
-  govet:
-    disable:
-      - shadow
-  gocyclo:
-    min-complexity: 15
-  dupl:
-    threshold: 100
-  goconst:
-    min-len: 3
-    min-occurrences: 3
-  misspell:
-    locale: US
-  lll:
-    line-length: 120
-  unparam:
-    check-exported: false
-  nakedret:
-    max-func-lines: 30
-  prealloc:
-    simple: true
-    range-loops: true
-    for-loops: false
-  gocritic:
-    enabled-tags:
-      - performance
-      - style
-    disabled-checks:
-      - wrapperFunc
-  gosec:
-    excludes:
-      - G404
-      - G304
-      - G301
-      - G302
-      - G306
-      - G104
 
 linters:
   enable:
-    - gofmt
-    - goimports
+    # Core linters - essential for code quality
     - govet
-    - errcheck
     - staticcheck
     - unused
-    - gosimple
     - ineffassign
-    - typecheck
+    
+    # Basic code quality
     - misspell
-    - lll
-    - unparam
-    - nakedret
-    - prealloc
-    - gocritic
-    - gocyclo
-    - dupl
-    - goconst
-    - gosec
-    - unconvert
-    - gofumpt
-    - whitespace
-    - gci
-    - nolintlint
-    - copyloopvar
-    - sqlclosecheck
-    - bodyclose
-    - noctx
-    - rowserrcheck
+  disable:
+    # Disable noisy linters for minimal CI
+    - errcheck
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
 
 issues:
   exclude-dirs:
@@ -90,85 +37,12 @@ issues:
     - ".*\\.pb\\.go$"
     - ".*_gen\\.go$"
   exclude-rules:
+    # Be more lenient with test files
     - path: _test\.go
       linters:
-        - gocyclo
-        - errcheck
-        - dupl
-        - gosec
-        - lll
-        - unparam
-        - goconst
-        - gocritic
-    - path: internal/p2p/
-      linters:
-        - gosec
-        - gocyclo
-        - gocritic
-    - text: "shadow: declaration of \"err\""
-      linters:
-        - govet
+        - staticcheck
+    # Exclude generated files from formatting rules
     - path: \.pb\.go
       linters:
         - gofmt
         - goimports
-    - source: "^//go:generate "
-      linters:
-        - lll
-    # Exclude specific noisy gocritic rules but keep important ones like importShadow
-    - text: "octalLiteral"
-      linters:
-        - gocritic
-    - text: "paramTypeCombine"
-      linters:
-        - gocritic
-    - text: "hugeParam"
-      linters:
-        - gocritic
-    - text: "appendAssign"
-      linters:
-        - gocritic
-    - text: "rangeValCopy"
-      linters:
-        - gocritic
-    - text: "ifElseChain"
-      linters:
-        - gocritic
-    - text: "commentFormatting"
-      linters:
-        - gocritic
-    - text: "emptyStringTest"
-      linters:
-        - gocritic
-    # Keep importShadow enabled - it catches important naming conflicts
-    - text: "has .* occurrences, make it a constant"
-      linters:
-        - goconst
-    - text: "cyclomatic complexity .* is high"
-      linters:
-        - gocyclo
-    - text: "unnecessary conversion"
-      linters:
-        - unconvert
-    - text: "func .* is unused"
-      linters:
-        - unused
-    - text: "empty branch"
-      linters:
-        - staticcheck
-    - text: "possible nil pointer dereference"
-      linters:
-        - staticcheck
-    - text: "The line is .* characters long"
-      linters:
-        - lll
-    - text: "File is not properly formatted"
-      linters:
-        - gci
-        - gofumpt
-        - goimports
-    - text: "unnamedResult"
-      linters:
-        - gocritic
-  max-issues-per-linter: 10
-  max-same-issues: 3

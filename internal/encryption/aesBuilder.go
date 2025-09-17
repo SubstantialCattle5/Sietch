@@ -96,7 +96,8 @@ func AesEncryptWithPassphrase(data string, vaultConfig config.VaultConfig, passp
 		mode = vaultConfig.Encryption.AESConfig.Mode
 	}
 
-	if mode == "gcm" {
+	switch mode {
+	case "gcm":
 		// Use GCM mode for authenticated encryption
 		gcm, err := cipher.NewGCM(block)
 		if err != nil {
@@ -114,7 +115,7 @@ func AesEncryptWithPassphrase(data string, vaultConfig config.VaultConfig, passp
 
 		// Return the encrypted data as a hex string
 		return hex.EncodeToString(ciphertext), nil
-	} else if mode == "cbc" {
+	case "cbc":
 		// Use CBC mode with PKCS#7 padding
 		iv := make([]byte, aes.BlockSize)
 		if _, err := io.ReadFull(rand.Reader, iv); err != nil {
@@ -231,7 +232,8 @@ func loadEncryptionKeyWithPassphrase(keyPath string, passphrase string, encConfi
 
 	// Derive key using appropriate KDF
 	var derivedKey []byte
-	if encConfig.AESConfig.KDF == "scrypt" {
+	switch encConfig.AESConfig.KDF {
+	case "scrypt":
 		// Use scrypt KDF
 		derivedKey, err = scrypt.Key(
 			[]byte(passphrase),
@@ -244,7 +246,7 @@ func loadEncryptionKeyWithPassphrase(keyPath string, passphrase string, encConfi
 		if err != nil {
 			return nil, fmt.Errorf("error deriving key with scrypt: %w", err)
 		}
-	} else if encConfig.AESConfig.KDF == "pbkdf2" {
+	case "pbkdf2":
 		// Use PBKDF2 KDF
 		derivedKey = pbkdf2.Key(
 			[]byte(passphrase),
@@ -253,7 +255,7 @@ func loadEncryptionKeyWithPassphrase(keyPath string, passphrase string, encConfi
 			32, // 32 bytes for AES-256
 			sha256.New,
 		)
-	} else {
+	default:
 		return nil, fmt.Errorf("unsupported KDF algorithm: %s", encConfig.AESConfig.KDF)
 	}
 
@@ -323,7 +325,8 @@ func decryptKeyWithDerivedKey(encryptedKey, derivedKey []byte, aesConfig *config
 		mode = "gcm" // Default mode is GCM
 	}
 
-	if mode == "gcm" {
+	switch mode {
+	case "gcm":
 		// Use GCM mode
 		gcm, err := cipher.NewGCM(block)
 		if err != nil {
@@ -345,7 +348,7 @@ func decryptKeyWithDerivedKey(encryptedKey, derivedKey []byte, aesConfig *config
 		}
 
 		return plaintext, nil
-	} else if mode == "cbc" {
+	case "cbc":
 		// Use CBC mode
 		ivSize := aes.BlockSize
 		if len(encryptedKey) < ivSize {

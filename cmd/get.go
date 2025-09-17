@@ -141,13 +141,12 @@ Example:
 					return fmt.Errorf("failed to decrypt chunk %s: %v", chunkHash, err)
 				}
 
-				// Verify chunk integrity by hashing the decrypted content
-				if !skipEncryption && chunkRef.Hash != "" {
-					// You would implement hash verification here
-					// Example: if util.SHA256Sum([]byte(decryptedData)) != chunkRef.Hash {
-					//    return fmt.Errorf("chunk integrity check failed")
-					// }
-				}
+				// TODO: Implement chunk integrity verification
+				// if !skipEncryption && chunkRef.Hash != "" {
+				//     if util.SHA256Sum([]byte(decryptedData)) != chunkRef.Hash {
+				//         return fmt.Errorf("chunk integrity check failed")
+				//     }
+				// }
 
 				chunkData = []byte(decryptedData)
 			}
