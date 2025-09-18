@@ -7,7 +7,7 @@ import (
 	"github.com/substantialcattle5/sietch/internal/config"
 	"github.com/substantialcattle5/sietch/internal/constants"
 	"github.com/substantialcattle5/sietch/internal/encryption/aesencryption"
-	"github.com/substantialcattle5/sietch/internal/encryption/gpgencyption/gpgkey"
+	"github.com/substantialcattle5/sietch/internal/encryption/gpgencyption"
 )
 
 // PromptSecurityConfig asks for security-related configuration
@@ -27,7 +27,7 @@ func PromptSecurityConfig(configuration *config.VaultConfig) error {
 			return err
 		}
 	case constants.EncryptionTypeGPG:
-		if err := gpgkey.PromptGPGOptions(configuration); err != nil {
+		if err := gpgencyption.PromptGPGOptions(configuration); err != nil {
 			return err
 		}
 	//TODO: Add ChaCha20-Poly1305 encryption

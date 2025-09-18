@@ -2,13 +2,11 @@ package gpgkey
 
 import (
 	"fmt"
-	"os/exec"
 	"regexp"
 	"strings"
 
 	"github.com/manifoldco/promptui"
 	"github.com/substantialcattle5/sietch/internal/config"
-	"github.com/substantialcattle5/sietch/internal/encryption/passphrase"
 )
 
 // GPGKeyInfo represents information about a GPG key
@@ -21,136 +19,8 @@ type GPGKeyInfo struct {
 	Expired     bool
 }
 
-func PromptGPGOptions(configuration *config.VaultConfig) error {
-	// Initialize GPG config if not exists
-	if configuration.Encryption.GPGConfig == nil {
-		configuration.Encryption.GPGConfig = &config.GPGConfig{}
-	}
-
-	// Check if GPG is available
-	if !isGPGAvailable() {
-		return fmt.Errorf("GPG is not available on this system. Please install GPG first")
-	}
-
-	// Get available GPG keys
-	keys, err := listGPGKeys()
-	if err != nil {
-		return fmt.Errorf("failed to list GPG keys: %w", err)
-	}
-
-	// Prompt for key selection or creation
-	selectedKey, err := promptForKeySelection(keys)
-	if err != nil {
-		return err
-	}
-
-	if selectedKey == nil {
-		// User chose to create a new key
-		newKey, err := promptForNewKeyCreation()
-		if err != nil {
-			return err
-		}
-		selectedKey = newKey
-	}
-
-	// Store the selected key configuration
-	configuration.Encryption.GPGConfig.KeyID = selectedKey.KeyID
-	configuration.Encryption.GPGConfig.Recipient = selectedKey.Email
-	configuration.Encryption.KeyHash = selectedKey.Fingerprint
-
-	// Prompt for passphrase protection (for private key access)
-	if err := passphrase.PromptPassphraseProtection(configuration); err != nil {
-		return err
-	}
-
-	// Configure key server (optional)
-	if err := promptForKeyServer(configuration); err != nil {
-		return err
-	}
-
-	fmt.Printf("✓ GPG key configured: %s (%s)\n", selectedKey.UserID, selectedKey.KeyID)
-
-	return nil
-}
-
-// isGPGAvailable checks if GPG is installed and available
-func isGPGAvailable() bool {
-	cmd := exec.Command("gpg", "--version")
-	return cmd.Run() == nil
-}
-
-// listGPGKeys retrieves available GPG keys from the keyring
-func listGPGKeys() ([]*GPGKeyInfo, error) {
-	cmd := exec.Command("gpg", "--list-keys", "--with-colons")
-	output, err := cmd.Output()
-	if err != nil {
-		return nil, fmt.Errorf("failed to execute gpg --list-keys: %w", err)
-	}
-
-	return parseGPGKeyList(string(output)), nil
-}
-
-// parseGPGKeyList parses GPG key list output and extracts key information
-func parseGPGKeyList(output string) []*GPGKeyInfo {
-	var keys []*GPGKeyInfo
-	lines := strings.Split(output, "\n")
-
-	var currentKey *GPGKeyInfo
-
-	for _, line := range lines {
-		if line == "" {
-			continue
-		}
-
-		fields := strings.Split(line, ":")
-		if len(fields) < 2 {
-			continue
-		}
-
-		recordType := fields[0]
-
-		switch recordType {
-		case "pub":
-			// Public key record
-			if len(fields) >= 5 {
-				currentKey = &GPGKeyInfo{
-					KeyID:   fields[4],
-					KeyType: fields[3],
-					Expired: fields[1] == "e",
-				}
-			}
-		case "fpr":
-			// Fingerprint record
-			if currentKey != nil && len(fields) >= 10 {
-				currentKey.Fingerprint = fields[9]
-			}
-		case "uid":
-			// User ID record
-			if currentKey != nil && len(fields) >= 10 {
-				userID := fields[9]
-				currentKey.UserID = userID
-
-				// Extract email from user ID
-				emailRegex := regexp.MustCompile(`<([^>]+)>`)
-				matches := emailRegex.FindStringSubmatch(userID)
-				if len(matches) > 1 {
-					currentKey.Email = matches[1]
-				}
-
-				// Only add the key when we have complete information
-				if currentKey.KeyID != "" && !currentKey.Expired {
-					keys = append(keys, currentKey)
-				}
-				currentKey = nil
-			}
-		}
-	}
-
-	return keys
-}
-
 // promptForKeySelection allows user to select an existing key or create a new one
-func promptForKeySelection(keys []*GPGKeyInfo) (*GPGKeyInfo, error) {
+func PromptForKeySelection(keys []*GPGKeyInfo) (*GPGKeyInfo, error) {
 	if len(keys) == 0 {
 		fmt.Println("No GPG keys found in your keyring.")
 		return nil, nil
@@ -192,7 +62,7 @@ func promptForKeySelection(keys []*GPGKeyInfo) (*GPGKeyInfo, error) {
 }
 
 // promptForNewKeyCreation guides user through creating a new GPG key
-func promptForNewKeyCreation() (*GPGKeyInfo, error) {
+func PromptForNewKeyCreation() (*GPGKeyInfo, error) {
 	fmt.Println("\n🔑 Creating a new GPG key...")
 
 	// Prompt for name
@@ -269,7 +139,7 @@ func promptForNewKeyCreation() (*GPGKeyInfo, error) {
 	// Create the GPG key
 	fmt.Println("\n🔄 Generating GPG key... This may take a moment.")
 
-	keyInfo, err := generateGPGKey(name, email, keyType, expiration)
+	keyInfo, err := GenerateGPGKey(name, email, keyType, expiration)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate GPG key: %w", err)
 	}
@@ -281,93 +151,8 @@ func promptForNewKeyCreation() (*GPGKeyInfo, error) {
 	return keyInfo, nil
 }
 
-// generateGPGKey creates a new GPG key with the specified parameters
-func generateGPGKey(name, email, keyType, expiration string) (*GPGKeyInfo, error) {
-	// Map key type to GPG parameters
-	var algorithm, keyLength string
-	switch keyType {
-	case "RSA 4096":
-		algorithm = "rsa"
-		keyLength = "4096"
-	case "RSA 2048":
-		algorithm = "rsa"
-		keyLength = "2048"
-	case "Ed25519":
-		algorithm = "ed25519"
-		keyLength = ""
-	default:
-		algorithm = "rsa"
-		keyLength = "4096"
-	}
-
-	// Map expiration to GPG format
-	var expire string
-	switch expiration {
-	case "1 year":
-		expire = "1y"
-	case "2 years":
-		expire = "2y"
-	case "5 years":
-		expire = "5y"
-	case "Never expires":
-		expire = "0"
-	default:
-		expire = "1y"
-	}
-
-	// Create GPG key generation batch file content
-	batchContent := fmt.Sprintf(`Key-Type: %s
-Key-Length: %s
-Subkey-Type: %s
-Subkey-Length: %s
-Name-Real: %s
-Name-Email: %s
-Expire-Date: %s
-%%commit
-%%echo done
-`, algorithm, keyLength, algorithm, keyLength, name, email, expire)
-
-	// For Ed25519, adjust the batch content
-	if algorithm == "ed25519" {
-		batchContent = fmt.Sprintf(`Key-Type: EDDSA
-Key-Curve: Ed25519
-Subkey-Type: ECDH
-Subkey-Curve: Curve25519
-Name-Real: %s
-Name-Email: %s
-Expire-Date: %s
-%%commit
-%%echo done
-`, name, email, expire)
-	}
-
-	// Execute GPG key generation
-	cmd := exec.Command("gpg", "--batch", "--generate-key")
-	cmd.Stdin = strings.NewReader(batchContent)
-
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return nil, fmt.Errorf("GPG key generation failed: %w\nOutput: %s", err, string(output))
-	}
-
-	// Retrieve the newly created key
-	keys, err := listGPGKeys()
-	if err != nil {
-		return nil, fmt.Errorf("failed to list keys after generation: %w", err)
-	}
-
-	// Find the key that matches our email
-	for _, key := range keys {
-		if key.Email == email {
-			return key, nil
-		}
-	}
-
-	return nil, fmt.Errorf("could not find the newly generated key")
-}
-
 // promptForKeyServer prompts for optional key server configuration
-func promptForKeyServer(configuration *config.VaultConfig) error {
+func PromptForKeyServer(configuration *config.VaultConfig) error {
 	prompt := promptui.Prompt{
 		Label:     "Configure custom key server (optional)",
 		IsConfirm: true,
