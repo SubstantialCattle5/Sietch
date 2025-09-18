@@ -15,10 +15,69 @@ import (
 	"github.com/substantialcattle5/sietch/internal/config"
 	"github.com/substantialcattle5/sietch/internal/encryption"
 	"github.com/substantialcattle5/sietch/internal/fs"
-	"github.com/substantialcattle5/sietch/internal/manifest"
 	"github.com/substantialcattle5/sietch/internal/ui"
 	"github.com/substantialcattle5/sietch/util"
 )
+
+// findFileManifest searches for a file manifest by path, trying multiple approaches
+func findFileManifest(vaultRoot, filePath string) (*config.FileManifest, error) {
+	// Create a vault manager to get all manifests
+	manager, err := config.NewManager(vaultRoot)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create vault manager: %v", err)
+	}
+
+	// Get all manifests
+	vaultManifest, err := manager.GetManifest()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get vault manifest: %v", err)
+	}
+
+	// Search through all files to find a match
+	for _, fileManifest := range vaultManifest.Files {
+		// Try multiple matching strategies:
+		// 1. Exact match with full path (Destination + FilePath)
+		fullPath := fileManifest.Destination + fileManifest.FilePath
+		if fullPath == filePath {
+			return &fileManifest, nil
+		}
+
+		// 2. Match just the FilePath
+		if fileManifest.FilePath == filePath {
+			return &fileManifest, nil
+		}
+
+		// 3. Match basename if user provided just filename
+		if filepath.Base(fileManifest.FilePath) == filePath {
+			return &fileManifest, nil
+		}
+
+		// 4. Match basename of full path
+		if filepath.Base(fullPath) == filePath {
+			return &fileManifest, nil
+		}
+	}
+
+	// If we get here, no file was found - provide helpful error message
+	if len(vaultManifest.Files) == 0 {
+		return nil, fmt.Errorf("no files found in vault")
+	}
+
+	// Show similar files to help user
+	var suggestions []string
+	for _, fileManifest := range vaultManifest.Files {
+		fullPath := fileManifest.Destination + fileManifest.FilePath
+		if filepath.Base(fullPath) == filepath.Base(filePath) {
+			suggestions = append(suggestions, fullPath)
+		}
+	}
+
+	if len(suggestions) > 0 {
+		return nil, fmt.Errorf("no file found matching '%s'. Did you mean one of: %v", filePath, suggestions)
+	}
+
+	return nil, fmt.Errorf("no file found matching '%s'. Use 'sietch ls' to see available files", filePath)
+}
 
 const (
 	force          = "force"
@@ -64,9 +123,8 @@ Example:
 
 		fmt.Printf("Retrieving %s from vault\n", filePath)
 
-		// Load the manifest for the requested file
-		manifestName := filepath.Base(filePath)
-		fileManifest, err := manifest.LoadFileManifest(vaultRoot, manifestName)
+		// Find the file manifest by searching through all manifests
+		fileManifest, err := findFileManifest(vaultRoot, filePath)
 		if err != nil {
 			return fmt.Errorf("file not found in vault: %v", err)
 		}

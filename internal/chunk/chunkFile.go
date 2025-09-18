@@ -1,7 +1,7 @@
 package chunk
 
 import (
-	"crypto/sha1"
+	"crypto/sha1" // #nosec G401
 	"crypto/sha256"
 	"crypto/sha512"
 	"fmt"
@@ -28,6 +28,7 @@ func createHasher(algorithm string) (hash.Hash, error) {
 	case constants.HashAlgorithmSHA512:
 		return sha512.New(), nil
 	case constants.HashAlgorithmSHA1:
+		// #nosec G401
 		return sha1.New(), nil
 	case constants.HashAlgorithmBLAKE3:
 		return blake3.New(), nil
