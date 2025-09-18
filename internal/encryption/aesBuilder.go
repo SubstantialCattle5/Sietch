@@ -16,15 +16,10 @@ import (
 	"golang.org/x/crypto/scrypt"
 
 	"github.com/substantialcattle5/sietch/internal/config"
+	"github.com/substantialcattle5/sietch/internal/constants"
 )
 
-func AesEncryption(data string, vaultPath string) (string, error) {
-	// Load vault configuration
-	vaultConfig, err := config.LoadVaultConfig(vaultPath)
-	if err != nil {
-		return "", fmt.Errorf("failed to load vault config: %w", err)
-	}
-
+func AesEncryption(data string, vaultConfig config.VaultConfig) (string, error) {
 	// Validate encryption type is AES
 	if vaultConfig.Encryption.Type != "aes" {
 		return "", fmt.Errorf("vault is not configured for AES encryption (using %s)",
@@ -70,15 +65,9 @@ func AesEncryption(data string, vaultPath string) (string, error) {
 
 // AesEncryptWithPassphrase encrypts data using the vault's encryption key
 // The passphrase is used to decrypt the encryption key if the vault is passphrase protected
-func AesEncryptWithPassphrase(data string, vaultRoot string, passphrase string) (string, error) {
-	// Load vault configuration
-	vaultConfig, err := config.LoadVaultConfig(vaultRoot)
-	if err != nil {
-		return "", fmt.Errorf("failed to load vault config: %w", err)
-	}
-
+func AesEncryptWithPassphrase(data string, vaultConfig config.VaultConfig, passphrase string) (string, error) {
 	// Validate encryption type is AES
-	if vaultConfig.Encryption.Type != "aes" {
+	if vaultConfig.Encryption.Type != constants.EncryptionTypeAES {
 		return "", fmt.Errorf("vault is not configured for AES encryption (using %s)",
 			vaultConfig.Encryption.Type)
 	}
@@ -107,7 +96,8 @@ func AesEncryptWithPassphrase(data string, vaultRoot string, passphrase string) 
 		mode = vaultConfig.Encryption.AESConfig.Mode
 	}
 
-	if mode == "gcm" {
+	switch mode {
+	case "gcm":
 		// Use GCM mode for authenticated encryption
 		gcm, err := cipher.NewGCM(block)
 		if err != nil {
@@ -125,7 +115,7 @@ func AesEncryptWithPassphrase(data string, vaultRoot string, passphrase string) 
 
 		// Return the encrypted data as a hex string
 		return hex.EncodeToString(ciphertext), nil
-	} else if mode == "cbc" {
+	case "cbc":
 		// Use CBC mode with PKCS#7 padding
 		iv := make([]byte, aes.BlockSize)
 		if _, err := io.ReadFull(rand.Reader, iv); err != nil {
@@ -203,6 +193,97 @@ func AesDecryption(encryptedData string, vaultPath string) (string, error) {
 	return string(plaintext), nil
 }
 
+// AesDecryptionWithPassphrase decrypts data using the vault's encryption key
+// The passphrase is used to decrypt the encryption key if the vault is passphrase protected
+func AesDecryptionWithPassphrase(encryptedData string, vaultPath string, passphrase string) (string, error) {
+	vaultConfig, err := config.LoadVaultConfig(vaultPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to load vault config: %w", err)
+	}
+
+	// Validate encryption type is AES
+	if vaultConfig.Encryption.Type != "aes" {
+		return "", fmt.Errorf("vault is not configured for AES encryption (using %s)", vaultConfig.Encryption.Type)
+	}
+
+	// Load and decrypt the encryption key if necessary
+	keyData, err := loadEncryptionKeyWithPassphrase(
+		vaultConfig.Encryption.KeyPath,
+		passphrase,
+		vaultConfig.Encryption,
+	)
+	if err != nil {
+		return "", fmt.Errorf("failed to load encryption key: %w", err)
+	}
+
+	// Decode the hex encoded ciphertext
+	decodedCipherText, err := hex.DecodeString(encryptedData)
+	if err != nil {
+		return "", fmt.Errorf("error decoding hex: %w", err)
+	}
+
+	// Create cipher block using the key
+	block, err := aes.NewCipher(keyData)
+	if err != nil {
+		return "", fmt.Errorf("error creating AES cipher block: %w", err)
+	}
+
+	// Determine decryption mode from config or default to GCM
+	mode := "gcm"
+	if vaultConfig.Encryption.AESConfig != nil && vaultConfig.Encryption.AESConfig.Mode != "" {
+		mode = vaultConfig.Encryption.AESConfig.Mode
+	}
+
+	switch mode {
+	case "gcm":
+		// Use GCM mode for authenticated decryption
+		gcm, err := cipher.NewGCM(block)
+		if err != nil {
+			return "", fmt.Errorf("error setting GCM mode: %w", err)
+		}
+
+		// Make sure the ciphertext is long enough to contain a nonce
+		if len(decodedCipherText) < gcm.NonceSize() {
+			return "", fmt.Errorf("ciphertext too short")
+		}
+
+		// Extract nonce and ciphertext
+		nonce, ciphertext := decodedCipherText[:gcm.NonceSize()], decodedCipherText[gcm.NonceSize():]
+
+		// Decrypt the data
+		plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
+		if err != nil {
+			return "", fmt.Errorf("error decrypting data: %w", err)
+		}
+
+		return string(plaintext), nil
+
+	case "cbc":
+		// Use CBC mode
+		if len(decodedCipherText) < aes.BlockSize {
+			return "", fmt.Errorf("ciphertext too short for CBC mode")
+		}
+
+		iv := decodedCipherText[:aes.BlockSize]
+		ciphertext := decodedCipherText[aes.BlockSize:]
+
+		// Create CBC decrypter
+		cbcMode := cipher.NewCBCDecrypter(block, iv)
+		plaintext := make([]byte, len(ciphertext))
+		cbcMode.CryptBlocks(plaintext, ciphertext)
+
+		// Remove PKCS#7 padding
+		paddingLen := int(plaintext[len(plaintext)-1])
+		if paddingLen > len(plaintext) || paddingLen <= 0 {
+			return "", fmt.Errorf("invalid padding")
+		}
+
+		return string(plaintext[:len(plaintext)-paddingLen]), nil
+	}
+
+	return "", fmt.Errorf("unsupported encryption mode: %s", mode)
+}
+
 func loadEncryptionKey(keyPath string) ([]byte, error) {
 	keyData, err := os.ReadFile(keyPath)
 	if err != nil {
@@ -242,7 +323,8 @@ func loadEncryptionKeyWithPassphrase(keyPath string, passphrase string, encConfi
 
 	// Derive key using appropriate KDF
 	var derivedKey []byte
-	if encConfig.AESConfig.KDF == "scrypt" {
+	switch encConfig.AESConfig.KDF {
+	case "scrypt":
 		// Use scrypt KDF
 		derivedKey, err = scrypt.Key(
 			[]byte(passphrase),
@@ -255,7 +337,7 @@ func loadEncryptionKeyWithPassphrase(keyPath string, passphrase string, encConfi
 		if err != nil {
 			return nil, fmt.Errorf("error deriving key with scrypt: %w", err)
 		}
-	} else if encConfig.AESConfig.KDF == "pbkdf2" {
+	case "pbkdf2":
 		// Use PBKDF2 KDF
 		derivedKey = pbkdf2.Key(
 			[]byte(passphrase),
@@ -264,7 +346,7 @@ func loadEncryptionKeyWithPassphrase(keyPath string, passphrase string, encConfi
 			32, // 32 bytes for AES-256
 			sha256.New,
 		)
-	} else {
+	default:
 		return nil, fmt.Errorf("unsupported KDF algorithm: %s", encConfig.AESConfig.KDF)
 	}
 
@@ -334,7 +416,8 @@ func decryptKeyWithDerivedKey(encryptedKey, derivedKey []byte, aesConfig *config
 		mode = "gcm" // Default mode is GCM
 	}
 
-	if mode == "gcm" {
+	switch mode {
+	case "gcm":
 		// Use GCM mode
 		gcm, err := cipher.NewGCM(block)
 		if err != nil {
@@ -356,7 +439,7 @@ func decryptKeyWithDerivedKey(encryptedKey, derivedKey []byte, aesConfig *config
 		}
 
 		return plaintext, nil
-	} else if mode == "cbc" {
+	case "cbc":
 		// Use CBC mode
 		ivSize := aes.BlockSize
 		if len(encryptedKey) < ivSize {

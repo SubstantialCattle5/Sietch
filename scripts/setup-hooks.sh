@@ -28,7 +28,7 @@ if ! command -v npm >/dev/null 2>&1; then
 fi
 
 # Check if Go is installed and version
-EXPECTED_GO_VERSION="1.23"
+EXPECTED_GO_VERSION="1.24"
 if ! command -v go >/dev/null 2>&1; then
     echo "❌ Go is required but not installed"
     echo "💡 Please install Go $EXPECTED_GO_VERSION from https://golang.org/dl/"

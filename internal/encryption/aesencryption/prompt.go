@@ -7,7 +7,6 @@ import (
 
 	"github.com/substantialcattle5/sietch/internal/config"
 	"github.com/substantialcattle5/sietch/internal/encryption/aesencryption/aeskey"
-	"github.com/substantialcattle5/sietch/internal/encryption/keys"
 	"github.com/substantialcattle5/sietch/internal/encryption/passphrase"
 )
 
@@ -31,12 +30,12 @@ func PromptAESOptions(configuration *config.VaultConfig) error {
 		}
 
 		// Prompt for passphrase
-		pass, err := passphrase.PromptForPassphrase(true)
+		pass, err := passphrase.PromptForPassphrase(configuration.Encryption.PassphraseProtected)
 		if err != nil {
 			return fmt.Errorf("failed to get passphrase: %w", err)
 		}
 		// Generate key configuration
-		keyConfig, err := keys.GenerateAESKey(configuration, pass)
+		keyConfig, err := aeskey.GenerateAESKey(configuration, pass)
 		if err != nil {
 			return fmt.Errorf("failed to generate AES key: %w", err)
 		}
@@ -51,7 +50,7 @@ func PromptAESOptions(configuration *config.VaultConfig) error {
 		}
 
 		// Generate key configuration for key file or random key
-		keyConfig, err := keys.GenerateAESKey(configuration, "")
+		keyConfig, err := aeskey.GenerateAESKey(configuration, "")
 		if err != nil {
 			return fmt.Errorf("failed to generate AES key: %w", err)
 		}

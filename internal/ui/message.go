@@ -63,7 +63,6 @@ func PrintSuccessMessage(cfg *config.VaultConfig, vaultID, vaultPath string) {
 	// Tips section
 	fmt.Println("\n💡 Tips:")
 	fmt.Println("  • Run 'sietch help' for a list of all commands")
-	fmt.Println("  • Use 'sietch config' to view or modify vault settings")
 	fmt.Printf("  • Your vault configuration is stored at %s/.sietch/vault.yaml\n", vaultPath)
 
 	fmt.Println("\nThank you for using Sietch Vault! 🏜️")

@@ -8,16 +8,17 @@ import (
 	"github.com/manifoldco/promptui"
 
 	"github.com/substantialcattle5/sietch/internal/config"
+	"github.com/substantialcattle5/sietch/internal/constants"
 )
 
 // promptBasicConfig asks for basic vault configuration
 func PromptBasicConfig(configuration *config.VaultConfig) error {
 	namePrompt := promptui.Prompt{
-		Label:     "Vault name",
-		Default:   "my-sietch",
+		Label:     constants.VaultNameLabel,
+		Default:   constants.VaultNameDefault,
 		AllowEdit: true,
 		Validate: func(input string) error {
-			if len(input) < 3 {
+			if len(input) < constants.VaultNameMinLength {
 				return errors.New("vault name must be at least 3 characters")
 			}
 			return nil
@@ -36,9 +37,9 @@ func PromptBasicConfig(configuration *config.VaultConfig) error {
 func PromptMetadataConfig(configuration *config.VaultConfig) error {
 	// Author prompt
 	authorPrompt := promptui.Prompt{
-		Label:     "Author",
-		Default:   "nilay@dune.net",
-		AllowEdit: true,
+		Label:     constants.AuthorLabel,
+		Default:   constants.AuthorDefault,
+		AllowEdit: constants.AuthorAllowEdit,
 	}
 
 	authorResult, err := authorPrompt.Run()
@@ -49,9 +50,9 @@ func PromptMetadataConfig(configuration *config.VaultConfig) error {
 
 	// Tags prompt - allow multiple tags
 	tagsPrompt := promptui.Prompt{
-		Label:     "Tags (comma-separated)",
-		Default:   "research,desert,offline",
-		AllowEdit: true,
+		Label:     constants.TagsLabel,
+		Default:   constants.TagsDefault,
+		AllowEdit: constants.TagsAllowEdit,
 	}
 
 	tagsResult, err := tagsPrompt.Run()

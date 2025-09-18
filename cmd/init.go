@@ -170,47 +170,61 @@ func runInit(cmd *cobra.Command) error {
 	}
 
 	// Handle key generation or import
-	keyParams := validation.KeyGenParams{
-		KeyType:          keyType,
-		UsePassphrase:    usePassphrase,
-		KeyFile:          keyFile,
-		AESMode:          aesMode,
-		UseScrypt:        useScrypt,
-		ScryptN:          scryptN,
-		ScryptR:          scryptR,
-		ScryptP:          scryptP,
-		PBKDF2Iterations: constants.DefaultPBKDF2Iters, // Default PBKDF2 iterations
-	}
+	var keyConfig *config.KeyConfig
 
-	keyConfig, err := validation.HandleKeyGeneration(cmd, absVaultPath, keyParams)
-	if err != nil {
-		// Clean up on error
-		cleanupOnError(absVaultPath)
-		return fmt.Errorf("key generation failed: %w", err)
-	}
-
-	// If we didn't generate key config but have one from interactive mode
-	if keyConfig == nil && keyType == constants.EncryptionTypeAES && interactiveVaultConfig != nil && interactiveVaultConfig.Encryption.AESConfig != nil {
+	// If we have a GPG config from interactive mode, use it directly
+	if interactiveVaultConfig != nil && keyType == constants.EncryptionTypeGPG && interactiveVaultConfig.Encryption.GPGConfig != nil {
 		keyConfig = &config.KeyConfig{
-			AESConfig: interactiveVaultConfig.Encryption.AESConfig,
+			GPGConfig: interactiveVaultConfig.Encryption.GPGConfig,
+			KeyHash:   interactiveVaultConfig.Encryption.KeyHash,
 		}
-	}
+	} else {
+		// Otherwise, generate or import a new key
+		keyParams := validation.KeyGenParams{
+			KeyType:          keyType,
+			UsePassphrase:    usePassphrase,
+			KeyFile:          keyFile,
+			AESMode:          aesMode,
+			UseScrypt:        useScrypt,
+			ScryptN:          scryptN,
+			ScryptR:          scryptR,
+			ScryptP:          scryptP,
+			PBKDF2Iterations: constants.DefaultPBKDF2Iters, // Default PBKDF2 iterations
+		}
 
-	// Print the key config to verify it contains the key
-	// TODO: think we should remove this
-	if keyConfig != nil && keyConfig.AESConfig != nil {
-		fmt.Println("\nKey Configuration:")
-		fmt.Printf("  Key exists: %v\n", keyConfig.AESConfig.Key != "")
-		// Print first few chars of the key if it exists (for debugging)
-		if keyConfig.AESConfig.Key != "" {
-			keyLen := len(keyConfig.AESConfig.Key)
-			if keyLen > 10 {
-				fmt.Printf("  Key (first 10 chars): %s...\n", keyConfig.AESConfig.Key[:10])
-			} else {
-				fmt.Printf("  Key: %s\n", keyConfig.AESConfig.Key)
+		var err error
+		keyConfig, err = validation.HandleKeyGeneration(cmd, absVaultPath, keyParams)
+		if err != nil {
+			// Clean up on error
+			cleanupOnError(absVaultPath)
+			return fmt.Errorf("key generation failed: %w", err)
+		}
+
+		// If we didn't generate key config but have one from interactive mode (for AES)
+		if keyConfig == nil && interactiveVaultConfig != nil {
+			if keyType == constants.EncryptionTypeAES && interactiveVaultConfig.Encryption.AESConfig != nil {
+				keyConfig = &config.KeyConfig{
+					AESConfig: interactiveVaultConfig.Encryption.AESConfig,
+				}
 			}
 		}
 	}
+
+	// // Print the key config to verify it contains the key
+	// // TODO: think we should remove this
+	// if keyConfig != nil && keyConfig.AESConfig != nil {
+	// 	fmt.Println("\nKey Configuration:")
+	// 	fmt.Printf("  Key exists: %v\n", keyConfig.AESConfig.Key != "")
+	// 	// Print first few chars of the key if it exists (for debugging)
+	// 	if keyConfig.AESConfig.Key != "" {
+	// 		keyLen := len(keyConfig.AESConfig.Key)
+	// 		if keyLen > 10 {
+	// 			fmt.Printf("  Key (first 10 chars): %s...\n", keyConfig.AESConfig.Key[:10])
+	// 		} else {
+	// 			fmt.Printf("  Key: %s\n", keyConfig.AESConfig.Key)
+	// 		}
+	// 	}
+	// }
 
 	// Generate vault ID
 	vaultID := uuid.New().String()

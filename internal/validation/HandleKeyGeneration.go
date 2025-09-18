@@ -8,7 +8,9 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/substantialcattle5/sietch/internal/config"
-	"github.com/substantialcattle5/sietch/internal/encryption/keys"
+	"github.com/substantialcattle5/sietch/internal/constants"
+	"github.com/substantialcattle5/sietch/internal/encryption"
+	"github.com/substantialcattle5/sietch/internal/encryption/aesencryption/aeskey"
 	"github.com/substantialcattle5/sietch/internal/ui"
 )
 
@@ -70,6 +72,30 @@ func importKeyFromFile(sourceKeyFile, destKeyPath string) error {
 }
 
 func generateNewKey(cmd *cobra.Command, keyPath string, params KeyGenParams) (*config.KeyConfig, error) {
+	var userPassphrase string
+	var err error
+
+	if params.UsePassphrase {
+		userPassphrase, err = ui.GetPassphraseForInitialization(cmd, true)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	switch params.KeyType {
+	case constants.EncryptionTypeAES:
+		return generateAESKey(keyPath, params, userPassphrase)
+	case constants.EncryptionTypeGPG:
+		return generateGPGKey(params, userPassphrase)
+	case constants.EncryptionTypeNone:
+		// No key generation needed for unencrypted vaults
+		return nil, nil
+	default:
+		return nil, fmt.Errorf("unsupported encryption type: %s", params.KeyType)
+	}
+}
+
+func generateAESKey(keyPath string, params KeyGenParams, userPassphrase string) (*config.KeyConfig, error) {
 	kdfValue := "pbkdf2"
 	if params.UseScrypt {
 		kdfValue = "scrypt"
@@ -94,25 +120,54 @@ func generateNewKey(cmd *cobra.Command, keyPath string, params KeyGenParams) (*c
 		},
 	}
 
-	var userPassphrase string
-	var err error
-
-	if params.UsePassphrase {
-		userPassphrase, err = ui.GetPassphraseForInitialization(cmd, true)
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	// Generate the key configuration
-	keyConfig, err := keys.GenerateAESKey(encConfig, userPassphrase)
+	keyConfig, err := aeskey.GenerateAESKey(encConfig, userPassphrase)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate encryption key: %w", err)
+		return nil, fmt.Errorf("failed to generate AES key: %w", err)
 	}
 
 	// If we need to save the key to a file
 	if encConfig.Encryption.KeyBackupPath != "" {
 		fmt.Printf("Key backed up to: %s\n", encConfig.Encryption.KeyBackupPath)
+	}
+
+	return keyConfig, nil
+}
+
+func generateGPGKey(params KeyGenParams, userPassphrase string) (*config.KeyConfig, error) {
+	// Check if GPG is available
+	if !encryption.IsGPGAvailable() {
+		return nil, fmt.Errorf("GPG is not available on this system. Please install GPG first")
+	}
+
+	// For non-interactive mode, we need to provide a default GPG key
+	// In interactive mode, this would be handled by the prompts
+	keys, err := encryption.ListAvailableGPGKeys()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list GPG keys: %w", err)
+	}
+
+	if len(keys) == 0 {
+		return nil, fmt.Errorf("no GPG keys found. Please create a GPG key first using 'gpg --generate-key' or use interactive mode")
+	}
+
+	// Use the first available key for non-interactive mode
+	// Note: In interactive mode, this key config will be overridden with the user's selection
+	selectedKey := keys[0]
+	fmt.Printf("Using GPG key: %s (%s)\n", selectedKey.UserID, selectedKey.KeyID)
+
+	// Create vault config for GPG key generation
+	vaultConfig := &config.VaultConfig{
+		Encryption: config.EncryptionConfig{
+			Type:                constants.EncryptionTypeGPG,
+			PassphraseProtected: params.UsePassphrase,
+		},
+	}
+
+	// Generate GPG key configuration
+	keyConfig, err := encryption.GenerateGPGKeyConfig(vaultConfig, selectedKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate GPG key configuration: %w", err)
 	}
 
 	return keyConfig, nil

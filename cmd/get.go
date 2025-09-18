@@ -9,14 +9,19 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/manifoldco/promptui"
 	"github.com/spf13/cobra"
 
 	"github.com/substantialcattle5/sietch/internal/config"
 	"github.com/substantialcattle5/sietch/internal/encryption"
 	"github.com/substantialcattle5/sietch/internal/fs"
 	"github.com/substantialcattle5/sietch/internal/manifest"
+	"github.com/substantialcattle5/sietch/internal/ui"
 	"github.com/substantialcattle5/sietch/util"
+)
+
+const (
+	force          = "force"
+	skipDecryption = "skip-decryption"
 )
 
 // getCmd represents the get command
@@ -53,8 +58,8 @@ Example:
 		}
 
 		// Get flags
-		force, _ := cmd.Flags().GetBool("force")
-		skipEncryption, _ := cmd.Flags().GetBool("skip-decryption")
+		force, _ := cmd.Flags().GetBool(force)
+		skipEncryption, _ := cmd.Flags().GetBool(skipDecryption)
 
 		fmt.Printf("Retrieving %s from vault\n", filePath)
 
@@ -84,20 +89,11 @@ Example:
 		}
 		defer outputFile.Close()
 
-		// Handle decryption based on vault configuration
-		var passphrase string
-		if !skipEncryption && vaultConfig.Encryption.Type == "aes" && vaultConfig.Encryption.PassphraseProtected {
-			// Prompt for passphrase if the key is protected
-			passphrasePrompt := promptui.Prompt{
-				Label: "Enter encryption passphrase",
-				Mask:  '*',
-			}
-			passphrase, err = passphrasePrompt.Run()
-			if err != nil {
-				return fmt.Errorf("failed to get passphrase: %v", err)
-			}
+		// Get passphrase if needed for decryption
+		passphrase, err := ui.GetPassphraseForVault(cmd, vaultConfig)
+		if err != nil {
+			return fmt.Errorf("failed to get passphrase: %v", err)
 		}
-		fmt.Print(passphrase)
 
 		// Process each chunk
 		chunkCount := len(fileManifest.Chunks)
@@ -127,27 +123,35 @@ Example:
 			}
 
 			// Decrypt the chunk if encryption is enabled and not skipped
-			if !skipEncryption && vaultConfig.Encryption.Type == "aes" {
+			if !skipEncryption && vaultConfig.Encryption.Type != "none" {
 				if len(chunkData) == 0 {
 					return fmt.Errorf("chunk %s is empty", chunkHash)
 				}
 
-				// Decrypt the data
-				decryptedData, err := encryption.AesDecryption(
-					string(chunkData),
-					vaultRoot,
-				)
+				// Decrypt the data using the appropriate method based on passphrase protection
+				var decryptedData string
+				if vaultConfig.Encryption.PassphraseProtected {
+					decryptedData, err = encryption.DecryptDataWithPassphrase(
+						string(chunkData),
+						vaultRoot,
+						passphrase,
+					)
+				} else {
+					decryptedData, err = encryption.DecryptData(
+						string(chunkData),
+						vaultRoot,
+					)
+				}
 				if err != nil {
 					return fmt.Errorf("failed to decrypt chunk %s: %v", chunkHash, err)
 				}
 
-				// Verify chunk integrity by hashing the decrypted content
-				if !skipEncryption && chunkRef.Hash != "" {
-					// You would implement hash verification here
-					// Example: if util.SHA256Sum([]byte(decryptedData)) != chunkRef.Hash {
-					//    return fmt.Errorf("chunk integrity check failed")
-					// }
-				}
+				// TODO: Implement chunk integrity verification
+				// if !skipEncryption && chunkRef.Hash != "" {
+				//     if util.SHA256Sum([]byte(decryptedData)) != chunkRef.Hash {
+				//         return fmt.Errorf("chunk integrity check failed")
+				//     }
+				// }
 
 				chunkData = []byte(decryptedData)
 			}
@@ -182,6 +186,10 @@ func init() {
 	rootCmd.AddCommand(getCmd)
 
 	// Add flags
-	getCmd.Flags().BoolP("force", "f", false, "Force overwrite if file exists at destination")
-	getCmd.Flags().Bool("skip-decryption", false, "Skip decryption and retrieve raw chunks (for recovery)")
+	getCmd.Flags().BoolP(force, "f", false, "Force overwrite if file exists at destination")
+	getCmd.Flags().Bool(skipDecryption, false, "Skip decryption and retrieve raw chunks (for recovery)")
 }
+
+//TODO: Implement parallel chunk retrieval
+//TODO: Implement streaming process
+//TODO: Implemnt atomic operations, rollback on error
