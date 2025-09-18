@@ -172,11 +172,18 @@ func runInit(cmd *cobra.Command) error {
 	// Handle key generation or import
 	var keyConfig *config.KeyConfig
 
-	// If we have a GPG config from interactive mode, use it directly
+	// If we have a config from interactive mode, use it directly
 	if interactiveVaultConfig != nil && keyType == constants.EncryptionTypeGPG && interactiveVaultConfig.Encryption.GPGConfig != nil {
 		keyConfig = &config.KeyConfig{
 			GPGConfig: interactiveVaultConfig.Encryption.GPGConfig,
 			KeyHash:   interactiveVaultConfig.Encryption.KeyHash,
+		}
+	} else if interactiveVaultConfig != nil && keyType == constants.EncryptionTypeAES && interactiveVaultConfig.Encryption.AESConfig != nil {
+		// Use AES config from interactive mode (key already generated during interactive config)
+		keyConfig = &config.KeyConfig{
+			AESConfig: interactiveVaultConfig.Encryption.AESConfig,
+			KeyHash:   interactiveVaultConfig.Encryption.KeyHash,
+			Salt:      interactiveVaultConfig.Encryption.AESConfig.Salt,
 		}
 	} else {
 		// Otherwise, generate or import a new key
@@ -200,37 +207,16 @@ func runInit(cmd *cobra.Command) error {
 			return fmt.Errorf("key generation failed: %w", err)
 		}
 
-		// If we didn't generate key config but have one from interactive mode (for AES)
-		if keyConfig == nil && interactiveVaultConfig != nil {
-			if keyType == constants.EncryptionTypeAES && interactiveVaultConfig.Encryption.AESConfig != nil {
-				keyConfig = &config.KeyConfig{
-					AESConfig: interactiveVaultConfig.Encryption.AESConfig,
-				}
-			}
-		}
 	}
-
-	// // Print the key config to verify it contains the key
-	// // TODO: think we should remove this
-	// if keyConfig != nil && keyConfig.AESConfig != nil {
-	// 	fmt.Println("\nKey Configuration:")
-	// 	fmt.Printf("  Key exists: %v\n", keyConfig.AESConfig.Key != "")
-	// 	// Print first few chars of the key if it exists (for debugging)
-	// 	if keyConfig.AESConfig.Key != "" {
-	// 		keyLen := len(keyConfig.AESConfig.Key)
-	// 		if keyLen > 10 {
-	// 			fmt.Printf("  Key (first 10 chars): %s...\n", keyConfig.AESConfig.Key[:10])
-	// 		} else {
-	// 			fmt.Printf("  Key: %s\n", keyConfig.AESConfig.Key)
-	// 		}
-	// 	}
-	// }
 
 	// Generate vault ID
 	vaultID := uuid.New().String()
 
-	// Create the key path for storing the key file
-	keyPath := filepath.Join(absVaultPath, ".sietch", "keys", "secret.key")
+	// Create the key path for storing the key file (only for AES encryption)
+	var keyPath string
+	if keyType == constants.EncryptionTypeAES {
+		keyPath = filepath.Join(absVaultPath, ".sietch", "keys", "secret.key")
+	}
 
 	// Write the key to file if it exists
 	if keyType == constants.EncryptionTypeAES && keyConfig != nil && keyConfig.AESConfig != nil && keyConfig.AESConfig.Key != "" {

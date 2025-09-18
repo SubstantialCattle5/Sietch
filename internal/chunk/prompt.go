@@ -35,7 +35,9 @@ func PromptChunkingConfig(configuration *config.VaultConfig) error {
 			Details: `
 {{ "Details:" | faint }}
 {{ if eq . "fixed" }}Fixed-size chunks (simple and predictable)
-{{ else if eq . "cdc" }}Content-Defined Chunking (better deduplication for similar files){{ end }}
+{{ else if eq . "cdc" }}Content-Defined Chunking (better deduplication for similar files)
+	Currently only fixed-size chunks are supported.
+{{ end }}
 `,
 		},
 	}
@@ -64,20 +66,23 @@ func PromptChunkingConfig(configuration *config.VaultConfig) error {
 	}
 	configuration.Chunking.ChunkSize = sizeResult
 
-	// Hash algorithm prompt with descriptions
+	// Hash algorithm prompt with descriptions and default
 	hashAlgorithmPrompt := promptui.Select{
-		Label: "Hash algorithm",
-		Items: []string{"sha256", "blake3", "sha512", "sha1"},
+		Label:     "Hash algorithm (SHA-256 recommended for most users)",
+		Items:     []string{"sha256", "blake3", "sha512", "sha1"},
+		CursorPos: 0, // Default to first item (sha256)
 		Templates: &promptui.SelectTemplates{
 			Selected: "Hash algorithm: {{ . }}",
-			Active:   "▸ {{ . }}",
-			Inactive: "  {{ . }}",
+			Active:   "▸ {{ . }} {{ if eq . \"sha256\" }}(recommended default){{ end }}",
+			Inactive: "  {{ . }} {{ if eq . \"sha256\" }}(recommended default){{ end }}",
 			Details: `
 {{ "Details:" | faint }}
-{{ if eq . "sha256" }}SHA-256 (recommended default, good balance of security and speed)
-{{ else if eq . "blake3" }}BLAKE3 (modern, very fast with strong security)
-{{ else if eq . "sha512" }}SHA-512 (stronger security, slightly slower)
-{{ else if eq . "sha1" }}SHA-1 (faster but less secure, not recommended for sensitive data){{ end }}
+{{ if eq . "sha256" }}SHA-256 (recommended default - good balance of security and speed, widely supported)
+{{ else if eq . "blake3" }}BLAKE3 (modern, very fast with strong security, excellent performance)
+{{ else if eq . "sha512" }}SHA-512 (stronger security, slightly slower, good for high-security environments)
+{{ else if eq . "sha1" }}SHA-1 (legacy, faster but less secure, NOT recommended for sensitive data){{ end }}
+
+{{ "Most users should choose SHA-256." | faint }}
 `,
 		},
 	}

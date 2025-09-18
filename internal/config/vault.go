@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"path/filepath"
 	"time"
+
+	"github.com/substantialcattle5/sietch/internal/constants"
 )
 
 // VaultConfig represents the structure for vault.yaml
@@ -162,7 +164,10 @@ func BuildVaultConfig(
 
 	// Set encryption configuration
 	config.Encryption.Type = keyType
-	config.Encryption.KeyPath = keyPath
+	// Only set key path for AES encryption - GPG uses system keyring
+	if keyType == constants.EncryptionTypeAES {
+		config.Encryption.KeyPath = keyPath
+	}
 	config.Encryption.PassphraseProtected = passPhraseProtected
 
 	// Set chunking configuration
@@ -196,7 +201,7 @@ func BuildVaultConfig(
 		config.Encryption.KeyHash = keyConfig.KeyHash
 
 		// Apply AES-specific config if available
-		if keyConfig.AESConfig != nil && keyType == "aes" {
+		if keyConfig.AESConfig != nil && keyType == constants.EncryptionTypeAES {
 			// Create a new AESConfig if it doesn't exist
 			if config.Encryption.AESConfig == nil {
 				config.Encryption.AESConfig = &AESConfig{}
@@ -207,7 +212,7 @@ func BuildVaultConfig(
 		}
 
 		// Apply GPG-specific config if available
-		if keyConfig.GPGConfig != nil && keyType == "gpg" {
+		if keyConfig.GPGConfig != nil && keyType == constants.EncryptionTypeGPG {
 			config.Encryption.GPGConfig = keyConfig.GPGConfig
 		}
 	}
@@ -248,11 +253,11 @@ func BuildDefaultVaultConfig(vaultID, vaultName, keyPath string) VaultConfig {
 // BuildDefaultAESConfig creates a default AES configuration
 func BuildDefaultAESConfig() *AESConfig {
 	return &AESConfig{
-		Mode:    "gcm",
-		KDF:     "scrypt",
-		ScryptN: 32768,
-		ScryptR: 8,
-		ScryptP: 1,
+		Mode:    constants.AESModeGCM,
+		KDF:     constants.KDFScrypt,
+		ScryptN: constants.DefaultScryptN,
+		ScryptR: constants.DefaultScryptR,
+		ScryptP: constants.DefaultScryptP,
 	}
 }
 

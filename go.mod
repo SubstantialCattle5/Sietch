@@ -5,7 +5,9 @@ go 1.24.0
 toolchain go1.24.6
 
 require (
+	github.com/klauspost/compress v1.18.0
 	github.com/manifoldco/promptui v0.9.0
+	github.com/zeebo/blake3 v0.2.4
 	golang.org/x/crypto v0.42.0
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
@@ -34,7 +36,6 @@ require (
 	github.com/ipfs/go-log/v2 v2.5.1 // indirect
 	github.com/jackpal/go-nat-pmp v1.0.2 // indirect
 	github.com/jbenet/go-temp-err-catcher v0.1.0 // indirect
-	github.com/klauspost/compress v1.18.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.10 // indirect
 	github.com/koron/go-ssdp v0.0.5 // indirect
 	github.com/libp2p/go-buffer-pool v0.1.0 // indirect

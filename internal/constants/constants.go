@@ -78,6 +78,21 @@ const (
 
 	DefaultChunkSize = 4 * 1024 * 1024 // 4MB
 
+	//** Constants for compression
+	CompressionTypeGzip = "gzip"
+	CompressionTypeZstd = "zstd"
+	CompressionTypeNone = "none"
+
+	// Maximum decompression size to prevent decompression bombs
+	// This should be large enough for legitimate chunks but prevent DoS attacks
+	MaxDecompressionSize = 100 * 1024 * 1024 // 100MB max decompressed size
+
+	//** Constants for hash algorithms
+	HashAlgorithmSHA256 = "sha256"
+	HashAlgorithmSHA512 = "sha512"
+	HashAlgorithmSHA1   = "sha1"
+	HashAlgorithmBLAKE3 = "blake3"
+
 	//* Regex
 	EmailRegex = `^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`
 )

@@ -232,8 +232,8 @@ func CaptureOutput(t *testing.T, fn func()) (stdout, stderr string) {
 	fn()
 
 	// Close writers and restore original stdout/stderr
-	stdoutW.Close()
-	stderrW.Close()
+	_ = stdoutW.Close()
+	_ = stderrW.Close()
 	os.Stdout = oldStdout
 	os.Stderr = oldStderr
 
@@ -242,8 +242,8 @@ func CaptureOutput(t *testing.T, fn func()) (stdout, stderr string) {
 	stderr = <-stderrCh
 
 	// Close readers
-	stdoutR.Close()
-	stderrR.Close()
+	_ = stdoutR.Close()
+	_ = stderrR.Close()
 
 	return stdout, stderr
 }

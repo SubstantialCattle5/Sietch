@@ -128,6 +128,7 @@ func AesEncryptWithPassphrase(data string, vaultConfig config.VaultConfig, passp
 		paddedData := append(plainText, padText...)
 
 		// Create CBC encrypter
+		// #nosec G407 -- IV is randomly generated above on line 121
 		cbcMode := cipher.NewCBCEncrypter(block, iv)
 		ciphertext := make([]byte, len(paddedData))
 		cbcMode.CryptBlocks(ciphertext, paddedData)
