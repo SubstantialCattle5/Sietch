@@ -11,6 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/substantialcattle5/sietch/internal/compression"
 	"github.com/substantialcattle5/sietch/internal/config"
 	"github.com/substantialcattle5/sietch/internal/encryption"
 	"github.com/substantialcattle5/sietch/internal/fs"
@@ -154,6 +155,15 @@ Example:
 				// }
 
 				chunkData = []byte(decryptedData)
+			}
+
+			// Decompress the chunk if it was compressed
+			if chunkRef.Compressed {
+				decompressedData, err := compression.DecompressData(chunkData, vaultConfig.Compression)
+				if err != nil {
+					return fmt.Errorf("failed to decompress chunk %s: %v", chunkHash, err)
+				}
+				chunkData = decompressedData
 			}
 
 			// Write the chunk to the output file

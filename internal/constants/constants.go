@@ -78,6 +78,11 @@ const (
 
 	DefaultChunkSize = 4 * 1024 * 1024 // 4MB
 
+	//** Constants for compression
+	CompressionTypeGzip = "gzip"
+	CompressionTypeZstd = "zstd"
+	CompressionTypeNone = "none"
+
 	//* Regex
 	EmailRegex = `^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`
 )

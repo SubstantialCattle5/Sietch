@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/substantialcattle5/sietch/internal/compression"
 	"github.com/substantialcattle5/sietch/internal/config"
 	"github.com/substantialcattle5/sietch/internal/constants"
 	"github.com/substantialcattle5/sietch/internal/encryption"
@@ -68,17 +69,30 @@ func processFileChunks(file *os.File, chunkSize int64, vaultConfig config.VaultC
 		hasher.Write(buffer[:bytesRead])
 		chunkHash := fmt.Sprintf("%x", hasher.Sum(nil))
 
+		// Store original chunk data for processing
+		originalChunkData := buffer[:bytesRead]
+
+		// Apply compression if configured
+		compressedData, err := compression.CompressData(originalChunkData, vaultConfig.Compression)
+		if err != nil {
+			return nil, fmt.Errorf("failed to compress chunk %d: %v", chunkCount, err)
+		}
+
 		// Create chunk reference
 		chunkRef := config.ChunkRef{
-			Hash:  chunkHash,
-			Size:  int64(bytesRead),
-			Index: chunkCount - 1, // 0-based index
+			Hash:       chunkHash,
+			Size:       int64(bytesRead),
+			Index:      chunkCount - 1, // 0-based index
+			Compressed: vaultConfig.Compression != "none",
 		}
+
+		// Use compressed data for further processing
+		chunkDataToProcess := compressedData
 
 		// Encrypt the chunk if encryption is enabled
 		if vaultConfig.Encryption.Type != "" && vaultConfig.Encryption.Type != "none" {
-			// Convert chunk data to string for encryption
-			chunkData := string(buffer[:bytesRead])
+			// Convert chunk data to string for encryption (use compressed data)
+			chunkData := string(chunkDataToProcess)
 
 			var encryptedData string
 			var encryptErr error
@@ -116,21 +130,39 @@ func processFileChunks(file *os.File, chunkSize int64, vaultConfig config.VaultC
 				return nil, fmt.Errorf("failed to write encrypted chunk file: %v", err)
 			}
 
-			fmt.Printf("Chunk %d: %s bytes, hash: %s (encrypted)\n",
+			compressionInfo := ""
+			if vaultConfig.Compression != "none" {
+				compressionInfo = fmt.Sprintf(" (compressed with %s: %s -> %s)",
+					vaultConfig.Compression,
+					util.HumanReadableSize(int64(bytesRead)),
+					util.HumanReadableSize(int64(len(chunkDataToProcess))))
+			}
+
+			fmt.Printf("Chunk %d: %s bytes, hash: %s (encrypted)%s\n",
 				chunkCount,
 				util.HumanReadableSize(int64(bytesRead)),
-				chunkHash[:12])
+				chunkHash[:12],
+				compressionInfo)
 		} else {
-			// If no encryption, save the raw chunk
+			// If no encryption, save the compressed chunk
 			chunkPath := filepath.Join(chunksDir, chunkHash)
-			if err := os.WriteFile(chunkPath, buffer[:bytesRead], constants.StandardFilePerms); err != nil {
+			if err := os.WriteFile(chunkPath, chunkDataToProcess, constants.StandardFilePerms); err != nil {
 				return nil, fmt.Errorf("failed to write chunk file: %v", err)
 			}
 
-			fmt.Printf("Chunk %d: %s bytes, hash: %s\n",
+			compressionInfo := ""
+			if vaultConfig.Compression != "none" {
+				compressionInfo = fmt.Sprintf(" (compressed with %s: %s -> %s)",
+					vaultConfig.Compression,
+					util.HumanReadableSize(int64(bytesRead)),
+					util.HumanReadableSize(int64(len(chunkDataToProcess))))
+			}
+
+			fmt.Printf("Chunk %d: %s bytes, hash: %s%s\n",
 				chunkCount,
 				util.HumanReadableSize(int64(bytesRead)),
-				chunkHash)
+				chunkHash,
+				compressionInfo)
 		}
 
 		// Add the chunk reference to our list
