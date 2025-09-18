@@ -50,8 +50,19 @@ func DecompressData(data []byte, algorithm string) ([]byte, error) {
 		defer reader.Close()
 
 		var buf bytes.Buffer
-		if _, err := io.Copy(&buf, reader); err != nil {
+		// Use io.CopyN to limit decompression size and prevent decompression bombs
+		n, err := io.CopyN(&buf, reader, constants.MaxDecompressionSize)
+		if err != nil && err != io.EOF {
 			return nil, fmt.Errorf("failed to decompress gzip data: %w", err)
+		}
+
+		// Check if we hit the limit (potential decompression bomb)
+		if n == constants.MaxDecompressionSize {
+			// Try to read one more byte to see if there's more data
+			var extraByte [1]byte
+			if _, err := reader.Read(extraByte[:]); err == nil {
+				return nil, fmt.Errorf("decompressed data exceeds maximum size limit (%d bytes) - potential decompression bomb", constants.MaxDecompressionSize)
+			}
 		}
 		return buf.Bytes(), nil
 	case constants.CompressionTypeZstd:
@@ -65,6 +76,12 @@ func DecompressData(data []byte, algorithm string) ([]byte, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to decompress zstd data: %w", err)
 		}
+
+		// Check decompressed size to prevent decompression bombs
+		if len(decompressed) > constants.MaxDecompressionSize {
+			return nil, fmt.Errorf("decompressed data exceeds maximum size limit (%d bytes) - potential decompression bomb", constants.MaxDecompressionSize)
+		}
+
 		return decompressed, nil
 	default:
 		return nil, fmt.Errorf("unsupported compression algorithm: %s", algorithm)

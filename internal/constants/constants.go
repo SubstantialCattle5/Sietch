@@ -83,6 +83,10 @@ const (
 	CompressionTypeZstd = "zstd"
 	CompressionTypeNone = "none"
 
+	// Maximum decompression size to prevent decompression bombs
+	// This should be large enough for legitimate chunks but prevent DoS attacks
+	MaxDecompressionSize = 100 * 1024 * 1024 // 100MB max decompressed size
+
 	//** Constants for hash algorithms
 	HashAlgorithmSHA256 = "sha256"
 	HashAlgorithmSHA512 = "sha512"
