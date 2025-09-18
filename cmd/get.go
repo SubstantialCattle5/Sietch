@@ -123,7 +123,7 @@ Example:
 			}
 
 			// Decrypt the chunk if encryption is enabled and not skipped
-			if !skipEncryption && vaultConfig.Encryption.Type == "aes" {
+			if !skipEncryption && vaultConfig.Encryption.Type != "none" {
 				if len(chunkData) == 0 {
 					return fmt.Errorf("chunk %s is empty", chunkHash)
 				}
@@ -131,13 +131,13 @@ Example:
 				// Decrypt the data using the appropriate method based on passphrase protection
 				var decryptedData string
 				if vaultConfig.Encryption.PassphraseProtected {
-					decryptedData, err = encryption.AesDecryptionWithPassphrase(
+					decryptedData, err = encryption.DecryptDataWithPassphrase(
 						string(chunkData),
 						vaultRoot,
 						passphrase,
 					)
 				} else {
-					decryptedData, err = encryption.AesDecryption(
+					decryptedData, err = encryption.DecryptData(
 						string(chunkData),
 						vaultRoot,
 					)
@@ -189,3 +189,7 @@ func init() {
 	getCmd.Flags().BoolP(force, "f", false, "Force overwrite if file exists at destination")
 	getCmd.Flags().Bool(skipDecryption, false, "Skip decryption and retrieve raw chunks (for recovery)")
 }
+
+//TODO: Implement parallel chunk retrieval
+//TODO: Implement streaming process
+//TODO: Implemnt atomic operations, rollback on error

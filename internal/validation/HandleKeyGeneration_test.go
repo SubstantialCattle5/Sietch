@@ -407,7 +407,8 @@ func TestGenerateNewKey(t *testing.T) {
 				cmd.Flags().Bool("interactive", false, "")
 				return cmd
 			},
-			wantErr: false, // GenerateAESKey still works, it just sets the type in config
+			wantErr:     true, // Now correctly returns error for unsupported types
+			errContains: "unsupported encryption type",
 			validateFunc: func(t *testing.T, result *config.KeyConfig) {
 				if result == nil {
 					t.Fatal("Expected KeyConfig to be returned")

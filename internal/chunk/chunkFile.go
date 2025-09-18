@@ -85,13 +85,13 @@ func processFileChunks(file *os.File, chunkSize int64, vaultConfig config.VaultC
 
 			// Choose encryption method based on passphrase protection
 			if vaultConfig.Encryption.PassphraseProtected {
-				encryptedData, encryptErr = encryption.AesEncryptWithPassphrase(
+				encryptedData, encryptErr = encryption.EncryptDataWithPassphrase(
 					chunkData,
 					vaultConfig,
 					passphrase,
 				)
 			} else {
-				encryptedData, encryptErr = encryption.AesEncryption(
+				encryptedData, encryptErr = encryption.EncryptData(
 					chunkData,
 					vaultConfig,
 				)

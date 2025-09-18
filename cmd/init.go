@@ -190,9 +190,16 @@ func runInit(cmd *cobra.Command) error {
 	}
 
 	// If we didn't generate key config but have one from interactive mode
-	if keyConfig == nil && keyType == constants.EncryptionTypeAES && interactiveVaultConfig != nil && interactiveVaultConfig.Encryption.AESConfig != nil {
-		keyConfig = &config.KeyConfig{
-			AESConfig: interactiveVaultConfig.Encryption.AESConfig,
+	if keyConfig == nil && interactiveVaultConfig != nil {
+		if keyType == constants.EncryptionTypeAES && interactiveVaultConfig.Encryption.AESConfig != nil {
+			keyConfig = &config.KeyConfig{
+				AESConfig: interactiveVaultConfig.Encryption.AESConfig,
+			}
+		} else if keyType == constants.EncryptionTypeGPG && interactiveVaultConfig.Encryption.GPGConfig != nil {
+			keyConfig = &config.KeyConfig{
+				GPGConfig: interactiveVaultConfig.Encryption.GPGConfig,
+				KeyHash:   interactiveVaultConfig.Encryption.KeyHash,
+			}
 		}
 	}
 
