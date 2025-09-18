@@ -83,6 +83,12 @@ const (
 	CompressionTypeZstd = "zstd"
 	CompressionTypeNone = "none"
 
+	//** Constants for hash algorithms
+	HashAlgorithmSHA256 = "sha256"
+	HashAlgorithmSHA512 = "sha512"
+	HashAlgorithmSHA1   = "sha1"
+	HashAlgorithmBLAKE3 = "blake3"
+
 	//* Regex
 	EmailRegex = `^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`
 )
