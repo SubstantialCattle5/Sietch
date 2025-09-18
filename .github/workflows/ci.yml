@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go-version: ['1.21', '1.22', '1.23']
+        go-version: ['1.24']
 
     steps:
     - name: Checkout code
@@ -85,12 +85,12 @@ jobs:
     - name: Report tool versions
       run: |
         echo "Go version: $(go version)"
-        echo "About to run golangci-lint v1.60.3"
+        echo "About to run golangci-lint v1.62.2"
     
     - name: golangci-lint
       uses: golangci/golangci-lint-action@v6
       with:
-        version: v1.60.3
+        version: v1.62.2
         args: --timeout=5m
 
   security:
@@ -106,7 +106,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.23'
+        go-version: '1.24'
 
     - name: Install Gosec
       run: go install github.com/securego/gosec/v2/cmd/gosec@latest
@@ -151,7 +151,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.23'
+        go-version: '1.24'
 
     - name: Cache Go modules
       uses: actions/cache@v4
@@ -159,9 +159,9 @@ jobs:
         path: |
           ~/.cache/go-build
           ~/go/pkg/mod
-        key: ${{ runner.os }}-go-1.23-${{ hashFiles('**/go.sum') }}
+        key: ${{ runner.os }}-go-1.24-${{ hashFiles('**/go.sum') }}
         restore-keys: |
-          ${{ runner.os }}-go-1.23-
+          ${{ runner.os }}-go-1.24-
 
     - name: Build binary
       env:
@@ -193,7 +193,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.23'
+        go-version: '1.24'
 
     - name: Cache Go modules
       uses: actions/cache@v4
@@ -201,9 +201,9 @@ jobs:
         path: |
           ~/.cache/go-build
           ~/go/pkg/mod
-        key: ${{ runner.os }}-go-1.23-${{ hashFiles('**/go.sum') }}
+        key: ${{ runner.os }}-go-1.24-${{ hashFiles('**/go.sum') }}
         restore-keys: |
-          ${{ runner.os }}-go-1.23-
+          ${{ runner.os }}-go-1.24-
 
     - name: Build binary for integration tests
       run: make build
@@ -227,7 +227,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.23'
+        go-version: '1.24'
 
     - name: Cache Go modules
       uses: actions/cache@v4
@@ -235,9 +235,9 @@ jobs:
         path: |
           ~/.cache/go-build
           ~/go/pkg/mod
-        key: ${{ runner.os }}-go-1.23-${{ hashFiles('**/go.sum') }}
+        key: ${{ runner.os }}-go-1.24-${{ hashFiles('**/go.sum') }}
         restore-keys: |
-          ${{ runner.os }}-go-1.23-
+          ${{ runner.os }}-go-1.24-
 
     - name: Run benchmarks
       run: make bench | tee benchmark.txt
@@ -258,12 +258,12 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.23'
+        go-version: '1.24'
 
     - name: Check for vulnerabilities
       uses: golang/govulncheck-action@v1
       with:
-        go-version-input: '1.23'
+        go-version-input: '1.24'
         go-package: './...'
 
     - name: Verify dependencies
