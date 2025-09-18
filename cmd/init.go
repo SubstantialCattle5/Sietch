@@ -170,35 +170,42 @@ func runInit(cmd *cobra.Command) error {
 	}
 
 	// Handle key generation or import
-	keyParams := validation.KeyGenParams{
-		KeyType:          keyType,
-		UsePassphrase:    usePassphrase,
-		KeyFile:          keyFile,
-		AESMode:          aesMode,
-		UseScrypt:        useScrypt,
-		ScryptN:          scryptN,
-		ScryptR:          scryptR,
-		ScryptP:          scryptP,
-		PBKDF2Iterations: constants.DefaultPBKDF2Iters, // Default PBKDF2 iterations
-	}
+	var keyConfig *config.KeyConfig
 
-	keyConfig, err := validation.HandleKeyGeneration(cmd, absVaultPath, keyParams)
-	if err != nil {
-		// Clean up on error
-		cleanupOnError(absVaultPath)
-		return fmt.Errorf("key generation failed: %w", err)
-	}
+	// If we have a GPG config from interactive mode, use it directly
+	if interactiveVaultConfig != nil && keyType == constants.EncryptionTypeGPG && interactiveVaultConfig.Encryption.GPGConfig != nil {
+		keyConfig = &config.KeyConfig{
+			GPGConfig: interactiveVaultConfig.Encryption.GPGConfig,
+			KeyHash:   interactiveVaultConfig.Encryption.KeyHash,
+		}
+	} else {
+		// Otherwise, generate or import a new key
+		keyParams := validation.KeyGenParams{
+			KeyType:          keyType,
+			UsePassphrase:    usePassphrase,
+			KeyFile:          keyFile,
+			AESMode:          aesMode,
+			UseScrypt:        useScrypt,
+			ScryptN:          scryptN,
+			ScryptR:          scryptR,
+			ScryptP:          scryptP,
+			PBKDF2Iterations: constants.DefaultPBKDF2Iters, // Default PBKDF2 iterations
+		}
 
-	// If we didn't generate key config but have one from interactive mode
-	if keyConfig == nil && interactiveVaultConfig != nil {
-		if keyType == constants.EncryptionTypeAES && interactiveVaultConfig.Encryption.AESConfig != nil {
-			keyConfig = &config.KeyConfig{
-				AESConfig: interactiveVaultConfig.Encryption.AESConfig,
-			}
-		} else if keyType == constants.EncryptionTypeGPG && interactiveVaultConfig.Encryption.GPGConfig != nil {
-			keyConfig = &config.KeyConfig{
-				GPGConfig: interactiveVaultConfig.Encryption.GPGConfig,
-				KeyHash:   interactiveVaultConfig.Encryption.KeyHash,
+		var err error
+		keyConfig, err = validation.HandleKeyGeneration(cmd, absVaultPath, keyParams)
+		if err != nil {
+			// Clean up on error
+			cleanupOnError(absVaultPath)
+			return fmt.Errorf("key generation failed: %w", err)
+		}
+
+		// If we didn't generate key config but have one from interactive mode (for AES)
+		if keyConfig == nil && interactiveVaultConfig != nil {
+			if keyType == constants.EncryptionTypeAES && interactiveVaultConfig.Encryption.AESConfig != nil {
+				keyConfig = &config.KeyConfig{
+					AESConfig: interactiveVaultConfig.Encryption.AESConfig,
+				}
 			}
 		}
 	}

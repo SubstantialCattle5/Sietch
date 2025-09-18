@@ -8,6 +8,11 @@ import (
 	"github.com/substantialcattle5/sietch/internal/encryption/passphrase"
 )
 
+//*
+//* really good article on gpg saving for reference,
+//* https://www.gnupg.org/documentation/manuals/gnupg/GPG-Configuration.html
+//*
+
 func PromptGPGOptions(configuration *config.VaultConfig) error {
 	// Initialize GPG config if not exists
 	if configuration.Encryption.GPGConfig == nil {

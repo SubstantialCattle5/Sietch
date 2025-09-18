@@ -152,6 +152,7 @@ func generateGPGKey(params KeyGenParams, userPassphrase string) (*config.KeyConf
 	}
 
 	// Use the first available key for non-interactive mode
+	// Note: In interactive mode, this key config will be overridden with the user's selection
 	selectedKey := keys[0]
 	fmt.Printf("Using GPG key: %s (%s)\n", selectedKey.UserID, selectedKey.KeyID)
 

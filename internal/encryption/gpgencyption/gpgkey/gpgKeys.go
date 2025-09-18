@@ -3,7 +3,10 @@ package gpgkey
 import (
 	"fmt"
 	"os/exec"
+	"strconv"
 	"strings"
+
+	"github.com/substantialcattle5/sietch/internal/constants"
 )
 
 // generateGPGKey creates a new GPG key with the specified parameters
@@ -12,32 +15,32 @@ func GenerateGPGKey(name, email, keyType, expiration string) (*GPGKeyInfo, error
 	var algorithm, keyLength string
 	switch keyType {
 	case "RSA 4096":
-		algorithm = "rsa"
-		keyLength = "4096"
+		algorithm = constants.GPGKeyTypeRSA
+		keyLength = strconv.Itoa(constants.DefaultRSAKeySize)
 	case "RSA 2048":
-		algorithm = "rsa"
-		keyLength = "2048"
+		algorithm = constants.GPGKeyTypeRSA
+		keyLength = strconv.Itoa(constants.MinRSAKeySize)
 	case "Ed25519":
-		algorithm = "ed25519"
-		keyLength = ""
+		algorithm = constants.GPGKeyTypeEd25519
+		keyLength = strconv.Itoa(constants.Ed25519KeySize)
 	default:
-		algorithm = "rsa"
-		keyLength = "4096"
+		algorithm = constants.GPGKeyTypeRSA
+		keyLength = strconv.Itoa(constants.DefaultRSAKeySize)
 	}
 
 	// Map expiration to GPG format
 	var expire string
 	switch expiration {
 	case "1 year":
-		expire = "1y"
+		expire = constants.GPGKeyExpiration1Year
 	case "2 years":
-		expire = "2y"
+		expire = constants.GPGKeyExpiration2Years
 	case "5 years":
-		expire = "5y"
+		expire = constants.GPGKeyExpiration5Years
 	case "Never expires":
-		expire = "0"
+		expire = constants.GPGKeyExpirationNever
 	default:
-		expire = "1y"
+		expire = constants.GPGKeyExpiration1Year
 	}
 
 	// Create GPG key generation batch file content
@@ -53,7 +56,7 @@ Expire-Date: %s
 `, algorithm, keyLength, algorithm, keyLength, name, email, expire)
 
 	// For Ed25519, adjust the batch content
-	if algorithm == "ed25519" {
+	if algorithm == constants.GPGKeyTypeEd25519 {
 		batchContent = fmt.Sprintf(`Key-Type: EDDSA
 Key-Curve: Ed25519
 Subkey-Type: ECDH

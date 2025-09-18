@@ -48,6 +48,7 @@ const (
 	// RSA key sizes
 	DefaultRSAKeySize = 4096 // Default RSA key size for secure operations
 	MinRSAKeySize     = 2048 // Minimum acceptable RSA key size
+	Ed25519KeySize    = 256  // Ed25519 key size
 
 	// Key sizes in bytes
 	AESKeySize    = 32 // AES-256 key size
@@ -60,10 +61,23 @@ const (
 	SaltSize        = 16 // Salt size for key derivation
 	LegacyNonceSize = 16 // Legacy nonce size for backward compatibility
 
+	// GPG key types
+	GPGKeyTypeRSA     = "rsa"
+	GPGKeyTypeEd25519 = "ed25519"
+
+	// GPG key expiration
+	GPGKeyExpiration1Year  = "1y"
+	GPGKeyExpiration2Years = "2y"
+	GPGKeyExpiration5Years = "5y"
+	GPGKeyExpirationNever  = "0"
+
 	// Validation string for key verification
 	KeyValidationString = "sietch-key-validation"
 
 	//** Constants for chunking
 
 	DefaultChunkSize = 4 * 1024 * 1024 // 4MB
+
+	//* Regex
+	EmailRegex = `^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`
 )

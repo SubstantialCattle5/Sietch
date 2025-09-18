@@ -7,6 +7,7 @@ import (
 
 	"github.com/manifoldco/promptui"
 	"github.com/substantialcattle5/sietch/internal/config"
+	"github.com/substantialcattle5/sietch/internal/constants"
 )
 
 // GPGKeyInfo represents information about a GPG key
@@ -31,7 +32,7 @@ func PromptForKeySelection(keys []*GPGKeyInfo) (*GPGKeyInfo, error) {
 	for i, key := range keys {
 		items[i] = fmt.Sprintf("%s (%s) - %s", key.UserID, key.KeyID, key.KeyType)
 	}
-	items[len(keys)] = "Create a new GPG key"
+	items[len(keys)] = "Create a new GPG key" // last item is the new key creation option
 
 	prompt := promptui.Select{
 		Label: "Select a GPG key for encryption",
@@ -84,7 +85,7 @@ func PromptForNewKeyCreation() (*GPGKeyInfo, error) {
 	emailPrompt := promptui.Prompt{
 		Label: "Email address",
 		Validate: func(input string) error {
-			emailRegex := regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
+			emailRegex := regexp.MustCompile(constants.EmailRegex)
 			if !emailRegex.MatchString(input) {
 				return fmt.Errorf("invalid email address")
 			}
