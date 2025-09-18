@@ -82,11 +82,11 @@ jobs:
       with:
         go-version: '1.24'
 
-    - name: Install golangci-lint
+    - name: Install golangci-lint v2
       run: |
         echo "Go version: $(go version)"
-        echo "Installing golangci-lint from source with Go 1.24..."
-        go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+        echo "Installing golangci-lint v2.4.0..."
+        curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.4.0
         echo "golangci-lint version: $(golangci-lint version)"
     
     - name: Run golangci-lint
