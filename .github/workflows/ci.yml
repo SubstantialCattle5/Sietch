@@ -82,16 +82,15 @@ jobs:
       with:
         go-version: '1.24'
 
-    - name: Report tool versions
+    - name: Install golangci-lint
       run: |
         echo "Go version: $(go version)"
-        echo "About to run golangci-lint v1.62.2"
+        echo "Installing golangci-lint from source with Go 1.24..."
+        go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+        echo "golangci-lint version: $(golangci-lint version)"
     
-    - name: golangci-lint
-      uses: golangci/golangci-lint-action@v6
-      with:
-        version: v1.62.2
-        args: --timeout=5m
+    - name: Run golangci-lint
+      run: golangci-lint run --timeout=5m
 
   security:
     runs-on: ubuntu-latest
