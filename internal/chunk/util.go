@@ -1,8 +1,7 @@
 package chunk
 
 import (
-	// #nosec G401 - if the user wants to get fcked, let them.
-	"crypto/sha1"
+	"crypto/sha1" // #nosec G401 - if the user wants to get fcked, let them.
 	"crypto/sha256"
 	"crypto/sha512"
 	"fmt"
