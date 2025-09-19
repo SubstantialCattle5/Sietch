@@ -15,11 +15,12 @@ type VaultConfig struct {
 	CreatedAt     time.Time `yaml:"created_at"`
 	SchemaVersion int       `yaml:"schema_version"`
 
-	Encryption  EncryptionConfig `yaml:"encryption"`
-	Chunking    ChunkingConfig   `yaml:"chunking"`
-	Compression string           `yaml:"compression"`
-	Sync        SyncConfig       `yaml:"sync"`
-	Metadata    MetadataConfig   `yaml:"metadata"`
+	Encryption    EncryptionConfig    `yaml:"encryption"`
+	Chunking      ChunkingConfig      `yaml:"chunking"`
+	Compression   string              `yaml:"compression"`
+	Deduplication DeduplicationConfig `yaml:"deduplication"`
+	Sync          SyncConfig          `yaml:"sync"`
+	Metadata      MetadataConfig      `yaml:"metadata"`
 }
 
 // EncryptionConfig contains encryption settings
@@ -65,6 +66,17 @@ type ChunkingConfig struct {
 	Strategy      string `yaml:"strategy"`
 	ChunkSize     string `yaml:"chunk_size"`
 	HashAlgorithm string `yaml:"hash_algorithm"`
+}
+
+// DeduplicationConfig contains settings for chunk deduplication
+type DeduplicationConfig struct {
+	Enabled        bool   `yaml:"enabled"`          // Enable/disable deduplication
+	Strategy       string `yaml:"strategy"`         // "content" for content-based deduplication
+	MinChunkSize   string `yaml:"min_chunk_size"`   // Minimum chunk size for deduplication
+	MaxChunkSize   string `yaml:"max_chunk_size"`   // Maximum chunk size for deduplication
+	GCThreshold    int    `yaml:"gc_threshold"`     // Unreferenced chunk count before GC suggestion
+	IndexEnabled   bool   `yaml:"index_enabled"`    // Enable chunk index for faster lookups
+	CrossFileDedup bool   `yaml:"cross_file_dedup"` // Enable deduplication across different files
 }
 
 // SyncConfig contains synchronization settings
@@ -154,6 +166,30 @@ func BuildVaultConfig(
 	tags []string,
 	keyConfig *KeyConfig, // Changed from variadic to single pointer
 ) VaultConfig {
+	return BuildVaultConfigWithDeduplication(
+		vaultID, vaultName, author, keyType, keyPath,
+		passPhraseProtected,
+		chunkingStrategy, chunkSize, hashAlgorithm, compression,
+		syncMode,
+		tags,
+		keyConfig,
+		// Default deduplication settings
+		true, "content", "1KB", "64MB", 1000, true, true,
+	)
+}
+
+// BuildVaultConfigWithDeduplication creates a complete vault configuration with deduplication settings
+func BuildVaultConfigWithDeduplication(
+	vaultID, vaultName, author, keyType, keyPath string,
+	passPhraseProtected bool,
+	chunkingStrategy, chunkSize, hashAlgorithm, compression string,
+	syncMode string,
+	tags []string,
+	keyConfig *KeyConfig,
+	// Deduplication parameters
+	enableDedup bool, dedupStrategy, dedupMinSize, dedupMaxSize string,
+	dedupGCThreshold int, dedupIndexEnabled, dedupCrossFile bool,
+) VaultConfig {
 	config := VaultConfig{
 		VaultID:       vaultID,
 		Name:          vaultName,
@@ -174,6 +210,15 @@ func BuildVaultConfig(
 	config.Chunking.Strategy = chunkingStrategy
 	config.Chunking.ChunkSize = chunkSize
 	config.Chunking.HashAlgorithm = hashAlgorithm
+
+	// Set deduplication configuration
+	config.Deduplication.Enabled = enableDedup
+	config.Deduplication.Strategy = dedupStrategy
+	config.Deduplication.MinChunkSize = dedupMinSize
+	config.Deduplication.MaxChunkSize = dedupMaxSize
+	config.Deduplication.GCThreshold = dedupGCThreshold
+	config.Deduplication.IndexEnabled = dedupIndexEnabled
+	config.Deduplication.CrossFileDedup = dedupCrossFile
 
 	// Set sync configuration
 	config.Sync.Mode = syncMode
