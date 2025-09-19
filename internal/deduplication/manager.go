@@ -61,7 +61,9 @@ func (m *Manager) ProcessChunk(chunkRef config.ChunkRef, chunkData []byte, stora
 		// New chunk, store it
 		if err := m.storeChunk(storageHash, chunkData); err != nil {
 			// Remove from index if storage failed
-			m.index.RemoveChunk(chunkRef.Hash)
+			if m.index.RemoveChunk(chunkRef.Hash) != nil {
+				fmt.Printf("Warning: failed to remove chunk %s from index: %v\n", chunkRef.Hash, err)
+			}
 			return chunkRef, false, err
 		}
 		chunkRef.Deduplicated = false
