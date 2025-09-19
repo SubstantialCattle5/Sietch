@@ -260,4 +260,4 @@ func init() {
 
 //TODO: Implement parallel chunk retrieval
 //TODO: Implement streaming process
-//TODO: Implemnt atomic operations, rollback on error
+//TODO: Implement atomic operations, rollback on error

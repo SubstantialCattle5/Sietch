@@ -1,43 +1,33 @@
 package chunk
 
 import (
-	"crypto/sha1" // #nosec G401
-	"crypto/sha256"
-	"crypto/sha512"
+	// #nosec G401
+
+	"encoding/base64"
 	"fmt"
-	"hash"
 	"io"
 	"os"
-	"path/filepath"
-
-	"github.com/zeebo/blake3"
 
 	"github.com/substantialcattle5/sietch/internal/compression"
 	"github.com/substantialcattle5/sietch/internal/config"
 	"github.com/substantialcattle5/sietch/internal/constants"
+	"github.com/substantialcattle5/sietch/internal/deduplication"
 	"github.com/substantialcattle5/sietch/internal/encryption"
 	"github.com/substantialcattle5/sietch/internal/fs"
 	"github.com/substantialcattle5/sietch/util"
 )
 
-// createHasher creates a hasher based on the configured hash algorithm
-func createHasher(algorithm string) (hash.Hash, error) {
-	switch algorithm {
-	case constants.HashAlgorithmSHA256, "": // Default to SHA-256 if empty
-		return sha256.New(), nil
-	case constants.HashAlgorithmSHA512:
-		return sha512.New(), nil
-	case constants.HashAlgorithmSHA1:
-		// #nosec G401
-		return sha1.New(), nil
-	case constants.HashAlgorithmBLAKE3:
-		return blake3.New(), nil
-	default:
-		return nil, fmt.Errorf("unsupported hash algorithm: %s", algorithm)
-	}
-}
+const (
+	// Display constants
+	HashDisplayLength = 12 // Length of hash to display in logs
+)
 
 func ChunkFile(filePath string, chunkSize int64, vaultRoot string, passphrase string) ([]config.ChunkRef, error) {
+	// Validate input parameters
+	if chunkSize <= 0 {
+		return nil, fmt.Errorf("chunk size must be positive, got: %d", chunkSize)
+	}
+
 	file, err := fs.VerifyFileAndReturnFile(filePath)
 	if err != nil {
 		return nil, err
@@ -61,10 +51,26 @@ func ChunkFile(filePath string, chunkSize int64, vaultRoot string, passphrase st
 		return nil, fmt.Errorf("passphrase required for encrypted vault but not provided")
 	}
 
-	return processFileChunks(file, chunkSize, *vaultConfig, chunksDir, passphrase)
+	// Initialize deduplication manager
+	dedupManager, err := deduplication.NewManager(vaultRoot, vaultConfig.Deduplication)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize deduplication manager: %v", err)
+	}
+
+	chunkRefs, err := processFileChunks(file, chunkSize, *vaultConfig, passphrase, dedupManager)
+	if err != nil {
+		return nil, err
+	}
+
+	// Save deduplication index after processing
+	if err := dedupManager.Save(); err != nil {
+		return nil, fmt.Errorf("failed to save deduplication index: %v", err)
+	}
+
+	return chunkRefs, nil
 }
 
-func processFileChunks(file *os.File, chunkSize int64, vaultConfig config.VaultConfig, chunksDir string, passphrase string) ([]config.ChunkRef, error) {
+func processFileChunks(file *os.File, chunkSize int64, vaultConfig config.VaultConfig, passphrase string, dedupManager *deduplication.Manager) ([]config.ChunkRef, error) {
 	// Create a buffer for reading chunks
 	buffer := make([]byte, chunkSize)
 	chunkCount := 0
@@ -87,9 +93,9 @@ func processFileChunks(file *os.File, chunkSize int64, vaultConfig config.VaultC
 		totalBytes += int64(bytesRead)
 
 		// Calculate chunk hash (pre-encryption) using configured algorithm
-		hasher, err := createHasher(vaultConfig.Chunking.HashAlgorithm)
+		hasher, err := CreateHasher(vaultConfig.Chunking.HashAlgorithm)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create hasher for chunk %d: %v", chunkCount, err)
+			return nil, fmt.Errorf("failed to create hasher for chunk %d (algorithm: %s): %v", chunkCount, vaultConfig.Chunking.HashAlgorithm, err)
 		}
 		hasher.Write(buffer[:bytesRead])
 		chunkHash := fmt.Sprintf("%x", hasher.Sum(nil))
@@ -100,14 +106,14 @@ func processFileChunks(file *os.File, chunkSize int64, vaultConfig config.VaultC
 		// Apply compression if configured
 		compressedData, err := compression.CompressData(originalChunkData, vaultConfig.Compression)
 		if err != nil {
-			return nil, fmt.Errorf("failed to compress chunk %d: %v", chunkCount, err)
+			return nil, fmt.Errorf("failed to compress chunk %d (size: %d bytes, algorithm: %s): %v", chunkCount, bytesRead, vaultConfig.Compression, err)
 		}
 
 		// Create chunk reference
 		chunkRef := config.ChunkRef{
 			Hash:       chunkHash,
 			Size:       int64(bytesRead),
-			Index:      chunkCount - 1, // 0-based index
+			Index:      chunkCount - 1, // Convert 1-based chunkCount to 0-based index
 			Compressed: vaultConfig.Compression != "none",
 		}
 
@@ -116,8 +122,8 @@ func processFileChunks(file *os.File, chunkSize int64, vaultConfig config.VaultC
 
 		// Encrypt the chunk if encryption is enabled
 		if vaultConfig.Encryption.Type != "" && vaultConfig.Encryption.Type != "none" {
-			// Convert chunk data to string for encryption (use compressed data)
-			chunkData := string(chunkDataToProcess)
+			// Encode binary data to base64 string for safe encryption (use compressed data)
+			chunkData := base64.StdEncoding.EncodeToString(chunkDataToProcess)
 
 			var encryptedData string
 			var encryptErr error
@@ -137,13 +143,13 @@ func processFileChunks(file *os.File, chunkSize int64, vaultConfig config.VaultC
 			}
 
 			if encryptErr != nil {
-				return nil, fmt.Errorf("failed to encrypt chunk %d: %v", chunkCount, encryptErr)
+				return nil, fmt.Errorf("failed to encrypt chunk %d (size: %d bytes, type: %s): %v", chunkCount, len(chunkDataToProcess), vaultConfig.Encryption.Type, encryptErr)
 			}
 
 			// Calculate hash of encrypted data for storage filename using configured algorithm
-			encHasher, err := createHasher(vaultConfig.Chunking.HashAlgorithm)
+			encHasher, err := CreateHasher(vaultConfig.Chunking.HashAlgorithm)
 			if err != nil {
-				return nil, fmt.Errorf("failed to create encrypted hasher for chunk %d: %v", chunkCount, err)
+				return nil, fmt.Errorf("failed to create encrypted hasher for chunk %d (algorithm: %s): %v", chunkCount, vaultConfig.Chunking.HashAlgorithm, err)
 			}
 			encHasher.Write([]byte(encryptedData))
 			encryptedHash := fmt.Sprintf("%x", encHasher.Sum(nil))
@@ -152,45 +158,25 @@ func processFileChunks(file *os.File, chunkSize int64, vaultConfig config.VaultC
 			chunkRef.EncryptedHash = encryptedHash
 			chunkRef.EncryptedSize = int64(len(encryptedData))
 
-			// Save the encrypted chunk
-			chunkPath := filepath.Join(chunksDir, encryptedHash)
-			if err := os.WriteFile(chunkPath, []byte(encryptedData), constants.StandardFilePerms); err != nil {
-				return nil, fmt.Errorf("failed to write encrypted chunk file: %v", err)
+			// Process chunk with deduplication manager
+			updatedChunkRef, deduplicated, err := dedupManager.ProcessChunk(chunkRef, []byte(encryptedData), encryptedHash)
+			if err != nil {
+				return nil, fmt.Errorf("failed to process chunk %d with deduplication (encrypted, hash: %s): %v", chunkCount, encryptedHash[:HashDisplayLength], err)
 			}
+			chunkRef = updatedChunkRef
 
-			compressionInfo := ""
-			if vaultConfig.Compression != "none" {
-				compressionInfo = fmt.Sprintf(" (compressed with %s: %s -> %s)",
-					vaultConfig.Compression,
-					util.HumanReadableSize(int64(bytesRead)),
-					util.HumanReadableSize(int64(len(chunkDataToProcess))))
-			}
-
-			fmt.Printf("Chunk %d: %s bytes, hash: %s (encrypted)%s\n",
-				chunkCount,
-				util.HumanReadableSize(int64(bytesRead)),
-				chunkHash[:12],
-				compressionInfo)
+			// Display chunk information using helper function
+			FormatChunkInfo(chunkCount, bytesRead, chunkHash, vaultConfig, chunkDataToProcess, deduplicated, true)
 		} else {
-			// If no encryption, save the compressed chunk
-			chunkPath := filepath.Join(chunksDir, chunkHash)
-			if err := os.WriteFile(chunkPath, chunkDataToProcess, constants.StandardFilePerms); err != nil {
-				return nil, fmt.Errorf("failed to write chunk file: %v", err)
+			// If no encryption, process chunk with deduplication manager
+			updatedChunkRef, deduplicated, err := dedupManager.ProcessChunk(chunkRef, chunkDataToProcess, chunkHash)
+			if err != nil {
+				return nil, fmt.Errorf("failed to process chunk %d with deduplication (unencrypted, hash: %s): %v", chunkCount, chunkHash[:HashDisplayLength], err)
 			}
+			chunkRef = updatedChunkRef
 
-			compressionInfo := ""
-			if vaultConfig.Compression != "none" {
-				compressionInfo = fmt.Sprintf(" (compressed with %s: %s -> %s)",
-					vaultConfig.Compression,
-					util.HumanReadableSize(int64(bytesRead)),
-					util.HumanReadableSize(int64(len(chunkDataToProcess))))
-			}
-
-			fmt.Printf("Chunk %d: %s bytes, hash: %s%s\n",
-				chunkCount,
-				util.HumanReadableSize(int64(bytesRead)),
-				chunkHash,
-				compressionInfo)
+			// Display chunk information using helper function
+			FormatChunkInfo(chunkCount, bytesRead, chunkHash, vaultConfig, chunkDataToProcess, deduplicated, false)
 		}
 
 		// Add the chunk reference to our list

@@ -12,17 +12,17 @@ func TestParseChunkSize(t *testing.T) {
 		wantErr     bool
 		errContains string
 	}{
-		// Valid cases - current implementation converts to MB
+		// Valid cases - new implementation properly handles units
 		{
-			name:    "single digit",
+			name:    "single digit (bytes)",
 			input:   "1",
-			want:    1048576, // 1 * 1024 * 1024
+			want:    1, // 1 byte
 			wantErr: false,
 		},
 		{
-			name:    "multiple digits",
+			name:    "multiple digits (bytes)",
 			input:   "4",
-			want:    4194304, // 4 * 1024 * 1024
+			want:    4, // 4 bytes
 			wantErr: false,
 		},
 		{
@@ -32,9 +32,33 @@ func TestParseChunkSize(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name:    "larger number",
+			name:    "larger number (bytes)",
 			input:   "100",
-			want:    104857600, // 100 * 1024 * 1024
+			want:    100, // 100 bytes
+			wantErr: false,
+		},
+		{
+			name:    "kilobytes",
+			input:   "1KB",
+			want:    1024, // 1 * 1024
+			wantErr: false,
+		},
+		{
+			name:    "megabytes",
+			input:   "1MB",
+			want:    1048576, // 1 * 1024 * 1024
+			wantErr: false,
+		},
+		{
+			name:    "gigabytes",
+			input:   "1GB",
+			want:    1073741824, // 1 * 1024 * 1024 * 1024
+			wantErr: false,
+		},
+		{
+			name:    "decimal number",
+			input:   "1.5KB",
+			want:    1536, // 1.5 * 1024
 			wantErr: false,
 		},
 
@@ -44,7 +68,7 @@ func TestParseChunkSize(t *testing.T) {
 			input:       "",
 			want:        0,
 			wantErr:     true,
-			errContains: "invalid size format",
+			errContains: "size cannot be empty",
 		},
 		{
 			name:        "non-numeric",
@@ -54,22 +78,18 @@ func TestParseChunkSize(t *testing.T) {
 			errContains: "invalid size format",
 		},
 		{
-			name:    "with units (extracts number part)",
-			input:   "1MB",
-			want:    1048576, // 1 * 1024 * 1024
-			wantErr: false,
+			name:        "negative number",
+			input:       "-1",
+			want:        0,
+			wantErr:     true,
+			errContains: "size cannot be negative",
 		},
 		{
-			name:    "negative number",
-			input:   "-1",
-			want:    -1048576, // -1 * 1024 * 1024
-			wantErr: false,
-		},
-		{
-			name:    "decimal number (extracts integer part)",
-			input:   "1.5",
-			want:    1048576, // 1 * 1024 * 1024
-			wantErr: false,
+			name:        "unsupported unit",
+			input:       "1XB",
+			want:        0,
+			wantErr:     true,
+			errContains: "unsupported unit",
 		},
 	}
 
@@ -107,7 +127,7 @@ func TestParseChunkSizeEdgeCases(t *testing.T) {
 			t.Errorf("ParseChunkSize() with large number failed: %v", err)
 			return
 		}
-		expected := int64(999999 * 1024 * 1024)
+		expected := int64(999999) // Just the number itself (bytes)
 		if result != expected {
 			t.Errorf("ParseChunkSize('999999') = %d, want %d", result, expected)
 		}
@@ -119,7 +139,7 @@ func TestParseChunkSizeEdgeCases(t *testing.T) {
 			t.Errorf("ParseChunkSize() with leading zeros failed: %v", err)
 			return
 		}
-		expected := int64(1 * 1024 * 1024)
+		expected := int64(1) // Just 1 byte
 		if result != expected {
 			t.Errorf("ParseChunkSize('001') = %d, want %d", result, expected)
 		}
@@ -132,9 +152,33 @@ func TestParseChunkSizeEdgeCases(t *testing.T) {
 			t.Errorf("ParseChunkSize() with whitespace failed: %v", err)
 			return
 		}
-		expected := int64(1 * 1024 * 1024)
+		expected := int64(1) // Just 1 byte
 		if result != expected {
 			t.Errorf("ParseChunkSize(' 1 ') = %d, want %d", result, expected)
+		}
+	})
+
+	t.Run("with KB unit", func(t *testing.T) {
+		result, err := ParseChunkSize("4KB")
+		if err != nil {
+			t.Errorf("ParseChunkSize() with KB unit failed: %v", err)
+			return
+		}
+		expected := int64(4 * 1024) // 4 KB
+		if result != expected {
+			t.Errorf("ParseChunkSize('4KB') = %d, want %d", result, expected)
+		}
+	})
+
+	t.Run("case insensitive", func(t *testing.T) {
+		result, err := ParseChunkSize("1kb")
+		if err != nil {
+			t.Errorf("ParseChunkSize() with lowercase unit failed: %v", err)
+			return
+		}
+		expected := int64(1024) // 1 KB
+		if result != expected {
+			t.Errorf("ParseChunkSize('1kb') = %d, want %d", result, expected)
 		}
 	})
 }
@@ -171,7 +215,7 @@ func TestParseChunkSizeConsistency(t *testing.T) {
 }
 
 func TestParseChunkSizeBoundaries(t *testing.T) {
-	// Test boundary values for the current simple implementation
+	// Test boundary values for the new implementation
 	boundaryTests := []struct {
 		name      string
 		input     string
@@ -184,7 +228,7 @@ func TestParseChunkSizeBoundaries(t *testing.T) {
 				if err != nil {
 					t.Errorf("Unexpected error: %v", err)
 				}
-				expected := int64(1024 * 1024)
+				expected := int64(1) // 1 byte
 				if result != expected {
 					t.Errorf("Expected %d, got %d", expected, result)
 				}
@@ -199,6 +243,32 @@ func TestParseChunkSizeBoundaries(t *testing.T) {
 				}
 				if result != 0 {
 					t.Errorf("Expected 0, got %d", result)
+				}
+			},
+		},
+		{
+			name:  "1KB boundary",
+			input: "1KB",
+			checkFunc: func(t *testing.T, result int64, err error) {
+				if err != nil {
+					t.Errorf("Unexpected error: %v", err)
+				}
+				expected := int64(1024) // 1 KB
+				if result != expected {
+					t.Errorf("Expected %d, got %d", expected, result)
+				}
+			},
+		},
+		{
+			name:  "1MB boundary",
+			input: "1MB",
+			checkFunc: func(t *testing.T, result int64, err error) {
+				if err != nil {
+					t.Errorf("Unexpected error: %v", err)
+				}
+				expected := int64(1024 * 1024) // 1 MB
+				if result != expected {
+					t.Errorf("Expected %d, got %d", expected, result)
 				}
 			},
 		},
@@ -229,13 +299,66 @@ func containsSubstringHelper(s, substr string) bool {
 	return false
 }
 
+// Test comprehensive unit support
+func TestParseChunkSizeUnits(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected int64
+	}{
+		// Bytes
+		{"1B", 1},
+		{"1BYTES", 1},
+		{"100", 100}, // no unit defaults to bytes
+
+		// Kilobytes
+		{"1K", 1024},
+		{"1KB", 1024},
+		{"1KILOBYTES", 1024},
+		{"2KB", 2048},
+
+		// Megabytes
+		{"1M", 1048576},
+		{"1MB", 1048576},
+		{"1MEGABYTES", 1048576},
+		{"2MB", 2097152},
+
+		// Gigabytes
+		{"1G", 1073741824},
+		{"1GB", 1073741824},
+		{"1GIGABYTES", 1073741824},
+
+		// Terabytes
+		{"1T", 1099511627776},
+		{"1TB", 1099511627776},
+		{"1TERABYTES", 1099511627776},
+
+		// Decimal values
+		{"0.5KB", 512},
+		{"1.5MB", 1572864},
+		{"2.5GB", 2684354560},
+	}
+
+	for _, test := range tests {
+		t.Run(test.input, func(t *testing.T) {
+			result, err := ParseChunkSize(test.input)
+			if err != nil {
+				t.Errorf("ParseChunkSize(%q) unexpected error: %v", test.input, err)
+				return
+			}
+			if result != test.expected {
+				t.Errorf("ParseChunkSize(%q) = %d, want %d", test.input, result, test.expected)
+			}
+		})
+	}
+}
+
 // Benchmark tests
 func BenchmarkParseChunkSize(b *testing.B) {
 	testCases := []string{
 		"1",
-		"4",
-		"100",
-		"1000",
+		"4KB",
+		"100MB",
+		"1GB",
 	}
 
 	for _, testCase := range testCases {

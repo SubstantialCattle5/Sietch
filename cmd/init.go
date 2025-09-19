@@ -54,6 +54,13 @@ var (
 	author string
 	tags   []string
 
+	// Deduplication
+	enableDeduplication bool
+	dedupStrategy       string
+	dedupMinChunkSize   string
+	dedupMaxChunkSize   string
+	dedupGCThreshold    int
+
 	// Other options
 	interactiveMode bool
 	forceInit       bool
@@ -134,6 +141,13 @@ func init() {
 
 	// RSA Keys
 	initCmd.Flags().Int("rsa-bits", constants.DefaultRSAKeySize, "Bit size for the RSA key pair (min 2048, recommended 4096)")
+
+	// Deduplication options
+	initCmd.Flags().BoolVar(&enableDeduplication, "enable-dedup", true, "Enable deduplication (default: true)")
+	initCmd.Flags().StringVar(&dedupStrategy, "dedup-strategy", "content", "Deduplication strategy (content)")
+	initCmd.Flags().StringVar(&dedupMinChunkSize, "dedup-min-size", "1KB", "Minimum chunk size for deduplication")
+	initCmd.Flags().StringVar(&dedupMaxChunkSize, "dedup-max-size", "64MB", "Maximum chunk size for deduplication")
+	initCmd.Flags().IntVar(&dedupGCThreshold, "dedup-gc-threshold", 1000, "Unreferenced chunk count before GC suggestion")
 
 	// Other options
 	initCmd.Flags().BoolVar(&interactiveMode, "interactive", false, "Use interactive mode")
@@ -244,7 +258,7 @@ func runInit(cmd *cobra.Command) error {
 	}
 
 	// Build vault configuration
-	configuration := config.BuildVaultConfig(
+	configuration := config.BuildVaultConfigWithDeduplication(
 		vaultID,
 		vaultName,
 		authorValidated,
@@ -258,6 +272,14 @@ func runInit(cmd *cobra.Command) error {
 		syncMode,
 		tags,
 		keyConfig,
+		// Deduplication parameters
+		enableDeduplication,
+		dedupStrategy,
+		dedupMinChunkSize,
+		dedupMaxChunkSize,
+		dedupGCThreshold,
+		true, // index enabled
+		true, // cross-file dedup enabled
 	)
 
 	// Initialize RSA config if not present
@@ -345,6 +367,13 @@ func handleInteractiveMode() (*config.VaultConfig, error) {
 	syncMode = vaultConfig.Sync.Mode
 	author = vaultConfig.Metadata.Author
 	tags = vaultConfig.Metadata.Tags
+
+	// Handle deduplication configuration
+	enableDeduplication = vaultConfig.Deduplication.Enabled
+	dedupStrategy = vaultConfig.Deduplication.Strategy
+	dedupMinChunkSize = vaultConfig.Deduplication.MinChunkSize
+	dedupMaxChunkSize = vaultConfig.Deduplication.MaxChunkSize
+	dedupGCThreshold = vaultConfig.Deduplication.GCThreshold
 
 	return vaultConfig, nil
 }
