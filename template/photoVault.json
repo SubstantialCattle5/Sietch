@@ -17,24 +17,5 @@
     "dedup_gc_threshold": 500,
     "dedup_index_enabled": true,
     "dedup_cross_file": true
-  },
-  "directories": [
-    "photos",
-    "photos/raw",
-    "photos/edited", 
-    "photos/archives",
-    "metadata"
-  ],
-  "files": [
-    {
-      "path": "photos/README.md",
-      "content": "# Photo Vault\n\nThis vault is optimized for photo storage with the following features:\n- High compression for space efficiency\n- Smart deduplication to avoid storing duplicate photos\n- Organized directory structure for different photo types\n\n## Directory Structure\n- `raw/` - Original unedited photos\n- `edited/` - Processed and edited photos\n- `archives/` - Older photos for long-term storage\n- `metadata/` - Photo metadata, EXIF data, and catalogs\n\n## Usage\nAdd photos to the appropriate directories and run `sietch add` to securely store them.\n",
-      "mode": "0644"
-    },
-    {
-      "path": "metadata/catalog.txt",
-      "content": "# Photo Catalog\n# Track important photos and their locations\n# Format: YYYY-MM-DD | Location | Description | Tags\n\n",
-      "mode": "0644"
-    }
-  ]
+  }
 }

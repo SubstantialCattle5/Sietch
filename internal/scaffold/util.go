@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 
 	"github.com/substantialcattle5/sietch/internal/fs"
 )
@@ -18,8 +17,6 @@ type Template struct {
 	Author      string         `json:"author"`
 	Tags        []string       `json:"tags"`
 	Config      TemplateConfig `json:"config"`
-	Directories []string       `json:"directories"`
-	Files       []TemplateFile `json:"files"`
 }
 
 // TemplateConfig represents default vault configuration in template
@@ -64,7 +61,8 @@ func EnsureConfigDirectories() error {
 	return fs.EnsureDirectory(templatesDir)
 }
 
-// ListAvailableTemplates lists all available templates from config directory and built-in templates
+// ListAvailableTemplates lists all available templates from config directory
+// This function assumes EnsureDefaultTemplates() has been called first
 func ListAvailableTemplates() ([]string, error) {
 	templatesDir, err := GetTemplatesDirectory()
 	if err != nil {
@@ -73,7 +71,7 @@ func ListAvailableTemplates() ([]string, error) {
 
 	var templates []string
 
-	// Check if templates directory exists
+	// Read templates from user config directory
 	if _, err := os.Stat(templatesDir); !os.IsNotExist(err) {
 		entries, err := os.ReadDir(templatesDir)
 		if err != nil {
@@ -88,41 +86,41 @@ func ListAvailableTemplates() ([]string, error) {
 		}
 	}
 
-	// TODO: Add built-in templates from bundled templates
-	builtInTemplates := []string{"photo-vault"}
-	for _, template := range builtInTemplates {
-		// Only add if not already in user templates
-		found := slices.Contains(templates, template)
-		if !found {
-			templates = append(templates, template)
-		}
-	}
-
 	return templates, nil
 }
 
-// LoadTemplate loads a template from file system
-func LoadTemplate(templateName string) (*Template, error) {
-	var templatePath string
+func GetBuiltInTemplates() []string {
+	// list all files in template directory
+	templateDir := "template"
+	files, err := os.ReadDir(templateDir)
+	if err != nil {
+		// Fallback to hardcoded list if template directory doesn't exist
+		return []string{}
+	}
 
-	// First check user config directory
+	var templates []string
+	for _, file := range files {
+		if !file.IsDir() && filepath.Ext(file.Name()) == ".json" {
+			templateName := file.Name()[:len(file.Name())-5] // Remove .json extension
+			templates = append(templates, templateName)
+		}
+	}
+
+	return templates
+}
+
+// LoadTemplate loads a template from user config directory
+// This function assumes EnsureDefaultTemplates() has been called first
+func LoadTemplate(templateName string) (*Template, error) {
+	// Load template from user config directory
 	templatesDir, err := GetTemplatesDirectory()
 	if err != nil {
 		return nil, err
 	}
 
-	userTemplatePath := filepath.Join(templatesDir, templateName+".json")
-	if _, err := os.Stat(userTemplatePath); err == nil {
-		templatePath = userTemplatePath
-	} else {
-		// Check built-in templates (in project template directory for now)
-		// In production, this would be embedded or in a system directory
-		builtInPath := filepath.Join("template", templateName+".json")
-		if _, err := os.Stat(builtInPath); err == nil {
-			templatePath = builtInPath
-		} else {
-			return nil, fmt.Errorf("template '%s' not found in user config or built-in templates", templateName)
-		}
+	templatePath := filepath.Join(templatesDir, templateName+".json")
+	if _, err := os.Stat(templatePath); err != nil {
+		return nil, fmt.Errorf("template '%s' not found in user config directory (%s)", templateName, templatesDir)
 	}
 
 	// Read and parse template file
@@ -160,18 +158,12 @@ func CopyDefaultTemplates() error {
 		return err
 	}
 
-	// List of built-in templates (in production, these would be embedded)
-	builtInTemplates := []string{"photoVault"}
+	builtInTemplates := GetBuiltInTemplates()
 
 	for _, templateName := range builtInTemplates {
 		userTemplatePath := filepath.Join(templatesDir, templateName+".json")
 
-		// Skip if user already has this template
-		if _, err := os.Stat(userTemplatePath); err == nil {
-			continue
-		}
-
-		// Copy from built-in location
+		// Copy from built-in location (always copy when this function is called)
 		builtInPath := filepath.Join("template", templateName+".json")
 		if _, err := os.Stat(builtInPath); err == nil {
 			data, err := os.ReadFile(builtInPath)
@@ -185,10 +177,63 @@ func CopyDefaultTemplates() error {
 		}
 	}
 
+	// Copy README.md file if it exists
+	readmeSourcePath := filepath.Join("template", "README.md")
+	if _, err := os.Stat(readmeSourcePath); err == nil {
+		readmeData, err := os.ReadFile(readmeSourcePath)
+		if err != nil {
+			return fmt.Errorf("failed to read README.md: %v", err)
+		}
+
+		readmeDestPath := filepath.Join(templatesDir, "README.md")
+		if err := os.WriteFile(readmeDestPath, readmeData, 0644); err != nil {
+			return fmt.Errorf("failed to copy README.md to user config: %v", err)
+		}
+	}
+
 	return nil
 }
 
 // EnsureDefaultTemplates ensures default templates exist in user config
+// If the templates directory is empty or doesn't exist, copies all templates from /template
 func EnsureDefaultTemplates() error {
-	return CopyDefaultTemplates()
+	templatesDir, err := GetTemplatesDirectory()
+	if err != nil {
+		return err
+	}
+
+	// Check if templates directory exists and has templates
+	hasTemplates, err := hasExistingTemplates(templatesDir)
+	if err != nil {
+		return err
+	}
+
+	// If no templates exist, copy all default templates
+	if !hasTemplates {
+		return CopyDefaultTemplates()
+	}
+
+	return nil
+}
+
+// hasExistingTemplates checks if the templates directory exists and contains .json files
+func hasExistingTemplates(templatesDir string) (bool, error) {
+	// Check if directory exists
+	if _, err := os.Stat(templatesDir); os.IsNotExist(err) {
+		return false, nil
+	}
+
+	// Check if directory contains any .json files
+	entries, err := os.ReadDir(templatesDir)
+	if err != nil {
+		return false, fmt.Errorf("failed to read templates directory: %v", err)
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() && filepath.Ext(entry.Name()) == ".json" {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }
