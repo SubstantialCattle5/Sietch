@@ -32,14 +32,6 @@ type TemplateConfig struct {
 	DedupMaxSize      string `json:"dedup_max_size"`
 	DedupGCThreshold  int    `json:"dedup_gc_threshold"`
 	DedupIndexEnabled bool   `json:"dedup_index_enabled"`
-	DedupCrossFile    bool   `json:"dedup_cross_file"`
-}
-
-// TemplateFile represents a file to be created in the vault
-type TemplateFile struct {
-	Path    string `json:"path"`
-	Content string `json:"content"`
-	Mode    string `json:"mode"`
 }
 
 // GetTemplatesDirectory returns the path to templates directory

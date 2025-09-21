@@ -279,7 +279,6 @@ func runInit(cmd *cobra.Command) error {
 		dedupMaxChunkSize,
 		dedupGCThreshold,
 		true, // index enabled
-		true, // cross-file dedup enabled
 	)
 
 	// Initialize RSA config if not present

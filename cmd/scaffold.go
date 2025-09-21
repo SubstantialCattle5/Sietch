@@ -119,7 +119,6 @@ func runScaffold(templateName, name, path string, force bool) error {
 		cfg.DedupMaxSize,
 		cfg.DedupGCThreshold,
 		cfg.DedupIndexEnabled,
-		cfg.DedupCrossFile,
 	)
 
 	// Initialize RSA config if not present
@@ -136,6 +135,7 @@ func runScaffold(templateName, name, path string, force bool) error {
 		scaffoldCleanupOnError(absVaultPath)
 		return fmt.Errorf("failed to generate RSA keys for sync: %w", err)
 	}
+
 	// Write configuration to manifest
 	if err := manifest.WriteManifest(absVaultPath, configuration); err != nil {
 		scaffoldCleanupOnError(absVaultPath)

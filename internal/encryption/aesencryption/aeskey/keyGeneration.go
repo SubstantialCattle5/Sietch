@@ -99,8 +99,8 @@ func ProcessUnprotectedKey(keyConfig *config.KeyConfig, keyMaterial []byte) {
 
 // HandleKeyStorage manages writing keys to files and creating backups
 func HandleKeyStorage(keyMaterial []byte, opts KeyGenerationOptions) error {
-	// Write main key file if requested
-	if opts.KeyPath != "" && opts.UseKeyFile {
+	// Write main key file if KeyPath is specified (always write for vaults)
+	if opts.KeyPath != "" {
 		if err := writeKeyToFile(keyMaterial, opts.KeyPath); err != nil {
 			return err
 		}

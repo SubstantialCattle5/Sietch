@@ -21,13 +21,12 @@ func TestDeduplicationManager(t *testing.T) {
 
 	// Create deduplication config
 	dedupConfig := config.DeduplicationConfig{
-		Enabled:        true,
-		Strategy:       "content",
-		MinChunkSize:   "0", // 0MB minimum = 0 bytes minimum for testing
-		MaxChunkSize:   "64",
-		GCThreshold:    100,
-		IndexEnabled:   true,
-		CrossFileDedup: true,
+		Enabled:      true,
+		Strategy:     "content",
+		MinChunkSize: "0", // 0MB minimum = 0 bytes minimum for testing
+		MaxChunkSize: "64",
+		GCThreshold:  100,
+		IndexEnabled: true,
 	}
 
 	// Create manager
