@@ -11,11 +11,13 @@ func ListTemplates() error {
 	}
 
 	// Ensure default templates are available
+	// This will check if .config/sietch/templates/*.json exist
+	// If the directory is empty or doesn't exist, it copies all templates from /template
 	if err := EnsureDefaultTemplates(); err != nil {
 		return fmt.Errorf("failed to ensure default templates: %v", err)
 	}
 
-	// Get available templates
+	// Get available templates from user config directory
 	templates, err := ListAvailableTemplates()
 	if err != nil {
 		return fmt.Errorf("failed to list templates: %v", err)

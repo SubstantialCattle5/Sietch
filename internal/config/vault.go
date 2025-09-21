@@ -70,13 +70,13 @@ type ChunkingConfig struct {
 
 // DeduplicationConfig contains settings for chunk deduplication
 type DeduplicationConfig struct {
-	Enabled        bool   `yaml:"enabled"`          // Enable/disable deduplication
-	Strategy       string `yaml:"strategy"`         // "content" for content-based deduplication
-	MinChunkSize   string `yaml:"min_chunk_size"`   // Minimum chunk size for deduplication
-	MaxChunkSize   string `yaml:"max_chunk_size"`   // Maximum chunk size for deduplication
-	GCThreshold    int    `yaml:"gc_threshold"`     // Unreferenced chunk count before GC suggestion
-	IndexEnabled   bool   `yaml:"index_enabled"`    // Enable chunk index for faster lookups
-	CrossFileDedup bool   `yaml:"cross_file_dedup"` // Enable deduplication across different files
+	Enabled      bool   `yaml:"enabled"`        // Enable/disable deduplication
+	Strategy     string `yaml:"strategy"`       // "content" for content-based deduplication
+	MinChunkSize string `yaml:"min_chunk_size"` // Minimum chunk size for deduplication
+	MaxChunkSize string `yaml:"max_chunk_size"` // Maximum chunk size for deduplication
+	GCThreshold  int    `yaml:"gc_threshold"`   // Unreferenced chunk count before GC suggestion
+	IndexEnabled bool   `yaml:"index_enabled"`  // Enable chunk index for faster lookups
+	// CrossFileDedup bool   `yaml:"cross_file_dedup"` // Enable deduplication across different files
 }
 
 // SyncConfig contains synchronization settings
@@ -174,7 +174,7 @@ func BuildVaultConfig(
 		tags,
 		keyConfig,
 		// Default deduplication settings
-		true, "content", "1KB", "64MB", 1000, true, true,
+		true, "content", "1KB", "64MB", 1000, true,
 	)
 }
 
@@ -188,7 +188,7 @@ func BuildVaultConfigWithDeduplication(
 	keyConfig *KeyConfig,
 	// Deduplication parameters
 	enableDedup bool, dedupStrategy, dedupMinSize, dedupMaxSize string,
-	dedupGCThreshold int, dedupIndexEnabled, dedupCrossFile bool,
+	dedupGCThreshold int, dedupIndexEnabled bool,
 ) VaultConfig {
 	config := VaultConfig{
 		VaultID:       vaultID,
@@ -218,7 +218,6 @@ func BuildVaultConfigWithDeduplication(
 	config.Deduplication.MaxChunkSize = dedupMaxSize
 	config.Deduplication.GCThreshold = dedupGCThreshold
 	config.Deduplication.IndexEnabled = dedupIndexEnabled
-	config.Deduplication.CrossFileDedup = dedupCrossFile
 
 	// Set sync configuration
 	config.Sync.Mode = syncMode

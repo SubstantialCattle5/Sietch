@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
@@ -66,40 +65,6 @@ func runScaffold(templateName, name, path string, force bool) error {
 		return fmt.Errorf("failed to create vault structure: %w", err)
 	}
 
-	// Create template-specific directories
-	for _, dir := range template.Directories {
-		dirPath := filepath.Join(absVaultPath, dir)
-		if err := fs.EnsureDirectory(dirPath); err != nil {
-			return fmt.Errorf("failed to create template directory %s: %v", dir, err)
-		}
-		fmt.Printf("Created directory: %s\n", dir)
-	}
-
-	// Create template-specific files
-	for _, file := range template.Files {
-		filePath := filepath.Join(absVaultPath, file.Path)
-
-		// Ensure parent directory exists
-		parentDir := filepath.Dir(filePath)
-		if err := fs.EnsureDirectory(parentDir); err != nil {
-			return fmt.Errorf("failed to create parent directory for %s: %v", file.Path, err)
-		}
-
-		// Parse file mode
-		mode := os.FileMode(0644) // default
-		if file.Mode != "" {
-			if parsedMode, err := strconv.ParseUint(file.Mode, 8, 32); err == nil {
-				mode = os.FileMode(parsedMode)
-			}
-		}
-
-		// Write file content
-		if err := os.WriteFile(filePath, []byte(file.Content), mode); err != nil {
-			return fmt.Errorf("failed to create template file %s: %v", file.Path, err)
-		}
-		fmt.Printf("Created file: %s\n", file.Path)
-	}
-
 	// Generate encryption key using AES (default for templates)
 	keyParams := validation.KeyGenParams{
 		KeyType:          constants.EncryptionTypeAES,
@@ -154,7 +119,6 @@ func runScaffold(templateName, name, path string, force bool) error {
 		cfg.DedupMaxSize,
 		cfg.DedupGCThreshold,
 		cfg.DedupIndexEnabled,
-		cfg.DedupCrossFile,
 	)
 
 	// Initialize RSA config if not present
@@ -240,5 +204,4 @@ func init() {
 	scaffoldCmd.Flags().BoolP("force", "f", false, "Force creation even if directory exists")
 	scaffoldCmd.Flags().BoolP("list", "l", false, "List available templates")
 
-	// Template is conditionally required (not when listing)
 }

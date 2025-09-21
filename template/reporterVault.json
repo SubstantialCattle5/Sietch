@@ -1,28 +1,21 @@
 {
     "name": "Reporter Vault",
-    "description": "A vault for reporting",
+    "description": "A vault template optimized for reporting, journalism, and document management with secure storage",
     "version": "1.0.0",
     "author": "Sietch Team",
-    "tags": ["reporting", "media", "storage", "secure"],
+    "tags": ["reporting", "journalism", "documents", "storage", "secure"],
     "config": {
         "chunking_strategy": "fixed",
-        "chunk_size": "8MB",
+        "chunk_size": "4MB",
         "hash_algorithm": "sha256", 
         "compression": "gzip",
         "sync_mode": "manual",
         "enable_dedup": true,
         "dedup_strategy": "content",
-        "dedup_min_size": "1MB",
-        "dedup_max_size": "64MB",
-        "dedup_gc_threshold": 500,
+        "dedup_min_size": "1KB",
+        "dedup_max_size": "32MB",
+        "dedup_gc_threshold": 1000,
         "dedup_index_enabled": true,
         "dedup_cross_file": true
-    },
-    "directories": [
-        "reports",
-        "reports/raw",
-        "reports/edited",
-        "reports/archives",
-        "metadata"
-    ]
+    }
 }
