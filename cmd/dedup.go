@@ -6,6 +6,7 @@ package cmd
 import (
 	"fmt"
 
+	"github.com/manifoldco/promptui"
 	"github.com/spf13/cobra"
 
 	"github.com/substantialcattle5/sietch/internal/config"
@@ -25,11 +26,107 @@ This command provides subcommands for:
 - Running garbage collection
 - Optimizing storage
 
+You can also configure deduplication settings interactively using the --setup flag.
+
 Example:
+  sietch dedup --setup   # Configure deduplication settings interactively
   sietch dedup stats     # Show deduplication statistics
   sietch dedup gc        # Run garbage collection
   sietch dedup optimize  # Optimize storage
 `,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		// Check if --setup flag is set
+		setup, _ := cmd.Flags().GetBool("setup")
+		if !setup {
+			// If no flag is set, show help
+			return cmd.Help()
+		}
+
+		vaultRoot, err := fs.FindVaultRoot()
+		if err != nil {
+			return fmt.Errorf("not inside a vault: %v", err)
+		}
+
+		// Check if vault is initialized
+		if !fs.IsVaultInitialized(vaultRoot) {
+			return fmt.Errorf("vault not initialized, run 'sietch init' first")
+		}
+
+		// Load vault configuration
+		vaultConfig, err := config.LoadVaultConfig(vaultRoot)
+		if err != nil {
+			return fmt.Errorf("failed to load vault configuration: %v", err)
+		}
+
+		// Display current settings
+		fmt.Println("🔧 Configure Deduplication Settings")
+		fmt.Println("===================================")
+		fmt.Println()
+
+		if vaultConfig.Deduplication.Enabled {
+			fmt.Println("Current settings:")
+			fmt.Printf("  Enabled: %v\n", vaultConfig.Deduplication.Enabled)
+			fmt.Printf("  Strategy: %s\n", vaultConfig.Deduplication.Strategy)
+			fmt.Printf("  Min chunk size: %s\n", vaultConfig.Deduplication.MinChunkSize)
+			fmt.Printf("  Max chunk size: %s\n", vaultConfig.Deduplication.MaxChunkSize)
+			fmt.Printf("  GC threshold: %d\n", vaultConfig.Deduplication.GCThreshold)
+			fmt.Printf("  Index enabled: %v\n", vaultConfig.Deduplication.IndexEnabled)
+			fmt.Println()
+		} else {
+			fmt.Println("Deduplication is currently disabled.")
+			fmt.Println()
+		}
+
+		// Prompt for deduplication configuration
+		if err := deduplication.PromptDeduplicationConfig(vaultConfig); err != nil {
+			return fmt.Errorf("configuration failed: %v", err)
+		}
+
+		// Display summary
+		fmt.Println()
+		fmt.Println("📋 New Configuration Summary")
+		fmt.Println("===========================")
+		fmt.Printf("  Enabled: %v\n", vaultConfig.Deduplication.Enabled)
+
+		if vaultConfig.Deduplication.Enabled {
+			fmt.Printf("  Strategy: %s\n", vaultConfig.Deduplication.Strategy)
+			fmt.Printf("  Min chunk size: %s\n", vaultConfig.Deduplication.MinChunkSize)
+			fmt.Printf("  Max chunk size: %s\n", vaultConfig.Deduplication.MaxChunkSize)
+			fmt.Printf("  GC threshold: %d\n", vaultConfig.Deduplication.GCThreshold)
+			fmt.Printf("  Index enabled: %v\n", vaultConfig.Deduplication.IndexEnabled)
+		}
+		fmt.Println()
+
+		// Confirm before saving
+		confirmPrompt := promptui.Prompt{
+			Label:     "Save these settings",
+			IsConfirm: true,
+			Default:   "y",
+		}
+
+		_, err = confirmPrompt.Run()
+		if err != nil {
+			if err == promptui.ErrAbort {
+				fmt.Println("Configuration cancelled.")
+				return nil
+			}
+			return fmt.Errorf("confirmation failed: %v", err)
+		}
+
+		// Save updated configuration
+		if err := config.SaveVaultConfig(vaultRoot, vaultConfig); err != nil {
+			return fmt.Errorf("failed to save configuration: %v", err)
+		}
+
+		fmt.Println("✓ Deduplication configuration saved successfully!")
+
+		if vaultConfig.Deduplication.Enabled {
+			fmt.Println("\n💡 Note: Deduplication will apply to new files added to the vault.")
+			fmt.Println("   Existing files will not be automatically deduplicated.")
+		}
+
+		return nil
+	},
 }
 
 // dedupStatsCmd shows deduplication statistics
@@ -225,6 +322,9 @@ Example:
 
 func init() {
 	rootCmd.AddCommand(dedupCmd)
+
+	// Add --setup flag for interactive configuration
+	dedupCmd.Flags().BoolP("setup", "s", false, "Configure deduplication settings interactively")
 
 	// Add subcommands
 	dedupCmd.AddCommand(dedupStatsCmd)

@@ -1,10 +1,13 @@
 # Sietch Vault
 
+[![CI](https://github.com/substantialcattle5/sietch/actions/workflows/ci.yml/badge.svg)](https://github.com/substantialcattle5/sietch/actions/workflows/ci.yml)
+[![Release](https://github.com/substantialcattle5/sietch/actions/workflows/release.yml/badge.svg)](https://github.com/substantialcattle5/sietch/actions/workflows/release.yml)
+[![codecov](https://codecov.io/gh/substantialcattle5/sietch/branch/main/graph/badge.svg)](https://codecov.io/gh/substantialcattle5/sietch)
+[![Go Report Card](https://goreportcard.com/badge/github.com/substantialcattle5/sietch)](https://goreportcard.com/report/github.com/substantialcattle5/sietch)
+
 Sietch creates self-contained encrypted vaults that can sync over LAN, sneakernet (USB drives), or weak WiFi networks. It operates fully offline, using chunked data, encryption, and peer-to-peer protocols to ensure your files are always protected and available—even when the internet is not.
 
----
-
-## Motivation
+## Why Sietch?
 
 Sietch Vault is designed for environments where:
 
@@ -12,7 +15,39 @@ Sietch Vault is designed for environments where:
 * Data privacy is a necessity, not an optional feature
 * People work nomadically—researchers, journalists, activists
 
----
+## Quick Start
+
+### Installation
+
+```bash
+git clone https://github.com/substantialcattle5/sietch.git
+cd sietch
+make build
+```
+
+### Basic Usage
+
+**Create a vault**
+```bash
+sietch init --name dune --key-type aes
+```
+
+**Add files**
+```bash
+sietch add ./secrets/thumper-plans.pdf documents/
+```
+
+**Sync over LAN**
+```bash
+sietch sync /ip4/192.168.1.42/tcp/4001/p2p/QmPeerID
+# or auto-discover peers
+sietch sync
+```
+
+**Retrieve files**
+```bash
+sietch get thumper-plans.pdf ./retrieved/
+```
 
 ## Core Features
 
@@ -23,224 +58,166 @@ Sietch Vault is designed for environments where:
 | **Gossip Discovery** | Lightweight peer discovery protocol for LAN environments              |
 | **CLI First UX**     | Fast, minimal CLI to manage vaults and syncs                          |
 
----
-
-## CI/CD Status
-
-[![CI](https://github.com/substantialcattle5/sietch/actions/workflows/ci.yml/badge.svg)](https://github.com/substantialcattle5/sietch/actions/workflows/ci.yml)
-[![Release](https://github.com/substantialcattle5/sietch/actions/workflows/release.yml/badge.svg)](https://github.com/substantialcattle5/sietch/actions/workflows/release.yml)
-[![codecov](https://codecov.io/gh/substantialcattle5/sietch/branch/main/graph/badge.svg)](https://codecov.io/gh/substantialcattle5/sietch)
-[![Go Report Card](https://goreportcard.com/badge/github.com/substantialcattle5/sietch)](https://goreportcard.com/report/github.com/substantialcattle5/sietch)
-
----
-
 ## How It Works
 
-### Chunking
-
+### Chunking & Deduplication
 * Files are split into configurable chunks (default: 4MB)
-* Identical chunks across files are deduplicated
+* Identical chunks across files are deduplicated to save space
 
 ### Encryption
+Each chunk is encrypted before storage using:
+* **Symmetric**: AES-256-GCM with passphrase
+* **Asymmetric**: GPG-compatible public/private keypairs
 
-Each chunk is encrypted before storage. Options:
-
-* Symmetric passphrase (**AES-256-GCM**)
-* Public/private keypairs (**GPG-compatible**)
-
-### Discovery
-
+### Peer Discovery
 Peers discover each other via:
-
 * LAN gossip (UDP broadcast)
 * Manual IP whitelisting
-* (Future) QR-code sharing
+* QR-code sharing *(coming soon)*
 
 ### Syncing
-
-Inspired by rsync, Sietch only syncs:
-
+Inspired by rsync, Sietch only transfers:
 * Missing chunks
 * Changed metadata
-* Over TCP (with optional compression)
+* Over encrypted TCP connections with optional compression
 
----
+## Available Commands
 
-## Security Model
-
-| Attack Vector     | Mitigation                               |
-| ----------------- | ---------------------------------------- |
-| Eavesdropping     | Encrypted chunks over TLS/TCP            |
-| Vault tampering   | Merkle trees + hash verification         |
-| Metadata leakage  | Optional obfuscation + encrypted indexes |
-| Unauthorized sync | Public key signature verification        |
-
----
-
-## Installation
-
-Releases will provide full install scripts and cross-platform builds.
-
+### Core Operations
 ```bash
-git clone https://github.com/SubstantialCattle5/Sietch.git
-cd Sietch
-go build
+sietch init [flags]                    # Initialize a new vault
+sietch add <source> <destination>      # Add files to vault
+sietch get <filename> <output-path>    # Retrieve files from vault
+sietch ls [path]                       # List vault contents
+sietch delete <filename>               # Delete files from vault
 ```
 
----
-
-## Development Setup
-
-### Prerequisites
-
-* **Go 1.23** – [Download](https://golang.org/dl/)
-* **Node.js 16+** – [Download](https://nodejs.org/)
-* **Git** – Version control
-
-### Development Tools (Auto-installed)
-
-* `golangci-lint v1.60.3` – Linting/formatting
-* `gosec` – Security scanner
-* `Husky` – Git hooks for code quality
-
-### Quick Start
-
-1. **Clone the repo**
-
-   ```bash
-   git clone https://github.com/substantialcattle5/sietch.git
-   cd sietch
-   ```
-
-2. **Run setup**
-
-   ```bash
-   ./scripts/setup-hooks.sh
-   ```
-
-   This will:
-
-   * Install dependencies
-   * Install dev tools (`golangci-lint`, `gosec`)
-   * Verify tool versions
-   * Set up Git hooks
-   * Run initial checks
-
-3. **Verify setup**
-
-   ```bash
-   make check-versions
-   make build
-   make test
-   make lint
-   ```
-
-### Git Hooks
-
-**Pre-commit:**
-
-* Go formatting (`go fmt`)
-* Linting (`golangci-lint`)
-* Static analysis (`go vet`)
-* Unit tests
-* Commit message check (Conventional Commits)
-
-**Pre-push:**
-
-* Full test suite (incl. integration)
-* Build verification
-* Security audit (`gosec`)
-
-*Bypass hooks:*
-
+### Network Operations
 ```bash
-git commit --no-verify -m "skip checks"
-git push --no-verify
+sietch discover [flags]                # Discover peers on local network
+sietch sync [peer-address]             # Sync with other vaults
+sietch sneak [flags]                   # Transfer via sneakernet (USB)
 ```
 
----
-
-## Makefile Commands
-
+### Management
 ```bash
-make help            # List commands
-make dev             # Format, test, build
-make check           # Full quality checks
-make test-coverage   # Run tests w/ coverage
-make security-audit  # Security checks
+sietch dedup stats                     # Show deduplication statistics
+sietch dedup gc                        # Run garbage collection
+sietch dedup optimize                  # Optimize storage
+sietch scaffold [flags]                # Create vault from template
 ```
 
----
+## Advanced Usage
 
-## Usage
-
-**Create a vault**
-
+**View vault contents**
 ```bash
-sietch init --name dune --encrypt aes256
+sietch ls                              # List all files
+sietch ls docs/                        # List files in specific directory
+sietch ls --long                       # Show detailed information
 ```
 
-**Add a file**
-
+**Network synchronization**
 ```bash
-sietch add ./secrets/thumper-plans.pdf
+sietch discover                        # Find peers automatically
+sietch sync                            # Auto-discover and sync
+sietch sync /ip4/192.168.1.5/tcp/4001/p2p/QmPeerID  # Sync with specific peer
 ```
 
-**Sync over LAN**
-
+**Sneakernet transfer**
 ```bash
-sietch sync --peer 192.168.1.42
+sietch sneak                           # Interactive mode
+sietch sneak --source /media/usb/vault # Transfer from USB vault
+sietch sneak --dry-run --source /backup/vault  # Preview transfer
 ```
 
-**Decrypt a file**
-
+**Deduplication management**
 ```bash
-sietch decrypt thumper-plans.pdf .
+sietch dedup stats                     # Show statistics
+sietch dedup gc                        # Clean unreferenced chunks
+sietch dedup optimize                  # Optimize storage layout
 ```
 
-**View manifest**
+## Planned Features (Not Yet Implemented)
+
+The following features are planned for future releases:
 
 ```bash
-sietch manifest
-```
-
-**Recovery options**
-
-```bash
+# Recovery operations (planned)
 sietch recover --from .backup
 sietch recover --from-remote peer-id
 sietch recover --rebuild-metadata
 sietch recover --verify-hashes
+
+# Standalone decryption (planned)
+sietch decrypt <file> <output>
+
+# Direct manifest access (planned)
+sietch manifest
 ```
 
----
+## Development
 
+### Prerequisites
+* **Go 1.23+** – [Download](https://golang.org/dl/)
+* **Git** – Version control
+
+### Quick Development Setup
+
+1. **Clone and setup**
+   ```bash
+   git clone https://github.com/substantialcattle5/sietch.git
+   cd sietch
+   ./scripts/setup-hooks.sh
+   ```
+
+2. **Verify installation**
+   ```bash
+   make check-versions
+   make build
+   make test
+   ```
+
+### Available Commands
+```bash
+make help            # List all commands
+make dev             # Format, test, build
+make check           # Full quality checks
+make test-coverage   # Run tests with coverage
+make security-audit  # Security checks
+```
+
+For detailed development guidelines, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Contributing
 
-Contributions welcome—from UX polish to protocol improvements.
+We welcome contributions of all kinds! Whether you're fixing bugs, adding features, improving documentation, or enhancing UX.
 
-1. Fork the repo
+**Quick contribution steps:**
+1. Fork the repository
 2. Create a feature branch: `git checkout -b feature/stillsuit`
-3. Commit: `git commit -am 'Add stillsuit hydration sync'`
-4. Push: `git push origin feature/stillsuit`
-5. Open a Pull Request
+3. Make your changes following our [style guidelines](CONTRIBUTING.md#styleguides)
+4. Commit using [conventional commits](CONTRIBUTING.md#commit-messages)
+5. Push and open a Pull Request
 
----
+See our [Contributing Guide](CONTRIBUTING.md) for detailed information about:
+- Development environment setup
+- Code style guidelines
+- Testing requirements
+- Review process
 
-## Credits
+## Inspiration & Credits
 
-**Inspiration**
+Sietch draws inspiration from:
+* **Syncthing** - Decentralized file synchronization
+* **IPFS** - Content-addressed storage
+* **Obsidian Sync** - Seamless cross-device syncing
 
-* Syncthing
-* IPFS
-* Obsidian Sync
-* Built with ❤️ in Go
-
----
+Built with ❤️ in Go by the open source community.
 
 ## License
 
-Licensed under the **MIT License** – see the LICENSE file.
+Licensed under the **MIT License** – see the [LICENSE](LICENSE) file for details.
 
-> *“When you live in the desert, you develop a very strong survival instinct.”* – Chani, *Dune*
+---
+
+> *"When you live in the desert, you develop a very strong survival instinct."* – Chani, *Dune*
