@@ -116,6 +116,11 @@ check: fmt vet lint test-race test-coverage
 install: build
 	cp $(BINARY_NAME) $(GOPATH)/bin/$(BINARY_NAME)
 
+# Install to local bin (for development)
+install-local: build
+	cp $(BINARY_NAME) /home/nilay/.local/bin/$(BINARY_NAME)
+	@echo "✅ Sietch installed to ~/.local/bin/"
+
 # Create test vaults for integration testing
 create-test-vaults:
 	@echo "Creating test vaults..."
@@ -179,7 +184,7 @@ help:
 	@echo "  create-test-vaults - Create test vaults for integration testing"
 	@echo "  clean-test-vaults  - Clean test vault data"
 	@echo "  security-audit     - Run security audit"
-	@  echo "  coverage-summary   - Show test coverage summary"
+	@echo "  coverage-summary   - Show test coverage summary"
 	@echo "  check-versions     - Check version consistency with CI environment"
 	@echo "  ci                 - CI pipeline (deps, check, security-audit)"
 	@echo "  dev                - Development workflow (fmt, test, build)"
