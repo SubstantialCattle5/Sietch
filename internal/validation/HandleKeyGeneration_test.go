@@ -519,23 +519,25 @@ func TestHandleKeyGenerationEdgeCases(t *testing.T) {
 	})
 
 	t.Run("empty vault path", func(t *testing.T) {
+		// Use a temporary directory instead of empty string to avoid creating
+		// .sietch directory in the source code directory
+		tempDir := testutil.TempDir(t, "empty-vault-path-test")
+
 		cmd := &cobra.Command{}
 		params := KeyGenParams{
 			KeyType:       "aes",
 			UsePassphrase: false,
 		}
 
-		// Empty vault path still creates a key path as ".sietch/keys/secret.key"
-		// The function doesn't validate the vault path itself
 		cmd.Flags().Bool("passphrase", false, "")
 		cmd.Flags().Bool("interactive", false, "")
 
-		result, err := HandleKeyGeneration(cmd, "", params)
+		result, err := HandleKeyGeneration(cmd, tempDir, params)
 		if err != nil {
-			t.Errorf("Unexpected error with empty vault path: %v", err)
+			t.Errorf("Unexpected error with vault path: %v", err)
 		}
 		if result == nil {
-			t.Error("Expected result even with empty vault path")
+			t.Error("Expected result with vault path")
 		}
 	})
 

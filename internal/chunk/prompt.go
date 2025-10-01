@@ -68,7 +68,7 @@ func PromptChunkingConfig(configuration *config.VaultConfig) error {
 
 	// Hash algorithm prompt with descriptions and default
 	hashAlgorithmPrompt := promptui.Select{
-		Label:     "Hash algorithm (SHA-256 recommended for most users)",
+		Label:     "Hash algorithm",
 		Items:     []string{"sha256", "blake3", "sha512", "sha1"},
 		CursorPos: 0, // Default to first item (sha256)
 		Templates: &promptui.SelectTemplates{
@@ -81,8 +81,6 @@ func PromptChunkingConfig(configuration *config.VaultConfig) error {
 {{ else if eq . "blake3" }}BLAKE3 (modern, very fast with strong security, excellent performance)
 {{ else if eq . "sha512" }}SHA-512 (stronger security, slightly slower, good for high-security environments)
 {{ else if eq . "sha1" }}SHA-1 (legacy, faster but less secure, NOT recommended for sensitive data){{ end }}
-
-{{ "Most users should choose SHA-256." | faint }}
 `,
 		},
 	}

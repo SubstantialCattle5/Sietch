@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/base64"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -92,7 +93,26 @@ func runScaffold(templateName, name, path string, force bool) error {
 
 	// Write the key to file
 	if keyConfig != nil && keyConfig.AESConfig != nil && keyConfig.AESConfig.Key != "" {
-		// Key is already written by HandleKeyGeneration, just inform user
+		// Decode the base64-encoded key
+		keyMaterial, err := base64.StdEncoding.DecodeString(keyConfig.AESConfig.Key)
+		if err != nil {
+			scaffoldCleanupOnError(absVaultPath)
+			return fmt.Errorf("failed to decode key: %w", err)
+		}
+
+		// Create directory structure for the key if it doesn't exist
+		keyDir := filepath.Dir(keyPath)
+		if err := os.MkdirAll(keyDir, constants.SecureDirPerms); err != nil {
+			scaffoldCleanupOnError(absVaultPath)
+			return fmt.Errorf("failed to create key directory %s: %w", keyDir, err)
+		}
+
+		// Write the key with secure permissions (only owner can read/write)
+		if err := os.WriteFile(keyPath, keyMaterial, constants.SecureFilePerms); err != nil {
+			scaffoldCleanupOnError(absVaultPath)
+			return fmt.Errorf("failed to write key to %s: %w", keyPath, err)
+		}
+
 		fmt.Printf("Encryption key stored at: %s\n", keyPath)
 	}
 

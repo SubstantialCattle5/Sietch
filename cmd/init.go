@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"github.com/substantialcattle5/sietch/internal/config"
 	"github.com/substantialcattle5/sietch/internal/constants"
@@ -68,6 +69,28 @@ var (
 	configFile      string
 )
 
+func shortHelp(cmd *cobra.Command) {
+	fmt.Printf("Usage: %s\n\n", cmd.UseLine())
+	fmt.Printf("%s\n\n", cmd.Short)
+	fmt.Println("Run 'sietch init --help' for detailed examples and options.")
+	fmt.Println(`
+	Examples:
+
+	# Quickstart vault with defaults and interactive mode
+	sietch init --interactive
+		
+	# Quickstart vault with defaults
+	sietch init --name "my-vault"
+
+
+	# Named vault with AES key + passphrase
+	sietch init --name "desert-cache" --key-type aes --passphrase
+		
+	# AES with custom scrypt parameters
+	sietch init --key-type aes --passphrase --use-scrypt --scrypt-n 32768 --scrypt-r 8 --scrypt-p 1
+  `)
+}
+
 var initCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Initialize a new Sietch vault",
@@ -75,8 +98,11 @@ var initCmd = &cobra.Command{
 This creates the necessary directory structure and configuration files for your vault.
 
 Examples:
+  # Show help and available options
+  sietch init --help
+  
   # Quickstart vault with defaults
-  sietch init
+  sietch init --name "my-vault"
   
   # Named vault with AES key + passphrase
   sietch init --name "desert-cache" --key-type aes --passphrase
@@ -157,6 +183,26 @@ func init() {
 }
 
 func runInit(cmd *cobra.Command) error {
+
+	// Check if any flags were provided by the user
+	// If no flags were provided, show shorter version (just usage and short description)
+	hasChanged := false
+	cmd.Flags().Visit(func(f *pflag.Flag) {
+		hasChanged = true
+	})
+
+	if !hasChanged {
+		// Show shorter help - just usage and short description
+		shortHelp(cmd)
+		return nil
+	}
+
+	// Check if --help was explicitly provided
+	// If --help is provided, show the full help with examples
+	if cmd.Flags().Changed("help") {
+		return cmd.Help()
+	}
+
 	// Handle interactive mode first
 	interactiveVaultConfig, err := handleInteractiveMode()
 	if err != nil {
