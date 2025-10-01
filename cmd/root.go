@@ -14,8 +14,7 @@ import (
 var rootCmd = &cobra.Command{
 	Use:   "sietch",
 	Short: "Sietch - A secure, nomadic file system",
-	Long: `Sietch is a secure, decentralized file system designed for operation
-in harsh, disconnected environments. It allows users to securely synchronize 
+	Long: `Sietch is a secure, decentralized file which allows users to securely synchronize 
 encrypted data across machines, even with limited connectivity.`,
 	// Uncomment the following line if your bare application
 	// has an action associated with it:

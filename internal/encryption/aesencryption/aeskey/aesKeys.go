@@ -60,7 +60,7 @@ func GenerateAESKey(cfg *config.VaultConfig, passphrase string) (*config.KeyConf
 
 // LoadEncryptionKey loads the encryption key using the provided passphrase
 func LoadEncryptionKey(cfg *config.VaultConfig, passphrase string) ([]byte, error) {
-	PrintKeyDetails(cfg) // Debug info about the key configuration
+	// PrintKeyDetails(cfg) // Debug info about the key configuration
 
 	// Extract key check and salt from config
 	keyCheck := cfg.Encryption.AESConfig.KeyCheck

@@ -68,19 +68,75 @@ func PromptForInputs() (*config.VaultConfig, error) {
 	return configuration, nil
 }
 
-// displayConfigSummary shows a summary of the configuration
+// displayConfigSummary shows a clean summary of the configuration
 func displayConfigSummary(configuration *config.VaultConfig) {
-	fmt.Println("\n📋 Configuration Summary")
-	fmt.Println("========================")
-	fmt.Printf("Vault Name: %s\n", configuration.Name)
-	fmt.Printf("Encryption: %s", configuration.Encryption.Type)
-	if configuration.Encryption.PassphraseProtected {
-		fmt.Printf(" (passphrase protected)")
+	fmt.Println()
+	fmt.Println("📋 Configuration Summary")
+	fmt.Println("=" + strings.Repeat("=", 50))
+	fmt.Println()
+
+	// Basic Information
+	fmt.Println("🏷️  Basic Information:")
+	fmt.Printf("   • Vault Name: %s\n", configuration.Name)
+	fmt.Printf("   • Author:     %s\n", configuration.Metadata.Author)
+
+	tagsStr := strings.Join(configuration.Metadata.Tags, ", ")
+	if tagsStr == "" {
+		tagsStr = "none"
 	}
+	fmt.Printf("   • Tags:       %s\n", tagsStr)
 	fmt.Println()
-	fmt.Printf("Chunking: %s (avg. %s MB)\n", configuration.Chunking.Strategy, configuration.Chunking.ChunkSize)
-	fmt.Printf("Compression: %s\n", configuration.Chunking.HashAlgorithm)
-	fmt.Printf("Author: %s\n", configuration.Metadata.Author)
-	fmt.Printf("Tags: %s\n", strings.Join(configuration.Metadata.Tags, ", "))
+
+	// Security Configuration
+	fmt.Println("🔐 Security:")
+	encryptionDesc := getEncryptionDescription(configuration.Encryption)
+	fmt.Printf("   • Encryption: %s\n", encryptionDesc)
 	fmt.Println()
+
+	// Storage Configuration
+	fmt.Println("💾 Storage:")
+	fmt.Printf("   • Chunking:    %s\n", configuration.Chunking.Strategy)
+	fmt.Printf("   • Chunk Size:  %s\n", configuration.Chunking.ChunkSize)
+	fmt.Printf("   • Hash Algo:   %s\n", configuration.Chunking.HashAlgorithm)
+
+	compressionDesc := configuration.Compression
+	if compressionDesc == "" {
+		compressionDesc = "none"
+	}
+	fmt.Printf("   • Compression: %s\n", compressionDesc)
+
+	fmt.Println()
+	fmt.Println(strings.Repeat("=", 52))
+}
+
+// getEncryptionDescription returns a human-readable description of the encryption config
+func getEncryptionDescription(enc config.EncryptionConfig) string {
+	if enc.Type == "" || enc.Type == "none" {
+		return "None ⚠️  (not recommended)"
+	}
+
+	desc := strings.ToUpper(enc.Type)
+	if enc.PassphraseProtected {
+		desc += " 🔒 (passphrase protected)"
+	}
+
+	// Add specific details for different encryption types
+	switch enc.Type {
+	case "aes":
+		if enc.AESConfig != nil && enc.AESConfig.Mode != "" {
+			desc += "-" + strings.ToUpper(enc.AESConfig.Mode)
+		} else {
+			desc += "-GCM" // default mode
+		}
+	case "gpg":
+		if enc.GPGConfig != nil && enc.GPGConfig.KeyID != "" {
+			keyID := enc.GPGConfig.KeyID
+			if len(keyID) > 8 {
+				keyID = keyID[:8]
+			}
+			desc += fmt.Sprintf(" (Key: %s)", keyID)
+		}
+	}
+
+	return desc
 }

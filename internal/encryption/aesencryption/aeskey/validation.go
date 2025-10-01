@@ -103,11 +103,9 @@ func VerifyPassphrase(keyCheck string, derivedKey []byte) error {
 
 	// Confirm expected string
 	if string(plaintext) != constants.KeyValidationString {
-		fmt.Printf("DEBUG: Got unexpected validation content: %s\n", string(plaintext))
 		return fmt.Errorf("key validation failed: unexpected content")
 	}
 
-	fmt.Printf("DEBUG: Passphrase verification successful\n")
 	return nil
 }
 

@@ -50,7 +50,7 @@ func promptEncryptionType(configuration *config.VaultConfig) error {
 {{ "Details:" | faint }}
 {{ if eq . "aes" }}AES-256 encryption (recommended for most users)
 {{ else if eq . "gpg" }}GPG encryption (use your existing GPG keys)
- {{ else if eq . "chacha20" }} ChaCha20-Poly1305 encryption (used for systems without dedicated AES hardware acceleration.)
+ {{ else if eq . "chacha20" }} ChaCha20-Poly1305 encryption (used for systems without dedicated AES hardware acceleration.) (NOT IMPLEMENTED YET)
 {{ else if eq . "none" }}No encryption (not recommended for sensitive data){{ end }}
 `,
 		},

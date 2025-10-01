@@ -1,5 +1,5 @@
 /*
-Copyright © 2025 nilay HERE <nilaysharan.com>
+Copyright © 2025 nilay <nilaysharan.com>
 */
 package main
 
