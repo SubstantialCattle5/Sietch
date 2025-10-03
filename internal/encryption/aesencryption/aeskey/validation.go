@@ -64,9 +64,6 @@ func VerifyPassphrase(keyCheck string, derivedKey []byte) error {
 		return fmt.Errorf("invalid key check encoding: %w", err)
 	}
 
-	// Add diagnostics
-	fmt.Printf("DEBUG: Key check length: %d bytes\n", len(checkData))
-
 	// Create AES cipher
 	block, err := aes.NewCipher(derivedKey)
 	if err != nil {
@@ -81,7 +78,6 @@ func VerifyPassphrase(keyCheck string, derivedKey []byte) error {
 
 	// The nonce size should be 12 bytes for GCM
 	nonceSize := gcm.NonceSize()
-	fmt.Printf("DEBUG: Expected nonce length: %d bytes\n", nonceSize)
 
 	if len(checkData) < nonceSize {
 		return fmt.Errorf("key check too short (%d bytes)", len(checkData))
@@ -90,10 +86,6 @@ func VerifyPassphrase(keyCheck string, derivedKey []byte) error {
 	// Extract nonce and ciphertext
 	nonce := checkData[:nonceSize]
 	ciphertext := checkData[nonceSize:]
-
-	fmt.Printf("DEBUG: Extracted nonce (base64): %s\n",
-		base64.StdEncoding.EncodeToString(nonce))
-	fmt.Printf("DEBUG: Ciphertext length: %d bytes\n", len(ciphertext))
 
 	// Try to decrypt
 	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)

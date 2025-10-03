@@ -26,26 +26,7 @@ Each template is defined in a JSON file with the following structure:
     "dedup_gc_threshold": 500,
     "dedup_index_enabled": true,
     "dedup_cross_file": true
-  },
-  "directories": [
-    "photos/raw",
-    "photos/edited",
-    "photos/archives",
-    "data",
-    "metadata"
-  ],
-  "files": [
-    {
-      "path": "README.md",
-      "content": "# My Photo Vault\n\nThis vault contains my photo collection...",
-      "mode": "0644"
-    },
-    {
-      "path": "photos/README.md",
-      "content": "# Photos\n\nOrganize your photos here...",
-      "mode": "0644"
-    }
-  ]
+  }
 }
 ```
 

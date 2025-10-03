@@ -57,14 +57,19 @@ Examples:
 		fmt.Printf("🎯 Destination vault: %s\n", destPath)
 
 		// Source vault discovery or validation
-		var sourceVault string
+		if sourcePath == "" {
+			return fmt.Errorf("source vault path is required (use --source flag)")
+		}
+
 		if !sneakernet.IsValidVault(sourcePath) {
 			return fmt.Errorf("source is not a valid vault: %s", sourcePath)
 		}
 
+		fmt.Printf("📦 Source vault: %s\n", sourcePath)
+
 		// Create sneakernet transfer
 		transfer := &sneakernet.SneakTransfer{
-			SourceVault:     sourceVault,
+			SourceVault:     sourcePath,
 			DestVault:       destPath,
 			FilePatterns:    filePatterns,
 			ExcludePatterns: excludePatterns,
@@ -191,7 +196,7 @@ func resolveConflictsInteractively(conflicts []sneakernet.FileConflict) error {
 
 // confirmTransfer asks user to confirm the transfer
 func confirmTransfer(analysis *sneakernet.SneakAnalysis) bool {
-	fmt.Printf("\n🤔 Ready to transfer %s in %d chunks. Continue? [y/N]: ",
+	fmt.Printf("\nReady to transfer %s in %d chunks. Continue? [y/N]: ",
 		util.HumanReadableSize(analysis.TransferSize),
 		len(analysis.NewChunks))
 
