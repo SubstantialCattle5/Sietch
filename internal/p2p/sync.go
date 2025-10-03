@@ -19,7 +19,9 @@ import (
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
+	"github.com/schollz/progressbar/v3"
 
+	"github.com/substantialcattle5/sietch/internal/bandwidth"
 	"github.com/substantialcattle5/sietch/internal/config"
 )
 
@@ -63,6 +65,9 @@ type SyncResult struct {
 	ChunksDeduplicated int
 	BytesTransferred   int64
 	Duration           time.Duration
+	TotalChunks        int
+	TotalBytes         int64
+	CurrentFile        string
 }
 
 // NewSyncService creates a new sync service
@@ -837,7 +842,7 @@ func (s *SyncService) AddTrustedPeer(ctx context.Context, peerID peer.ID) error 
 }
 
 // SyncWithPeer performs a sync operation with a specific peer
-func (s *SyncService) SyncWithPeer(ctx context.Context, peerID peer.ID) (*SyncResult, error) {
+func (s *SyncService) SyncWithPeer(ctx context.Context, peerID peer.ID, quiet bool, bandwidthLimiter *bandwidth.Limiter) (*SyncResult, error) {
 	// Create a context with timeout for the entire operation
 	timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
@@ -846,7 +851,9 @@ func (s *SyncService) SyncWithPeer(ctx context.Context, peerID peer.ID) (*SyncRe
 	result := &SyncResult{}
 
 	// First verify and exchange keys with peer (will auto-trust if trustAllPeers is true)
-	fmt.Printf("Starting key verification with peer %s...\n", peerID.String())
+	if !quiet {
+		fmt.Printf("Starting key verification with peer %s...\n", peerID.String())
+	}
 	trusted, err := s.VerifyAndExchangeKeys(timeoutCtx, peerID)
 	if err != nil {
 		return nil, fmt.Errorf("key exchange failed: %w", err)
@@ -855,15 +862,21 @@ func (s *SyncService) SyncWithPeer(ctx context.Context, peerID peer.ID) (*SyncRe
 	if !trusted {
 		return nil, fmt.Errorf("peer %s is not trusted", peerID.String())
 	}
-	fmt.Printf("Peer %s is trusted, proceeding with sync\n", peerID.String())
+	if !quiet {
+		fmt.Printf("Peer %s is trusted, proceeding with sync\n", peerID.String())
+	}
 
 	// Step 1: Get remote manifest
-	fmt.Printf("Retrieving manifest from peer %s...\n", peerID.String())
+	if !quiet {
+		fmt.Printf("Retrieving manifest from peer %s...\n", peerID.String())
+	}
 	remoteManifest, err := s.getRemoteManifest(timeoutCtx, peerID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get remote manifest: %v", err)
 	}
-	fmt.Printf("Retrieved manifest from peer with %d files\n", len(remoteManifest.Files))
+	if !quiet {
+		fmt.Printf("Retrieved manifest from peer with %d files\n", len(remoteManifest.Files))
+	}
 
 	// Step 2: Get local manifest
 	localManifest, err := s.vaultMgr.GetManifest()
@@ -873,17 +886,50 @@ func (s *SyncService) SyncWithPeer(ctx context.Context, peerID peer.ID) (*SyncRe
 
 	// Step 3: Find missing chunks
 	missingChunks := s.findMissingChunks(localManifest, remoteManifest)
-	fmt.Printf("Found %d missing chunks to fetch\n", len(missingChunks))
+	if !quiet {
+		fmt.Printf("Found %d missing chunks to fetch\n", len(missingChunks))
+	}
+
+	// Calculate total bytes to transfer
+	totalBytes := s.calculateTotalBytes(missingChunks, remoteManifest)
+	result.TotalChunks = len(missingChunks)
+	result.TotalBytes = totalBytes
+
+	// Create progress bar if not quiet
+	var bar *progressbar.ProgressBar
+	if !quiet && len(missingChunks) > 0 {
+		bar = progressbar.NewOptions64(totalBytes,
+			progressbar.OptionSetDescription("Syncing"),
+			progressbar.OptionSetWidth(50),
+			progressbar.OptionShowBytes(true),
+			progressbar.OptionShowCount(),
+			progressbar.OptionOnCompletion(func() {
+				fmt.Println()
+			}),
+			progressbar.OptionSetTheme(progressbar.Theme{
+				Saucer:        "█",
+				SaucerHead:    "█",
+				SaucerPadding: "░",
+				BarStart:      "|",
+				BarEnd:        "|",
+			}),
+		)
+	}
 
 	// Step 4: Fetch missing chunks
-	for i, chunkHash := range missingChunks {
-		if i%10 == 0 {
-			fmt.Printf("Fetching chunk %d of %d...\n", i+1, len(missingChunks))
+	for _, chunkHash := range missingChunks {
+		// Find the file this chunk belongs to for progress display
+		currentFile := s.findFileForChunk(chunkHash, remoteManifest)
+		if currentFile != "" {
+			result.CurrentFile = currentFile
 		}
 
 		exists, _ := s.vaultMgr.ChunkExists(chunkHash)
 		if exists {
 			result.ChunksDeduplicated++
+			if bar != nil {
+				bar.Add64(0) // Update progress bar even for skipped chunks
+			}
 			continue
 		}
 
@@ -902,7 +948,7 @@ func (s *SyncService) SyncWithPeer(ctx context.Context, peerID peer.ID) (*SyncRe
 		}
 
 		// Pass the encrypted hash directly to fetchChunk
-		chunkData, size, err := s.fetchChunk(timeoutCtx, peerID, chunkHash, encryptedHash)
+		chunkData, size, err := s.fetchChunk(timeoutCtx, peerID, chunkHash, encryptedHash, bandwidthLimiter)
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch chunk %s: %v", chunkHash, err)
 		}
@@ -914,6 +960,11 @@ func (s *SyncService) SyncWithPeer(ctx context.Context, peerID peer.ID) (*SyncRe
 
 		result.ChunksTransferred++
 		result.BytesTransferred += int64(size)
+
+		// Update progress bar
+		if bar != nil {
+			bar.Add64(int64(size))
+		}
 	}
 
 	// Step 5: Update file manifests
@@ -925,8 +976,10 @@ func (s *SyncService) SyncWithPeer(ctx context.Context, peerID peer.ID) (*SyncRe
 	}
 
 	result.Duration = time.Since(startTime)
-	fmt.Printf("Sync completed in %v: %d files, %d chunks transferred, %d chunks reused\n",
-		result.Duration, result.FileCount, result.ChunksTransferred, result.ChunksDeduplicated)
+	if !quiet {
+		fmt.Printf("Sync completed in %v: %d files, %d chunks transferred, %d chunks reused\n",
+			result.Duration, result.FileCount, result.ChunksTransferred, result.ChunksDeduplicated)
+	}
 
 	return result, nil
 }
@@ -1031,7 +1084,7 @@ func (s *SyncService) findMissingChunks(local, remote *config.Manifest) []string
 }
 
 // fetchChunk downloads a chunk from a remote peer
-func (s *SyncService) fetchChunk(ctx context.Context, peerID peer.ID, hash string, encryptedHash string) ([]byte, int, error) {
+func (s *SyncService) fetchChunk(ctx context.Context, peerID peer.ID, hash string, encryptedHash string, bandwidthLimiter *bandwidth.Limiter) ([]byte, int, error) {
 	// Create a context with timeout
 	timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -1084,6 +1137,13 @@ func (s *SyncService) fetchChunk(ctx context.Context, peerID peer.ID, hash strin
 		return nil, 0, fmt.Errorf("remote error: %s", response.Error)
 	}
 
+	// Apply bandwidth limiting to the received data
+	if bandwidthLimiter != nil && len(response.Data) > 0 {
+		if err := bandwidthLimiter.WaitN(ctx, len(response.Data)); err != nil {
+			return nil, 0, fmt.Errorf("bandwidth limit exceeded: %w", err)
+		}
+	}
+
 	// Decrypt data if necessary
 	var chunkData []byte
 	if response.Encrypted && s.privateKey != nil {
@@ -1111,4 +1171,42 @@ func (s *SyncService) StoreChunk(hash string, data []byte, encryptedHash string)
 	}
 
 	return nil
+}
+
+// calculateTotalBytes calculates the total bytes to be transferred for the given chunks
+func (s *SyncService) calculateTotalBytes(missingChunks []string, remoteManifest *config.Manifest) int64 {
+	totalBytes := int64(0)
+
+	// Create a map of chunk hashes to their sizes for quick lookup
+	chunkSizes := make(map[string]int64)
+
+	for _, file := range remoteManifest.Files {
+		for _, chunk := range file.Chunks {
+			chunkSizes[chunk.Hash] = int64(chunk.Size)
+			if chunk.EncryptedHash != "" {
+				chunkSizes[chunk.EncryptedHash] = int64(chunk.Size)
+			}
+		}
+	}
+
+	// Sum up the sizes of missing chunks
+	for _, chunkHash := range missingChunks {
+		if size, exists := chunkSizes[chunkHash]; exists {
+			totalBytes += size
+		}
+	}
+
+	return totalBytes
+}
+
+// findFileForChunk finds the file that contains the given chunk hash
+func (s *SyncService) findFileForChunk(chunkHash string, remoteManifest *config.Manifest) string {
+	for _, file := range remoteManifest.Files {
+		for _, chunk := range file.Chunks {
+			if chunk.Hash == chunkHash || chunk.EncryptedHash == chunkHash {
+				return file.FilePath
+			}
+		}
+	}
+	return ""
 }
