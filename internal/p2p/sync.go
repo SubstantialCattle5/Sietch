@@ -22,7 +22,6 @@ import (
 	"github.com/schollz/progressbar/v3"
 
 	"github.com/substantialcattle5/sietch/internal/config"
-	"github.com/substantialcattle5/sietch/util"
 )
 
 const (
@@ -917,7 +916,7 @@ func (s *SyncService) SyncWithPeer(ctx context.Context, peerID peer.ID, quiet bo
 	}
 
 	// Step 4: Fetch missing chunks
-	for i, chunkHash := range missingChunks {
+	for _, chunkHash := range missingChunks {
 		// Find the file this chunk belongs to for progress display
 		currentFile := s.findFileForChunk(chunkHash, remoteManifest)
 		if currentFile != "" {
@@ -1169,10 +1168,10 @@ func (s *SyncService) StoreChunk(hash string, data []byte, encryptedHash string)
 // calculateTotalBytes calculates the total bytes to be transferred for the given chunks
 func (s *SyncService) calculateTotalBytes(missingChunks []string, remoteManifest *config.Manifest) int64 {
 	totalBytes := int64(0)
-	
+
 	// Create a map of chunk hashes to their sizes for quick lookup
 	chunkSizes := make(map[string]int64)
-	
+
 	for _, file := range remoteManifest.Files {
 		for _, chunk := range file.Chunks {
 			chunkSizes[chunk.Hash] = int64(chunk.Size)
@@ -1181,14 +1180,14 @@ func (s *SyncService) calculateTotalBytes(missingChunks []string, remoteManifest
 			}
 		}
 	}
-	
+
 	// Sum up the sizes of missing chunks
 	for _, chunkHash := range missingChunks {
 		if size, exists := chunkSizes[chunkHash]; exists {
 			totalBytes += size
 		}
 	}
-	
+
 	return totalBytes
 }
 
@@ -1197,7 +1196,7 @@ func (s *SyncService) findFileForChunk(chunkHash string, remoteManifest *config.
 	for _, file := range remoteManifest.Files {
 		for _, chunk := range file.Chunks {
 			if chunk.Hash == chunkHash || chunk.EncryptedHash == chunkHash {
-				return file.Path
+				return file.FilePath
 			}
 		}
 	}

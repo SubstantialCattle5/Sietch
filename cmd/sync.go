@@ -329,8 +329,8 @@ func displaySyncResults(result *p2p.SyncResult, quiet bool) {
 	if quiet {
 		// In quiet mode, show minimal output
 		fmt.Printf("Sync complete: %d files, %d chunks, %s transferred in %s\n",
-			result.FileCount, result.ChunksTransferred, 
-			util.HumanReadableSize(result.BytesTransferred), 
+			result.FileCount, result.ChunksTransferred,
+			util.HumanReadableSize(result.BytesTransferred),
 			result.Duration.Round(time.Millisecond))
 		return
 	}
@@ -341,13 +341,13 @@ func displaySyncResults(result *p2p.SyncResult, quiet bool) {
 	fmt.Printf("   Chunks deduplicated:  %d\n", result.ChunksDeduplicated)
 	fmt.Printf("   Data transferred:     %s\n", util.HumanReadableSize(result.BytesTransferred))
 	fmt.Printf("   Duration:             %s\n", result.Duration.Round(time.Millisecond))
-	
+
 	// Show additional progress information if available
 	if result.TotalChunks > 0 {
 		fmt.Printf("   Total chunks:         %d\n", result.TotalChunks)
 		fmt.Printf("   Total data:          %s\n", util.HumanReadableSize(result.TotalBytes))
 	}
-	
+
 	if result.CurrentFile != "" {
 		fmt.Printf("   Last file processed:  %s\n", result.CurrentFile)
 	}
