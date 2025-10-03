@@ -146,15 +146,16 @@ type FileEncryptionInfo struct {
 
 // ChunkRef references a chunk in the vault
 type ChunkRef struct {
-	Hash          string `yaml:"hash"`                     // Hash of chunk content (pre-encryption)
-	EncryptedHash string `yaml:"encrypted_hash,omitempty"` // Hash of encrypted chunk (filename in storage)
-	Size          int64  `yaml:"size"`                     // Size of plaintext chunk
-	EncryptedSize int64  `yaml:"encrypted_size,omitempty"` // Size after encryption
-	Index         int    `yaml:"index"`                    // Position in the file
-	Deduplicated  bool   `yaml:"deduplicated,omitempty"`   // Whether this chunk was deduplicated
-	Compressed    bool   `yaml:"compressed,omitempty"`     // Whether this chunk was compressed
-	IV            string `yaml:"iv,omitempty"`             // Per-chunk IV if used
-	Integrity     string `yaml:"integrity,omitempty"`      // Integrity check value (e.g., HMAC)
+	Hash            string `yaml:"hash"`                       // Hash of chunk content (pre-encryption)
+	EncryptedHash   string `yaml:"encrypted_hash,omitempty"`   // Hash of encrypted chunk (filename in storage)
+	Size            int64  `yaml:"size"`                       // Size of plaintext chunk
+	EncryptedSize   int64  `yaml:"encrypted_size,omitempty"`   // Size after encryption
+	Index           int    `yaml:"index"`                      // Position in the file
+	Deduplicated    bool   `yaml:"deduplicated,omitempty"`     // Whether this chunk was deduplicated
+	Compressed      bool   `yaml:"compressed,omitempty"`       // Whether this chunk was compressed
+	CompressionType string `yaml:"compression_type,omitempty"` // Compression algorithm used (e.g., "gzip", "zstd", "none")
+	IV              string `yaml:"iv,omitempty"`               // Per-chunk IV if used
+	Integrity       string `yaml:"integrity,omitempty"`        // Integrity check value (e.g., HMAC)
 }
 
 // BuildVaultConfig creates a complete vault configuration with all necessary fields

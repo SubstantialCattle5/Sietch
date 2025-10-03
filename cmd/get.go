@@ -223,7 +223,14 @@ Example:
 
 			// Decompress the chunk if it was compressed
 			if chunkRef.Compressed {
-				decompressedData, err := compression.DecompressData(chunkData, vaultConfig.Compression)
+				// Use the compression type stored in the chunk ref, not the current vault config
+				// This handles cases where the vault compression setting changed after the file was added
+				compressionType := chunkRef.CompressionType
+				if compressionType == "" {
+					// Fallback to vault config for backwards compatibility with old manifests
+					compressionType = vaultConfig.Compression
+				}
+				decompressedData, err := compression.DecompressData(chunkData, compressionType)
 				if err != nil {
 					return fmt.Errorf("failed to decompress chunk %s: %v", chunkHash, err)
 				}

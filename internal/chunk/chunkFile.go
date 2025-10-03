@@ -111,10 +111,11 @@ func processFileChunks(file *os.File, chunkSize int64, vaultConfig config.VaultC
 
 		// Create chunk reference
 		chunkRef := config.ChunkRef{
-			Hash:       chunkHash,
-			Size:       int64(bytesRead),
-			Index:      chunkCount - 1, // Convert 1-based chunkCount to 0-based index
-			Compressed: vaultConfig.Compression != "none",
+			Hash:            chunkHash,
+			Size:            int64(bytesRead),
+			Index:           chunkCount - 1, // Convert 1-based chunkCount to 0-based index
+			Compressed:      vaultConfig.Compression != "none",
+			CompressionType: vaultConfig.Compression,
 		}
 
 		// Use compressed data for further processing
