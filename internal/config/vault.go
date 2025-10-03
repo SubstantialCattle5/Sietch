@@ -123,17 +123,18 @@ type KeyConfig struct {
 
 // FileManifest represents the metadata for a stored file
 type FileManifest struct {
-	FilePath    string              `yaml:"file"`
-	Size        int64               `yaml:"size"`
-	ModTime     string              `yaml:"mtime"`
-	Chunks      []ChunkRef          `yaml:"chunks"`
-	Destination string              `yaml:"destination"`
-	Tags        []string            `yaml:"tags,omitempty"`         // File-specific tags
-	Encryption  *FileEncryptionInfo `yaml:"encryption,omitempty"`   // Per-file encryption settings
-	ContentHash string              `yaml:"content_hash,omitempty"` // Hash of entire file content
-	MerkleRoot  string              `yaml:"merkle_root,omitempty"`  // Root hash of chunk Merkle tree
-	AddedAt     time.Time           `yaml:"added_at"`               // When file was added to vault
-	LastSynced  time.Time           `yaml:"last_synced,omitempty"`  // Last successful sync time
+	FilePath     string              `yaml:"file"`
+	Size         int64               `yaml:"size"`
+	ModTime      string              `yaml:"mtime"`
+	Chunks       []ChunkRef          `yaml:"chunks"`
+	Destination  string              `yaml:"destination"`
+	Tags         []string            `yaml:"tags,omitempty"`          // File-specific tags
+	Encryption   *FileEncryptionInfo `yaml:"encryption,omitempty"`    // Per-file encryption settings
+	ContentHash  string              `yaml:"content_hash,omitempty"`  // Hash of entire file content
+	MerkleRoot   string              `yaml:"merkle_root,omitempty"`   // Root hash of chunk Merkle tree
+	AddedAt      time.Time           `yaml:"added_at"`                // When file was added to vault
+	LastSynced   time.Time           `yaml:"last_synced,omitempty"`   // Last successful sync time
+	LastVerified time.Time           `yaml:"last_verified,omitempty"` // Last verification time
 }
 
 // FileEncryptionInfo contains per-file encryption details (if different from vault default)
