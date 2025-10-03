@@ -41,6 +41,9 @@ Examples:
   sietch sync                               # Auto-discover and sync with peers
   sietch sync /ip4/192.168.1.5/tcp/4001/p2p/QmPeerID  # Sync with a specific peer`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// Get the quiet flag
+		quiet, _ := cmd.Flags().GetBool("quiet")
+
 		// Create a context with cancellation
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -174,13 +177,13 @@ Examples:
 			fmt.Println("📝 Starting vault synchronization...")
 
 			// Sync with the peer
-			result, err := syncService.SyncWithPeer(ctx, info.ID)
+			result, err := syncService.SyncWithPeer(ctx, info.ID, quiet)
 			if err != nil {
 				return fmt.Errorf("sync failed: %v", err)
 			}
 
 			// Display sync results
-			displaySyncResults(result)
+			displaySyncResults(result, quiet)
 			return nil
 		}
 
@@ -262,13 +265,13 @@ Examples:
 			fmt.Printf("🔄 Starting sync with peer: %s\n", peerInfo.ID.String())
 
 			// Sync with the peer
-			result, err := syncService.SyncWithPeer(ctx, peerInfo.ID)
+			result, err := syncService.SyncWithPeer(ctx, peerInfo.ID, quiet)
 			if err != nil {
 				return fmt.Errorf("sync failed: %v", err)
 			}
 
 			// Display sync results
-			displaySyncResults(result)
+			displaySyncResults(result, quiet)
 
 		case <-timeoutCtx.Done():
 			return fmt.Errorf("discovery timed out after %d seconds, no peers found", timeout)
@@ -322,13 +325,32 @@ func promptForTrust() bool {
 }
 
 // displaySyncResults shows the results of a sync operation
-func displaySyncResults(result *p2p.SyncResult) {
+func displaySyncResults(result *p2p.SyncResult, quiet bool) {
+	if quiet {
+		// In quiet mode, show minimal output
+		fmt.Printf("Sync complete: %d files, %d chunks, %s transferred in %s\n",
+			result.FileCount, result.ChunksTransferred, 
+			util.HumanReadableSize(result.BytesTransferred), 
+			result.Duration.Round(time.Millisecond))
+		return
+	}
+
 	fmt.Println("\n✅ Synchronization complete!")
 	fmt.Printf("   Files transferred:    %d\n", result.FileCount)
 	fmt.Printf("   Chunks transferred:   %d\n", result.ChunksTransferred)
 	fmt.Printf("   Chunks deduplicated:  %d\n", result.ChunksDeduplicated)
 	fmt.Printf("   Data transferred:     %s\n", util.HumanReadableSize(result.BytesTransferred))
 	fmt.Printf("   Duration:             %s\n", result.Duration.Round(time.Millisecond))
+	
+	// Show additional progress information if available
+	if result.TotalChunks > 0 {
+		fmt.Printf("   Total chunks:         %d\n", result.TotalChunks)
+		fmt.Printf("   Total data:          %s\n", util.HumanReadableSize(result.TotalBytes))
+	}
+	
+	if result.CurrentFile != "" {
+		fmt.Printf("   Last file processed:  %s\n", result.CurrentFile)
+	}
 }
 
 func init() {
@@ -339,4 +361,5 @@ func init() {
 	syncCmd.Flags().IntP("timeout", "t", 60, "Discovery timeout in seconds (for auto-discovery)")
 	syncCmd.Flags().BoolP("force-trust", "f", false, "Automatically trust new peers without prompting")
 	syncCmd.Flags().BoolP("read-only", "r", false, "Only receive files, don't send")
+	syncCmd.Flags().BoolP("quiet", "q", false, "Suppress progress output")
 }

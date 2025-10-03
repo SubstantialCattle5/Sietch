@@ -7,6 +7,7 @@ toolchain go1.24.6
 require (
 	github.com/klauspost/compress v1.18.0
 	github.com/manifoldco/promptui v0.9.0
+	github.com/schollz/progressbar/v3 v3.14.1
 	github.com/zeebo/blake3 v0.2.4
 	golang.org/x/crypto v0.42.0
 	gopkg.in/yaml.v2 v2.4.0
