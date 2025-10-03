@@ -13,6 +13,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/substantialcattle5/sietch/internal/config"
+	passphrasevalidation "github.com/substantialcattle5/sietch/internal/passphrase"
 )
 
 // GetPassphraseForVault retrieves the passphrase for an encrypted vault from multiple sources
@@ -62,19 +63,19 @@ func GetPassphraseForVault(cmd *cobra.Command, vaultConfig *config.VaultConfig) 
 
 		if usePromptUI {
 			// Use promptui for interactive sessions (better UX)
-			passphrasePrompt := promptui.Prompt{
-				Label: "Enter encryption passphrase",
-				Mask:  '*',
-				Validate: func(input string) error {
-					//TODO: Add a common validation for passphrase length and the rest.
-					if len(input) < 8 {
-						return fmt.Errorf("passphrase must be at least 8 characters")
-					}
-					return nil
-				},
-			}
+		passphrasePrompt := promptui.Prompt{
+			Label: "Enter encryption passphrase",
+			Mask:  '*',
+			Validate: func(input string) error {
+				result := passphrasevalidation.ValidateHybrid(input)
+				if !result.Valid || len(result.Warnings) > 0 {
+					return fmt.Errorf("%s", passphrasevalidation.GetHybridErrorMessage(result))
+				}
+				return nil
+			},
+		}
 
-			passphrase, err = passphrasePrompt.Run()
+		passphrase, err = passphrasePrompt.Run()
 			if err != nil {
 				return "", fmt.Errorf("failed to get passphrase: %w", err)
 			}
@@ -90,9 +91,10 @@ func GetPassphraseForVault(cmd *cobra.Command, vaultConfig *config.VaultConfig) 
 
 			passphrase = string(bytePassphrase)
 
-			// Validate passphrase length
-			if len(passphrase) < 8 {
-				return "", fmt.Errorf("passphrase must be at least 8 characters")
+			// Validate passphrase using hybrid validation (strict rules + zxcvbn intelligence)
+			result := passphrasevalidation.ValidateHybrid(passphrase)
+			if !result.Valid || len(result.Warnings) > 0 {
+				return "", fmt.Errorf("%s", passphrasevalidation.GetHybridErrorMessage(result))
 			}
 		}
 	}
@@ -126,8 +128,9 @@ func GetPassphraseForInitialization(cmd *cobra.Command, requireConfirmation bool
 	}
 
 	if passphraseValue != "" {
-		if len(passphraseValue) < 8 {
-			return "", fmt.Errorf("passphrase must be at least 8 characters")
+		result := passphrasevalidation.ValidateHybrid(passphraseValue)
+		if !result.Valid || len(result.Warnings) > 0 {
+			return "", fmt.Errorf("%s", passphrasevalidation.GetHybridErrorMessage(result))
 		}
 		return passphraseValue, nil
 	}
@@ -135,8 +138,9 @@ func GetPassphraseForInitialization(cmd *cobra.Command, requireConfirmation bool
 	// Check environment variable
 	passphraseEnv := os.Getenv("SIETCH_PASSPHRASE")
 	if passphraseEnv != "" {
-		if len(passphraseEnv) < 8 {
-			return "", fmt.Errorf("passphrase from environment variable must be at least 8 characters")
+		result := passphrasevalidation.ValidateHybrid(passphraseEnv)
+		if !result.Valid || len(result.Warnings) > 0 {
+			return "", fmt.Errorf("passphrase from environment variable: %s", passphrasevalidation.GetHybridErrorMessage(result))
 		}
 		return passphraseEnv, nil
 	}
@@ -150,8 +154,9 @@ func GetPassphraseForInitialization(cmd *cobra.Command, requireConfirmation bool
 			Label: "Enter encryption passphrase",
 			Mask:  '*',
 			Validate: func(input string) error {
-				if len(input) < 8 {
-					return fmt.Errorf("passphrase must be at least 8 characters")
+				result := passphrasevalidation.ValidateHybrid(input)
+				if !result.Valid || len(result.Warnings) > 0 {
+					return fmt.Errorf("%s", passphrasevalidation.GetHybridErrorMessage(result))
 				}
 				return nil
 			},
@@ -194,9 +199,10 @@ func GetPassphraseForInitialization(cmd *cobra.Command, requireConfirmation bool
 
 		enteredPassphrase := string(bytePassphrase)
 
-		// Validate passphrase length
-		if len(enteredPassphrase) < 8 {
-			return "", fmt.Errorf("passphrase must be at least 8 characters")
+		// Validate passphrase using hybrid validation (strict rules + zxcvbn intelligence)
+		result := passphrasevalidation.ValidateHybrid(enteredPassphrase)
+		if !result.Valid || len(result.Warnings) > 0 {
+			return "", fmt.Errorf("%s", passphrasevalidation.GetHybridErrorMessage(result))
 		}
 
 		// Add confirmation if required
