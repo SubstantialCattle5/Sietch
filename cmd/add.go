@@ -5,6 +5,8 @@ package cmd
 
 import (
 	"fmt"
+	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -101,6 +103,12 @@ Example:
 			return err
 		}
 
+		// Compute content hash for the entire file
+		contentHash, err := computeContentHash(filePath, vaultConfig.Chunking.HashAlgorithm)
+		if err != nil {
+			return fmt.Errorf("failed to compute content hash: %v", err)
+		}
+
 		// Process the file and store chunks - using the appropriate chunking function
 		var chunkRefs []config.ChunkRef
 		chunkRefs, err = chunk.ChunkFile(filePath, chunkSize, vaultRoot, passphrase)
@@ -116,6 +124,7 @@ Example:
 			ModTime:     fileInfo.ModTime().Format(time.RFC3339),
 			Chunks:      chunkRefs,
 			Destination: destPath,
+			ContentHash: contentHash,
 			AddedAt:     time.Now().UTC(),
 			Tags:        tags, // Include tags in the manifest
 		}
@@ -142,6 +151,27 @@ func init() {
 	addCmd.Flags().BoolP("force", "f", false, "Force add without confirmation")
 	addCmd.Flags().StringP("tags", "t", "", "Comma-separated tags to associate with the file")
 	addCmd.Flags().StringP("passphrase-value", "p", "", "Passphrase for encrypted vault (if required)")
+}
+
+// computeContentHash computes the hash of the entire file content
+func computeContentHash(filePath, hashAlgorithm string) (string, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return "", fmt.Errorf("failed to open file for hashing: %v", err)
+	}
+	defer file.Close()
+
+	hasher, err := chunk.CreateHasher(hashAlgorithm)
+	if err != nil {
+		return "", fmt.Errorf("failed to create hasher: %v", err)
+	}
+
+	_, err = io.Copy(hasher, file)
+	if err != nil {
+		return "", fmt.Errorf("failed to hash file content: %v", err)
+	}
+
+	return fmt.Sprintf("%x", hasher.Sum(nil)), nil
 }
 
 //TODO: Add support for directories and symlinks
