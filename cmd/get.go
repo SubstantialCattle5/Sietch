@@ -5,6 +5,7 @@ Copyright © 2025 SubstantialCattle5, nilaysharan.com
 package cmd
 
 import (
+	"encoding/base64"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -212,7 +213,12 @@ Example:
 				//     }
 				// }
 
-				chunkData = []byte(decryptedData)
+				// The original data was base64-encoded before encryption. Decode back to bytes.
+				decodedBytes, err := base64.StdEncoding.DecodeString(decryptedData)
+				if err != nil {
+					return fmt.Errorf("failed to base64-decode decrypted chunk %s: %v", chunkHash, err)
+				}
+				chunkData = decodedBytes
 			}
 
 			// Decompress the chunk if it was compressed
