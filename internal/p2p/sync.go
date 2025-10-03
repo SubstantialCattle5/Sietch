@@ -23,6 +23,30 @@ import (
 	"github.com/substantialcattle5/sietch/internal/config"
 )
 
+import (
+	"os"
+	"path/filepath"
+)
+
+// checkManifestsSaved checks if manifest files exist in the vault.
+func checkManifestsSaved(vaultPath string) bool {
+	manifestPath := filepath.Join(vaultPath, "manifest.json") // adjust if needed
+	info, err := os.Stat(manifestPath)
+	return err == nil && !info.IsDir()
+}
+
+// checkFilesAccessible verifies that synced files exist and are readable.
+func checkFilesAccessible(vaultPath string) bool {
+	filesPath := filepath.Join(vaultPath, "files") // adjust if needed
+	info, err := os.Stat(filesPath)
+	if err != nil || !info.IsDir() {
+		return false
+	}
+	files, err := os.ReadDir(filesPath)
+	return err == nil && len(files) > 0
+}
+
+
 const (
 	// Protocol IDs for different sync operations
 	ManifestProtocolID   = "/sietch/manifest/1.0.0"
@@ -57,13 +81,26 @@ type PeerInfo struct {
 }
 
 // SyncResult contains statistics about a sync operation
+// type SyncResult struct {
+// 	FileCount          int
+// 	ChunksTransferred  int
+// 	ChunksDeduplicated int
+// 	BytesTransferred   int64
+// 	Duration           time.Duration
+// }
+
+// SyncResult contains statistics about a sync operation
 type SyncResult struct {
-	FileCount          int
-	ChunksTransferred  int
+	FileCount           int
+	ChunksTransferred   int
 	ChunksDeduplicated int
-	BytesTransferred   int64
-	Duration           time.Duration
+	BytesTransferred    int64
+	Duration            time.Duration
+
+	ManifestsSaved     bool // NEW
+	FilesAccessible     bool // NEW
 }
+
 
 // NewSyncService creates a new sync service
 func NewSyncService(h host.Host, vm *config.Manager) (*SyncService, error) {
@@ -924,6 +961,10 @@ func (s *SyncService) SyncWithPeer(ctx context.Context, peerID peer.ID) (*SyncRe
 		return nil, fmt.Errorf("failed to rebuild references: %v", err)
 	}
 
+	result.ManifestsSaved = checkManifestsSaved(s.vaultMgr.RootPath())
+	result.FilesAccessible = checkFilesAccessible(s.vaultMgr.RootPath())
+
+	
 	result.Duration = time.Since(startTime)
 	fmt.Printf("Sync completed in %v: %d files, %d chunks transferred, %d chunks reused\n",
 		result.Duration, result.FileCount, result.ChunksTransferred, result.ChunksDeduplicated)
