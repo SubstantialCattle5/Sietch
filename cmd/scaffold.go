@@ -18,13 +18,6 @@ import (
 	"github.com/substantialcattle5/sietch/internal/vault"
 )
 
-// TODO
-// 1. creates vault based on templates
-// 2. user can save their own templates which will be stored in .config/sietch/templates
-// 3. user can edit templates but they have to go to .config/sietch/templates and edit the yaml file
-// 4. user can recover standard templates by resetting .config/sietch/templates
-//
-
 func runScaffold(templateName, name, path string, force bool) error {
 	// Ensure config directories exist
 	if err := scaffold.EnsureConfigDirectories(); err != nil {
