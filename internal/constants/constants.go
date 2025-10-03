@@ -20,9 +20,10 @@ const (
 	TagsAllowEdit = true
 
 	// Encryption types and modes
-	EncryptionTypeAES  = "aes"
-	EncryptionTypeNone = "none"
-	EncryptionTypeGPG  = "gpg"
+	EncryptionTypeAES      = "aes"
+	EncryptionTypeNone     = "none"
+	EncryptionTypeGPG      = "gpg"
+	EncryptionTypeChaCha20 = "chacha20"
 
 	AESModeGCM = "gcm"
 	AESModeCBC = "cbc"

@@ -29,7 +29,8 @@ make build
 
 **Create a vault**
 ```bash
-sietch init --name dune --key-type aes
+sietch init --name dune --key-type aes        # AES-256-GCM encryption
+sietch init --name dune --key-type chacha20   # ChaCha20-Poly1305 encryption
 ```
 
 **Add files**
@@ -54,6 +55,7 @@ sietch get thumper-plans.pdf ./retrieved/
 | Feature              | Description                                                           |
 | -------------------- | --------------------------------------------------------------------- |
 | **AES256/GPG**       | Files are chunked and encrypted with strong symmetric/asymmetric keys |
+| **ChaCha20**         | Modern authenticated encryption with ChaCha20-Poly1305 AEAD           |
 | **Offline Sync**     | Rsync-style syncing over TCP or LibP2P                                |
 | **Gossip Discovery** | Lightweight peer discovery protocol for LAN environments              |
 | **CLI First UX**     | Fast, minimal CLI to manage vaults and syncs                          |
@@ -66,7 +68,7 @@ sietch get thumper-plans.pdf ./retrieved/
 
 ### Encryption
 Each chunk is encrypted before storage using:
-* **Symmetric**: AES-256-GCM with passphrase
+* **Symmetric**: AES-256-GCM or ChaCha20-Poly1305 with passphrase
 * **Asymmetric**: GPG-compatible public/private keypairs
 
 ### Peer Discovery
