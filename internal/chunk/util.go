@@ -13,8 +13,8 @@ import (
 	"github.com/zeebo/blake3"
 )
 
-// formatChunkInfo formats and prints chunk processing information
-func FormatChunkInfo(chunkCount int, bytesRead int, chunkHash string, vaultConfig config.VaultConfig, chunkDataToProcess []byte, deduplicated bool, encrypted bool) {
+// formatChunkInfo formats and returns chunk processing information as a string
+func FormatChunkInfoString(chunkCount int, bytesRead int, chunkHash string, vaultConfig config.VaultConfig, chunkDataToProcess []byte, deduplicated bool, encrypted bool) string {
 	compressionInfo := ""
 	if vaultConfig.Compression != "none" {
 		compressionInfo = fmt.Sprintf(" (compressed with %s: %s -> %s)",
@@ -38,13 +38,18 @@ func FormatChunkInfo(chunkCount int, bytesRead int, chunkHash string, vaultConfi
 		encryptionInfo = " (encrypted)"
 	}
 
-	fmt.Printf("Chunk %d: %s bytes, hash: %s%s%s%s\n",
+	return fmt.Sprintf("Chunk %d: %s bytes, hash: %s%s%s%s\n",
 		chunkCount,
 		util.HumanReadableSize(int64(bytesRead)),
 		displayHash,
 		encryptionInfo,
 		compressionInfo,
 		dedupInfo)
+}
+
+// formatChunkInfo formats and prints chunk processing information (deprecated, use FormatChunkInfoString)
+func FormatChunkInfo(chunkCount int, bytesRead int, chunkHash string, vaultConfig config.VaultConfig, chunkDataToProcess []byte, deduplicated bool, encrypted bool) {
+	fmt.Print(FormatChunkInfoString(chunkCount, bytesRead, chunkHash, vaultConfig, chunkDataToProcess, deduplicated, encrypted))
 }
 
 // createHasher creates a hasher based on the configured hash algorithm

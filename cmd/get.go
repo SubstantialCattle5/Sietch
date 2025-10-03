@@ -5,6 +5,7 @@ Copyright © 2025 SubstantialCattle5, nilaysharan.com
 package cmd
 
 import (
+	"context"
 	"encoding/base64"
 	"fmt"
 	"os"
@@ -16,6 +17,7 @@ import (
 	"github.com/substantialcattle5/sietch/internal/config"
 	"github.com/substantialcattle5/sietch/internal/encryption"
 	"github.com/substantialcattle5/sietch/internal/fs"
+	"github.com/substantialcattle5/sietch/internal/progress"
 	"github.com/substantialcattle5/sietch/internal/ui"
 	"github.com/substantialcattle5/sietch/util"
 )
@@ -99,6 +101,10 @@ Example:
   sietch get vault/photos/vacation.jpg ./retrieved_photos/`,
 	Args: cobra.RangeArgs(1, 2),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// Get global flags
+		verbose, _ := cmd.Flags().GetBool("verbose")
+		quiet, _ := cmd.Flags().GetBool("quiet")
+
 		// Find vault root
 		vaultRoot, err := fs.FindVaultRoot()
 		if err != nil {
@@ -122,7 +128,9 @@ Example:
 		force, _ := cmd.Flags().GetBool(force)
 		skipEncryption, _ := cmd.Flags().GetBool(skipDecryption)
 
-		fmt.Printf("Retrieving %s from vault\n", filePath)
+		if !quiet {
+			fmt.Printf("Retrieving %s from vault\n", filePath)
+		}
 
 		// Find the file manifest by searching through all manifests
 		fileManifest, err := findFileManifest(vaultRoot, filePath)
@@ -155,12 +163,41 @@ Example:
 			return fmt.Errorf("failed to get passphrase: %v", err)
 		}
 
+		// Create progress manager
+		progressMgr := progress.NewManager(progress.Options{
+			Quiet:   quiet,
+			Verbose: verbose,
+		})
+
+		// Create context with cancellation
+		ctx := context.Background()
+		ctx = progressMgr.SetupCancellation(ctx)
+
 		// Process each chunk
 		chunkCount := len(fileManifest.Chunks)
-		fmt.Printf("Reassembling file from %d chunks\n", chunkCount)
+		totalSize := int64(0)
+		for _, chunkRef := range fileManifest.Chunks {
+			totalSize += chunkRef.Size
+		}
+
+		// Initialize progress bars
+		progressMgr.InitTotalProgress(totalSize, "Retrieving file")
+		progressMgr.InitFileProgress(totalSize, fileManifest.FilePath)
+
+		if !quiet {
+			fmt.Printf("Reassembling file from %d chunks\n", chunkCount)
+		}
 
 		for i, chunkRef := range fileManifest.Chunks {
-			fmt.Printf("Processing chunk %d/%d\n", i+1, chunkCount)
+			// Check for cancellation
+			select {
+			case <-ctx.Done():
+				progressMgr.Cleanup()
+				return fmt.Errorf("operation cancelled")
+			default:
+			}
+
+			progressMgr.PrintVerbose("Processing chunk %d/%d\n", i+1, chunkCount)
 
 			// Get the chunk hash to use - if encrypted, use the encrypted hash
 			chunkHash := chunkRef.Hash
@@ -231,25 +268,35 @@ Example:
 			}
 
 			// Write the chunk to the output file
-			_, err = outputFile.Write(chunkData)
+			bytesWritten, err := outputFile.Write(chunkData)
 			if err != nil {
+				progressMgr.Cleanup()
 				return fmt.Errorf("failed to write to output file: %v", err)
 			}
+
+			// Update progress bars
+			progressMgr.UpdateFileProgress(int64(bytesWritten))
+			progressMgr.UpdateTotalProgress(int64(bytesWritten))
 		}
 
-		fmt.Printf("\nFile retrieved successfully: %s\n", outputPath)
-		fmt.Printf("Size: %s\n", util.HumanReadableSize(fileManifest.Size))
+		// Complete progress bars
+		progressMgr.FinishFileProgress()
+		progressMgr.FinishTotalProgress()
+		progressMgr.Cleanup()
+
+		progressMgr.PrintInfo("\nFile retrieved successfully: %s\n", outputPath)
+		progressMgr.PrintInfo("Size: %s\n", util.HumanReadableSize(fileManifest.Size))
 
 		// Show file tags if available
 		if len(fileManifest.Tags) > 0 {
-			fmt.Printf("Tags: %v\n", fileManifest.Tags)
+			progressMgr.PrintInfo("Tags: %v\n", fileManifest.Tags)
 		}
 
 		// Note about encryption status
 		if skipEncryption && vaultConfig.Encryption.Type != "none" {
-			fmt.Println("\nWarning: File retrieved without decryption (--skip-decryption flag used)")
+			progressMgr.PrintInfo("\nWarning: File retrieved without decryption (--skip-decryption flag used)")
 		} else if vaultConfig.Encryption.Type != "none" {
-			fmt.Println("\nFile successfully decrypted")
+			progressMgr.PrintInfo("\nFile successfully decrypted")
 		}
 
 		return nil

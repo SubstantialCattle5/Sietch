@@ -4,6 +4,7 @@ Copyright © 2025 SubstantialCattle5, nilaysharan.com
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -16,6 +17,7 @@ import (
 	"github.com/substantialcattle5/sietch/internal/constants"
 	"github.com/substantialcattle5/sietch/internal/fs"
 	"github.com/substantialcattle5/sietch/internal/manifest"
+	"github.com/substantialcattle5/sietch/internal/progress"
 	"github.com/substantialcattle5/sietch/internal/ui"
 	"github.com/substantialcattle5/sietch/util"
 )
@@ -64,6 +66,10 @@ Examples:
 			tags = strings.Split(tagsFlag, ",")
 		}
 
+		// Get global flags
+		verbose, _ := cmd.Flags().GetBool("verbose")
+		quiet, _ := cmd.Flags().GetBool("quiet")
+
 		vaultRoot, err := fs.FindVaultRoot()
 		if err != nil {
 			return fmt.Errorf("not inside a vault: %v", err)
@@ -94,6 +100,16 @@ Examples:
 		if err != nil {
 			return err
 		}
+
+		// Create progress manager
+		progressMgr := progress.NewManager(progress.Options{
+			Quiet:   quiet,
+			Verbose: verbose,
+		})
+
+		// Create context with cancellation
+		ctx := context.Background()
+		ctx = progressMgr.SetupCancellation(ctx)
 
 		// Process each file pair
 		successCount := 0
@@ -138,7 +154,7 @@ Examples:
 
 			// Process the file and store chunks - using the appropriate chunking function
 			var chunkRefs []config.ChunkRef
-			chunkRefs, err = chunk.ChunkFile(pair.Source, chunkSize, vaultRoot, passphrase)
+			chunkRefs, err = chunk.ChunkFile(ctx, pair.Source, chunkSize, vaultRoot, passphrase, progressMgr)
 
 			if err != nil {
 				errorMsg := fmt.Sprintf("✗ %s: chunking failed - %v", filepath.Base(pair.Source), err)
@@ -178,6 +194,9 @@ Examples:
 
 			successCount++
 		}
+
+		// Cleanup progress manager
+		progressMgr.Cleanup()
 
 		// Enhanced summary
 		fmt.Printf("\n=== Batch Processing Summary ===\n")
