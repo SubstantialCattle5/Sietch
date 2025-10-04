@@ -14,6 +14,8 @@ func EncryptData(data string, vaultConfig config.VaultConfig) (string, error) {
 		return AesEncryption(data, vaultConfig)
 	case constants.EncryptionTypeGPG:
 		return GPGEncryption(data, vaultConfig)
+	case constants.EncryptionTypeChaCha20:
+		return ChaCha20Encryption(data, vaultConfig)
 	case constants.EncryptionTypeNone:
 		return data, nil
 	default:
@@ -28,6 +30,8 @@ func EncryptDataWithPassphrase(data string, vaultConfig config.VaultConfig, pass
 		return AesEncryptWithPassphrase(data, vaultConfig, passphrase)
 	case constants.EncryptionTypeGPG:
 		return GPGEncryptWithPassphrase(data, vaultConfig, passphrase)
+	case constants.EncryptionTypeChaCha20:
+		return ChaCha20EncryptWithPassphrase(data, vaultConfig, passphrase)
 	case constants.EncryptionTypeNone:
 		return data, nil
 	default:
@@ -47,6 +51,8 @@ func DecryptData(encryptedData string, vaultPath string) (string, error) {
 		return AesDecryption(encryptedData, vaultPath)
 	case constants.EncryptionTypeGPG:
 		return GPGDecryption(encryptedData, vaultPath)
+	case constants.EncryptionTypeChaCha20:
+		return ChaCha20Decryption(encryptedData, vaultPath)
 	case constants.EncryptionTypeNone:
 		return encryptedData, nil
 	default:
@@ -66,6 +72,8 @@ func DecryptDataWithPassphrase(encryptedData string, vaultPath string, passphras
 		return AesDecryptionWithPassphrase(encryptedData, vaultPath, passphrase)
 	case constants.EncryptionTypeGPG:
 		return GPGDecryptionWithPassphrase(encryptedData, vaultPath, passphrase)
+	case constants.EncryptionTypeChaCha20:
+		return ChaCha20DecryptionWithPassphrase(encryptedData, vaultPath, passphrase)
 	case constants.EncryptionTypeNone:
 		return encryptedData, nil
 	default:
@@ -84,6 +92,12 @@ func ValidateEncryptionConfiguration(vaultConfig config.VaultConfig) error {
 		return nil
 	case constants.EncryptionTypeGPG:
 		return ValidateGPGConfiguration(vaultConfig)
+	case constants.EncryptionTypeChaCha20:
+		// ChaCha20 validation logic
+		if vaultConfig.Encryption.ChaChaConfig == nil {
+			return fmt.Errorf("ChaCha20 configuration is missing")
+		}
+		return nil
 	case constants.EncryptionTypeNone:
 		return nil
 	default:
@@ -109,6 +123,15 @@ func GetEncryptionDetails(vaultConfig config.VaultConfig) (string, error) {
 			return "GPG (configuration error)", nil
 		}
 		return fmt.Sprintf("GPG (Key: %s)", gpgDetails.KeyID), nil
+	case constants.EncryptionTypeChaCha20:
+		if vaultConfig.Encryption.ChaChaConfig == nil {
+			return "ChaCha20 (configuration missing)", nil
+		}
+		mode := vaultConfig.Encryption.ChaChaConfig.Mode
+		if mode == "" {
+			mode = "Poly1305"
+		}
+		return fmt.Sprintf("ChaCha20-%s", mode), nil
 	case constants.EncryptionTypeNone:
 		return "None (unencrypted)", nil
 	default:

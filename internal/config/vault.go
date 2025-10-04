@@ -25,16 +25,17 @@ type VaultConfig struct {
 
 // EncryptionConfig contains encryption settings
 type EncryptionConfig struct {
-	Type                string     `yaml:"type"`
-	KeyPath             string     `yaml:"key_path"`
-	KeyHash             string     `yaml:"key_hash,omitempty"` // Fingerprint of the key
-	PassphraseProtected bool       `yaml:"passphrase_protected"`
-	KeyFile             bool       `yaml:"key_file,omitempty"`        // Whether key comes from file
-	KeyFilePath         string     `yaml:"key_file_path,omitempty"`   // Path to key file
-	RandomKey           bool       `yaml:"random_key,omitempty"`      // Whether key was randomly generated
-	KeyBackupPath       string     `yaml:"key_backup_path,omitempty"` // Where key is backed up
-	AESConfig           *AESConfig `yaml:"aes_config,omitempty"`      // AES specific settings
-	GPGConfig           *GPGConfig `yaml:"gpg_config,omitempty"`      // GPG specific settings
+	Type                string        `yaml:"type"`
+	KeyPath             string        `yaml:"key_path"`
+	KeyHash             string        `yaml:"key_hash,omitempty"` // Fingerprint of the key
+	PassphraseProtected bool          `yaml:"passphrase_protected"`
+	KeyFile             bool          `yaml:"key_file,omitempty"`        // Whether key comes from file
+	KeyFilePath         string        `yaml:"key_file_path,omitempty"`   // Path to key file
+	RandomKey           bool          `yaml:"random_key,omitempty"`      // Whether key was randomly generated
+	KeyBackupPath       string        `yaml:"key_backup_path,omitempty"` // Where key is backed up
+	AESConfig           *AESConfig    `yaml:"aes_config,omitempty"`      // AES specific settings
+	GPGConfig           *GPGConfig    `yaml:"gpg_config,omitempty"`      // GPG specific settings
+	ChaChaConfig        *ChaChaConfig `yaml:"chacha_config,omitempty"`   // ChaCha20 specific settings
 }
 
 // AESConfig contains AES-specific encryption settings
@@ -59,6 +60,20 @@ type GPGConfig struct {
 	PublicKey  string `yaml:"public_key,omitempty"`  // Path to public key
 	PrivateKey string `yaml:"private_key,omitempty"` // Path to private key
 	KeyServer  string `yaml:"key_server,omitempty"`  // Key server URL
+}
+
+// ChaChaConfig contains ChaCha20-specific encryption settings
+type ChaChaConfig struct {
+	Key      string `yaml:"key,omitempty"`       // Base64 encoded key
+	Mode     string `yaml:"mode,omitempty"`      // Currently only "poly1305" (authenticated encryption)
+	KDF      string `yaml:"kdf,omitempty"`       // Key derivation function (scrypt or pbkdf2)
+	Salt     string `yaml:"salt,omitempty"`      // Base64 encoded salt for KDF
+	ScryptN  int    `yaml:"scrypt_n,omitempty"`  // scrypt N parameter
+	ScryptR  int    `yaml:"scrypt_r,omitempty"`  // scrypt r parameter
+	ScryptP  int    `yaml:"scrypt_p,omitempty"`  // scrypt p parameter
+	PBKDF2I  int    `yaml:"pbkdf2_i,omitempty"`  // PBKDF2 iterations
+	Nonce    string `yaml:"nonce,omitempty"`     // For future use if needed
+	KeyCheck string `yaml:"key_check,omitempty"` // Hash to verify key
 }
 
 // ChunkingConfig contains settings for file chunking
@@ -115,10 +130,11 @@ type MetadataConfig struct {
 
 // KeyConfig is the internal structure returned by key generation functions
 type KeyConfig struct {
-	KeyHash   string     `yaml:"key_hash,omitempty"`
-	Salt      string     `yaml:"salt,omitempty"`
-	AESConfig *AESConfig `yaml:"aes_config,omitempty"`
-	GPGConfig *GPGConfig `yaml:"gpg_config,omitempty"`
+	KeyHash      string        `yaml:"key_hash,omitempty"`
+	Salt         string        `yaml:"salt,omitempty"`
+	AESConfig    *AESConfig    `yaml:"aes_config,omitempty"`
+	ChaChaConfig *ChaChaConfig `yaml:"chacha_config,omitempty"`
+	GPGConfig    *GPGConfig    `yaml:"gpg_config,omitempty"`
 }
 
 // FileManifest represents the metadata for a stored file
@@ -146,15 +162,16 @@ type FileEncryptionInfo struct {
 
 // ChunkRef references a chunk in the vault
 type ChunkRef struct {
-	Hash          string `yaml:"hash"`                     // Hash of chunk content (pre-encryption)
-	EncryptedHash string `yaml:"encrypted_hash,omitempty"` // Hash of encrypted chunk (filename in storage)
-	Size          int64  `yaml:"size"`                     // Size of plaintext chunk
-	EncryptedSize int64  `yaml:"encrypted_size,omitempty"` // Size after encryption
-	Index         int    `yaml:"index"`                    // Position in the file
-	Deduplicated  bool   `yaml:"deduplicated,omitempty"`   // Whether this chunk was deduplicated
-	Compressed    bool   `yaml:"compressed,omitempty"`     // Whether this chunk was compressed
-	IV            string `yaml:"iv,omitempty"`             // Per-chunk IV if used
-	Integrity     string `yaml:"integrity,omitempty"`      // Integrity check value (e.g., HMAC)
+	Hash            string `yaml:"hash"`                       // Hash of chunk content (pre-encryption)
+	EncryptedHash   string `yaml:"encrypted_hash,omitempty"`   // Hash of encrypted chunk (filename in storage)
+	Size            int64  `yaml:"size"`                       // Size of plaintext chunk
+	EncryptedSize   int64  `yaml:"encrypted_size,omitempty"`   // Size after encryption
+	Index           int    `yaml:"index"`                      // Position in the file
+	Deduplicated    bool   `yaml:"deduplicated,omitempty"`     // Whether this chunk was deduplicated
+	Compressed      bool   `yaml:"compressed,omitempty"`       // Whether this chunk was compressed
+	CompressionType string `yaml:"compression_type,omitempty"` // Compression algorithm used (e.g., "gzip", "zstd", "none")
+	IV              string `yaml:"iv,omitempty"`               // Per-chunk IV if used
+	Integrity       string `yaml:"integrity,omitempty"`        // Integrity check value (e.g., HMAC)
 }
 
 // BuildVaultConfig creates a complete vault configuration with all necessary fields
@@ -200,8 +217,8 @@ func BuildVaultConfigWithDeduplication(
 
 	// Set encryption configuration
 	config.Encryption.Type = keyType
-	// Only set key path for AES encryption - GPG uses system keyring
-	if keyType == constants.EncryptionTypeAES {
+	// Set key path for AES and ChaCha20 encryption - GPG uses system keyring
+	if keyType == constants.EncryptionTypeAES || keyType == constants.EncryptionTypeChaCha20 {
 		config.Encryption.KeyPath = keyPath
 	}
 	config.Encryption.PassphraseProtected = passPhraseProtected
@@ -253,6 +270,11 @@ func BuildVaultConfigWithDeduplication(
 
 			// Copy all fields from keyConfig.AESConfig to config.Encryption.AESConfig
 			*config.Encryption.AESConfig = *keyConfig.AESConfig
+		}
+
+		// Apply ChaCha20-specific config if available
+		if keyConfig.ChaChaConfig != nil && keyType == constants.EncryptionTypeChaCha20 {
+			config.Encryption.ChaChaConfig = keyConfig.ChaChaConfig
 		}
 
 		// Apply GPG-specific config if available
@@ -309,6 +331,17 @@ func BuildDefaultAESConfig() *AESConfig {
 func BuildDefaultGPGConfig() *GPGConfig {
 	return &GPGConfig{
 		KeyServer: "hkps://keys.openpgp.org",
+	}
+}
+
+// BuildDefaultChaChaConfig creates a default ChaCha20 configuration
+func BuildDefaultChaChaConfig() *ChaChaConfig {
+	return &ChaChaConfig{
+		Mode:    "poly1305",
+		KDF:     constants.KDFScrypt,
+		ScryptN: constants.DefaultScryptN,
+		ScryptR: constants.DefaultScryptR,
+		ScryptP: constants.DefaultScryptP,
 	}
 }
 

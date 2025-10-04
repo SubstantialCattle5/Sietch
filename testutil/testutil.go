@@ -15,7 +15,7 @@ import (
 )
 
 // TempDir creates a temporary directory for testing
-func TempDir(t *testing.T, prefix string) string {
+func TempDir(t testing.TB, prefix string) string {
 	t.Helper()
 	dir, err := os.MkdirTemp("", prefix)
 	if err != nil {
