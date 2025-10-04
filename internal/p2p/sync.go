@@ -1112,3 +1112,12 @@ func (s *SyncService) StoreChunk(hash string, data []byte, encryptedHash string)
 
 	return nil
 }
+
+// HasPeer returns true if peer is already in trustedPeers map
+func (s *SyncService) HasPeer(id peer.ID) bool {
+	if s == nil {
+		return false
+	}
+	_, ok := s.trustedPeers[id]
+	return ok
+}
