@@ -5,6 +5,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -23,23 +24,36 @@ import (
 // addCmd represents the add command
 var addCmd = &cobra.Command{
 	Use:   "add <source_path> <destination_path> [source_path2] [destination_path2]...",
-	Short: "Add one or more files to the Sietch vault",
-	Long: `Add multiple files to your Sietch vault.
+	Short: "Add files, directories, or symlinks to the Sietch vault",
+	Long: `Add files, directories, or symlinks to your Sietch vault.
 
 This command adds files from the specified source paths to the destination
-paths in your vault, then processes them according to your vault configuration.
+paths in your vault. It supports regular files, directories (recursively),
+and symbolic links (by copying their contents).
 
 Supports two usage patterns:
 1. Paired arguments: sietch add source1 dest1 source2 dest2 ...
-	  Each source file is stored at its corresponding destination path.
+	  Each source is stored at its corresponding destination path.
 
 2. Single destination: sietch add source1 source2 ... dest
-	  All source files are stored under the same destination directory.
+	  All sources are stored under the same destination directory.
+
+Directory handling:
+- Directories are processed recursively
+- Directory structure is preserved in the destination
+- Hidden files and directories are included
+- Symlinks within directories are followed
+
+Symlink handling:
+- Symlinks to files: the target file content is added
+- Symlinks to directories: all files in the target directory are added recursively
 
 Examples:
 	 sietch add document.txt vault/documents/
 	 sietch add file1.txt dest1/ file2.txt dest2/
-	 sietch add ~/photos/img1.jpg ~/photos/img2.jpg vault/photos/`,
+	 sietch add ~/photos vault/photos/
+	 sietch add ~/link-to-file.txt vault/files/
+	 sietch add ~/photos/img1.jpg ~/docs/ vault/backup/`,
 	Args: cobra.MinimumNArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Validate argument count (reasonable limit for batch operations)
@@ -113,8 +127,8 @@ Examples:
 				fmt.Printf("Processing: %s\n", pair.Source)
 			}
 
-			// Check if file exists and that it is not a directory or symlink
-			fileInfo, err := fs.VerifyFileAndReturnFileInfo(pair.Source)
+			// Check if path exists (accepts files, directories, and symlinks)
+			pathInfo, err := fs.VerifyPathAndReturnInfo(pair.Source)
 			if err != nil {
 				errorMsg := fmt.Sprintf("✗ %s: %v", filepath.Base(pair.Source), err)
 				fmt.Println(errorMsg)
@@ -122,61 +136,121 @@ Examples:
 				continue
 			}
 
-			// Get file size in human-readable format
-			sizeInBytes := fileInfo.Size()
-			sizeReadable := util.HumanReadableSize(sizeInBytes)
+			// Collect all files to process (handles directories and symlinks)
+			var filesToProcess []string
+			if pathInfo.IsDir() || pathInfo.Mode()&os.ModeSymlink != 0 {
+				// For directories and symlinks, recursively collect all files
+				filesToProcess, err = fs.CollectFilesRecursively(pair.Source)
+				if err != nil {
+					errorMsg := fmt.Sprintf("✗ %s: %v", filepath.Base(pair.Source), err)
+					fmt.Println(errorMsg)
+					failedFiles = append(failedFiles, errorMsg)
+					continue
+				}
 
-			// Display file metadata for confirmation (only for single files or when verbose)
-			verbose, _ := cmd.Flags().GetBool("verbose")
-			if len(filePairs) == 1 || verbose {
-				fmt.Printf("  Size: %s (%d bytes)\n", sizeReadable, sizeInBytes)
-				fmt.Printf("  Modified: %s\n", fileInfo.ModTime().Format(time.RFC3339))
-				if len(tags) > 0 {
-					fmt.Printf("  Tags: %s\n", strings.Join(tags, ", "))
+				if len(filesToProcess) == 0 {
+					fmt.Printf("⚠ %s: directory is empty, skipping\n", filepath.Base(pair.Source))
+					continue
+				}
+
+				fmt.Printf("  Found %d file(s) to add\n", len(filesToProcess))
+			} else {
+				// Regular file
+				filesToProcess = []string{pair.Source}
+			}
+
+			// Process each collected file
+			processedCount := 0
+			for _, sourceFile := range filesToProcess {
+				// Get file info for the actual file
+				fileInfo, err := fs.VerifyFileAndReturnFileInfo(sourceFile)
+				if err != nil {
+					errorMsg := fmt.Sprintf("✗ %s: %v", filepath.Base(sourceFile), err)
+					fmt.Println(errorMsg)
+					failedFiles = append(failedFiles, errorMsg)
+					continue
+				}
+
+				// Get file size in human-readable format
+				sizeInBytes := fileInfo.Size()
+				sizeReadable := util.HumanReadableSize(sizeInBytes)
+
+				// Display file metadata for confirmation (only for single files or when verbose)
+				verbose, _ := cmd.Flags().GetBool("verbose")
+				if len(filePairs) == 1 || verbose {
+					fmt.Printf("    %s: %s (%d bytes)\n", filepath.Base(sourceFile), sizeReadable, sizeInBytes)
+					if verbose {
+						fmt.Printf("    Modified: %s\n", fileInfo.ModTime().Format(time.RFC3339))
+					}
+				}
+
+				// Calculate relative path for destination if processing directory
+				var destPath string
+				if len(filesToProcess) > 1 {
+					// For directories, preserve the structure
+					relPath, err := filepath.Rel(pair.Source, sourceFile)
+					if err != nil {
+						// If we can't get relative path, use just the filename
+						destPath = filepath.Join(pair.Destination, filepath.Base(sourceFile))
+					} else {
+						destPath = filepath.Join(pair.Destination, relPath)
+					}
+				} else {
+					destPath = pair.Destination
+				}
+
+				// Process the file and store chunks
+				var chunkRefs []config.ChunkRef
+				chunkRefs, err = chunk.ChunkFile(sourceFile, chunkSize, vaultRoot, passphrase)
+
+				if err != nil {
+					errorMsg := fmt.Sprintf("✗ %s: chunking failed - %v", filepath.Base(sourceFile), err)
+					fmt.Println(errorMsg)
+					failedFiles = append(failedFiles, errorMsg)
+					continue
+				}
+
+				// Create and store the file manifest
+				fileManifest := &config.FileManifest{
+					FilePath:    filepath.Base(sourceFile),
+					Size:        sizeInBytes,
+					ModTime:     fileInfo.ModTime().Format(time.RFC3339),
+					Chunks:      chunkRefs,
+					Destination: destPath,
+					AddedAt:     time.Now().UTC(),
+					Tags:        tags, // Include tags in the manifest
+				}
+
+				// Save the manifest
+				err = manifest.StoreFileManifest(vaultRoot, filepath.Base(sourceFile), fileManifest)
+				if err != nil {
+					errorMsg := fmt.Sprintf("✗ %s: manifest storage failed - %v", filepath.Base(sourceFile), err)
+					fmt.Println(errorMsg)
+					failedFiles = append(failedFiles, errorMsg)
+					continue
+				}
+
+				// Success message (compact for directories)
+				if len(filesToProcess) > 1 {
+					fmt.Printf("    ✓ %s (%d chunks)\n", filepath.Base(sourceFile), len(chunkRefs))
+				} else if len(filePairs) > 1 {
+					fmt.Printf("✓ %s (%d chunks)\n", filepath.Base(sourceFile), len(chunkRefs))
+				} else {
+					fmt.Printf("✓ File added to vault: %s\n", filepath.Base(sourceFile))
+					fmt.Printf("✓ %d chunks stored in vault\n", len(chunkRefs))
+					fmt.Printf("✓ Manifest written to .sietch/manifests/%s.yaml\n", filepath.Base(sourceFile))
+				}
+
+				processedCount++
+			}
+
+			// Update success count for this pair
+			if processedCount > 0 {
+				successCount += processedCount
+				if len(filesToProcess) > 1 {
+					fmt.Printf("✓ Added %d file(s) from %s\n", processedCount, filepath.Base(pair.Source))
 				}
 			}
-
-			// Process the file and store chunks - using the appropriate chunking function
-			var chunkRefs []config.ChunkRef
-			chunkRefs, err = chunk.ChunkFile(pair.Source, chunkSize, vaultRoot, passphrase)
-
-			if err != nil {
-				errorMsg := fmt.Sprintf("✗ %s: chunking failed - %v", filepath.Base(pair.Source), err)
-				fmt.Println(errorMsg)
-				failedFiles = append(failedFiles, errorMsg)
-				continue
-			}
-
-			// Create and store the file manifest
-			fileManifest := &config.FileManifest{
-				FilePath:    filepath.Base(pair.Source),
-				Size:        sizeInBytes,
-				ModTime:     fileInfo.ModTime().Format(time.RFC3339),
-				Chunks:      chunkRefs,
-				Destination: pair.Destination,
-				AddedAt:     time.Now().UTC(),
-				Tags:        tags, // Include tags in the manifest
-			}
-
-			// Save the manifest
-			err = manifest.StoreFileManifest(vaultRoot, filepath.Base(pair.Source), fileManifest)
-			if err != nil {
-				errorMsg := fmt.Sprintf("✗ %s: manifest storage failed - %v", filepath.Base(pair.Source), err)
-				fmt.Println(errorMsg)
-				failedFiles = append(failedFiles, errorMsg)
-				continue
-			}
-
-			// Success message
-			if len(filePairs) > 1 {
-				fmt.Printf("✓ %s (%d chunks)\n", filepath.Base(pair.Source), len(chunkRefs))
-			} else {
-				fmt.Printf("✓ File added to vault: %s\n", filepath.Base(pair.Source))
-				fmt.Printf("✓ %d chunks stored in vault\n", len(chunkRefs))
-				fmt.Printf("✓ Manifest written to .sietch/manifests/%s.yaml\n", filepath.Base(pair.Source))
-			}
-
-			successCount++
 		}
 
 		// Enhanced summary
@@ -265,6 +339,4 @@ func init() {
 	addCmd.Flags().StringP("passphrase-value", "p", "", "Passphrase for encrypted vault (if required)")
 }
 
-//TODO: Add support for directories and symlinks
-//TODO: Need to check how symlinks will be handled
 //TODO: Interactive mode with real time progress indicators
