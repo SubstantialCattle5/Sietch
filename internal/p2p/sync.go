@@ -21,6 +21,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/protocol"
 
 	"github.com/substantialcattle5/sietch/internal/config"
+	"github.com/substantialcattle5/sietch/internal/manifest" //golangci-lint error
 )
 
 const (
@@ -836,7 +837,6 @@ func (s *SyncService) AddTrustedPeer(ctx context.Context, peerID peer.ID) error 
 	return nil
 }
 
-
 // SyncWithPeer performs a sync operation with a specific peer
 func (s *SyncService) SyncWithPeer(ctx context.Context, peerID peer.ID) (*SyncResult, error) {
 	// Create a context with timeout for the entire operation
@@ -929,18 +929,18 @@ func (s *SyncService) SyncWithPeer(ctx context.Context, peerID peer.ID) (*SyncRe
 				break
 			}
 		}
-		
+
 		if !exists {
 			// Create a copy of the file manifest to avoid pointer issues
 			fileManifest := remoteFile
-			
+
 			err := manifest.StoreFileManifest(
 				s.vaultMgr.VaultRoot(),
 				fileManifest.FilePath,
 				&fileManifest,
 			)
 			if err != nil {
-				return nil, fmt.Errorf("failed to save manifest for %s: %v", 
+				return nil, fmt.Errorf("failed to save manifest for %s: %v",
 					fileManifest.FilePath, err)
 			}
 			fmt.Printf("Saved manifest for: %s\n", fileManifest.FilePath)
