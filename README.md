@@ -34,7 +34,14 @@ sietch init --name dune --key-type aes
 
 **Add files**
 ```bash
+# Single file
 sietch add ./secrets/thumper-plans.pdf documents/
+
+# Multiple files with individual destinations
+sietch add file1.txt dest1/ file2.txt dest2/
+
+# Multiple files to single destination
+sietch add ~/photos/img1.jpg ~/photos/img2.jpg vault/photos/
 ```
 
 **Sync over LAN**
@@ -86,7 +93,7 @@ Inspired by rsync, Sietch only transfers:
 ### Core Operations
 ```bash
 sietch init [flags]                    # Initialize a new vault
-sietch add <source> <destination>      # Add files to vault
+sietch add <source> <destination> [args...]  # Add files to vault (multiple file support)
 sietch get <filename> <output-path>    # Retrieve files from vault
 sietch ls [path]                       # List vault contents
 sietch delete <filename>               # Delete files from vault
@@ -164,18 +171,18 @@ sietch manifest
 ### Quick Development Setup
 
 1. **Clone and setup**
-   ```bash
-   git clone https://github.com/substantialcattle5/sietch.git
-   cd sietch
-   ./scripts/setup-hooks.sh
-   ```
+    ```bash
+    git clone https://github.com/substantialcattle5/sietch.git
+    cd sietch
+    ./scripts/setup-hooks.sh
+    ```
 
 2. **Verify installation**
-   ```bash
-   make check-versions
-   make build
-   make test
-   ```
+    ```bash
+    make check-versions
+    make build
+    make test
+    ```
 
 ### Available Commands
 ```bash
@@ -213,6 +220,12 @@ Sietch draws inspiration from:
 * **Obsidian Sync** - Seamless cross-device syncing
 
 Built with ❤️ in Go by the open source community.
+
+## Contributors
+
+Thanks to all our amazing contributors!  
+
+[![Contributors](https://contrib.rocks/image?repo=substantialcattle5/sietch)](https://github.com/substantialcattle5/sietch/graphs/contributors)
 
 ## License
 
