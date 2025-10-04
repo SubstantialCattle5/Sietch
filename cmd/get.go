@@ -182,7 +182,6 @@ Example:
 
 		// Initialize progress bars
 		progressMgr.InitTotalProgress(totalSize, "Retrieving file")
-		progressMgr.InitFileProgress(totalSize, fileManifest.FilePath)
 
 		if !quiet {
 			fmt.Printf("Reassembling file from %d chunks\n", chunkCount)
@@ -275,12 +274,10 @@ Example:
 			}
 
 			// Update progress bars
-			progressMgr.UpdateFileProgress(int64(bytesWritten))
 			progressMgr.UpdateTotalProgress(int64(bytesWritten))
 		}
 
 		// Complete progress bars
-		progressMgr.FinishFileProgress()
 		progressMgr.FinishTotalProgress()
 		progressMgr.Cleanup()
 

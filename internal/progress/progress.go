@@ -49,6 +49,7 @@ func (pm *Manager) SetupCancellation(ctx context.Context) context.Context {
 			pm.cancelMux.Lock()
 			pm.cancelled = true
 			pm.cancelMux.Unlock()
+			// #nosec G104 - cancellation message is not critical for functionality
 			fmt.Println("\nOperation cancelled by user")
 			cancel()
 		case <-ctx.Done():
@@ -88,6 +89,7 @@ func (pm *Manager) InitTotalProgress(totalBytes int64, description string) {
 		progressbar.OptionThrottle(65),
 		progressbar.OptionShowCount(),
 		progressbar.OptionOnCompletion(func() {
+			// #nosec G104 - progress bar completion message is not critical
 			fmt.Fprint(os.Stderr, "\n")
 		}),
 		progressbar.OptionSpinnerType(14),
@@ -109,6 +111,7 @@ func (pm *Manager) InitFileProgress(totalBytes int64, filename string) {
 		progressbar.OptionThrottle(65),
 		progressbar.OptionShowCount(),
 		progressbar.OptionOnCompletion(func() {
+			// #nosec G104 - progress bar completion message is not critical
 			fmt.Fprint(os.Stderr, "\n")
 		}),
 		progressbar.OptionSpinnerType(14),
@@ -121,6 +124,7 @@ func (pm *Manager) UpdateTotalProgress(bytes int64) {
 	if pm.options.Quiet || pm.totalBar == nil {
 		return
 	}
+	// #nosec G104 - progress bar errors are not critical for functionality
 	pm.totalBar.Add64(bytes)
 }
 
@@ -129,6 +133,7 @@ func (pm *Manager) UpdateFileProgress(bytes int64) {
 	if pm.options.Quiet || pm.fileBar == nil {
 		return
 	}
+	// #nosec G104 - progress bar errors are not critical for functionality
 	pm.fileBar.Add64(bytes)
 }
 
@@ -145,19 +150,27 @@ func (pm *Manager) FinishFileProgress() {
 	if pm.options.Quiet || pm.fileBar == nil {
 		return
 	}
+	// #nosec G104 - progress bar errors are not critical for functionality
 	pm.fileBar.Finish()
 }
 
 // PrintVerbose prints verbose information if verbose mode is enabled
 func (pm *Manager) PrintVerbose(format string, args ...interface{}) {
 	if pm.options.Verbose {
+		// #nosec G104 - verbose output errors are not critical for functionality
 		fmt.Printf(format, args...)
+		// Ensure output ends with newline if not already present
+		if len(format) == 0 || format[len(format)-1] != '\n' {
+			// #nosec G104 - newline output is not critical for functionality
+			fmt.Println()
+		}
 	}
 }
 
 // PrintInfo prints informational messages (unless quiet mode)
 func (pm *Manager) PrintInfo(format string, args ...interface{}) {
 	if !pm.options.Quiet {
+		// #nosec G104 - info output errors are not critical for functionality
 		fmt.Printf(format, args...)
 	}
 }

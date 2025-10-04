@@ -45,7 +45,6 @@ func ChunkFile(ctx context.Context, filePath string, chunkSize int64, vaultRoot 
 
 	// Initialize progress bars
 	progressMgr.InitTotalProgress(fileSize, "Chunking file")
-	progressMgr.InitFileProgress(fileSize, fileInfo.Name())
 
 	// Load Vault Configuration
 	vaultConfig, err := config.LoadVaultConfig(vaultRoot)
@@ -76,7 +75,6 @@ func ChunkFile(ctx context.Context, filePath string, chunkSize int64, vaultRoot 
 	}
 
 	// Complete progress bars
-	progressMgr.FinishFileProgress()
 	progressMgr.FinishTotalProgress()
 
 	// Save deduplication index after processing
@@ -117,7 +115,6 @@ func processFileChunks(ctx context.Context, file *os.File, chunkSize int64, vaul
 		totalBytes += int64(bytesRead)
 
 		// Update progress bars
-		progressMgr.UpdateFileProgress(int64(bytesRead))
 		progressMgr.UpdateTotalProgress(int64(bytesRead))
 
 		// Calculate chunk hash (pre-encryption) using configured algorithm

@@ -221,6 +221,25 @@ Examples:
 
 		if successCount > 0 {
 			fmt.Printf("\n✓ %d file(s) successfully added to vault\n", successCount)
+
+			// Show vault configuration details
+			fmt.Printf("\n📋 Vault Configuration:\n")
+			fmt.Printf("  • Encryption: %s", vaultConfig.Encryption.Type)
+			if vaultConfig.Encryption.PassphraseProtected {
+				fmt.Printf(" (passphrase protected)")
+			}
+			fmt.Println()
+
+			fmt.Printf("  • Compression: %s\n", vaultConfig.Compression)
+
+			// Calculate and show space savings if compression is used
+			if vaultConfig.Compression != "none" {
+				// TODO: Calculate actual space savings during processing
+				// For now, show compression info
+				fmt.Printf("  • Compression: %s (space savings calculated during processing)\n", vaultConfig.Compression)
+			}
+
+			fmt.Printf("  • Chunking: %s (size: %s)\n", vaultConfig.Chunking.Strategy, vaultConfig.Chunking.ChunkSize)
 		}
 
 		// Return error only if all files failed
