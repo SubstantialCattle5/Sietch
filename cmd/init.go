@@ -282,13 +282,12 @@ func runInit(cmd *cobra.Command) error {
 	}
 
 	// Write the key to file if it exists
-	if (keyType == constants.EncryptionTypeAES || keyType == constants.EncryptionTypeChaCha20) && keyConfig != nil {
-
-		// Decode the base64-encoded key
+	if keyType == constants.EncryptionTypeAES && keyConfig != nil && keyConfig.AESConfig != nil && keyConfig.AESConfig.Key != "" {
+		// Decode the base64-encoded AES key
 		keyMaterial, err := base64.StdEncoding.DecodeString(keyConfig.AESConfig.Key)
 		if err != nil {
 			cleanupOnError(absVaultPath)
-			return fmt.Errorf("failed to decode key: %w", err)
+			return fmt.Errorf("failed to decode AES key: %w", err)
 		}
 
 		// Create directory structure for the key if it doesn't exist
@@ -304,6 +303,10 @@ func runInit(cmd *cobra.Command) error {
 			return fmt.Errorf("failed to write key to %s: %w", keyPath, err)
 		}
 
+		fmt.Printf("Encryption key stored at: %s\n", keyPath)
+	} else if keyType == constants.EncryptionTypeChaCha20 && keyConfig != nil && keyConfig.ChaChaConfig != nil && keyConfig.ChaChaConfig.Key != "" {
+		// Note: ChaCha20 key generation already writes the key to file in chachakey.GenerateChaCha20Key
+		// So we don't need to write it again here, but we print confirmation
 		fmt.Printf("Encryption key stored at: %s\n", keyPath)
 	}
 
