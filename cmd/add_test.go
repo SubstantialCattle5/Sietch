@@ -101,15 +101,16 @@ func TestAddCommandUsageText(t *testing.T) {
 }
 
 func TestAddCommandLongDescription(t *testing.T) {
-	// Check that long description contains multiple file support information
+	// Check that long description contains file, directory, and symlink support information
 	longText := addCmd.Long
 
 	expectedPhrases := []string{
-		"multiple files",
 		"Paired arguments",
 		"Single destination",
 		"source1 dest1 source2 dest2",
 		"source1 source2 ... dest",
+		"directories",
+		"symlinks",
 	}
 
 	for _, phrase := range expectedPhrases {
@@ -120,11 +121,12 @@ func TestAddCommandLongDescription(t *testing.T) {
 }
 
 func TestAddCommandShortDescription(t *testing.T) {
-	// Check that short description reflects multiple file support
+	// Check that short description reflects file, directory, and symlink support
 	shortText := addCmd.Short
 
-	if !strings.Contains(shortText, "one or more files") {
-		t.Errorf("Short description should indicate multiple file support, got: %s", shortText)
+	// Should mention either "files" or "directories" or "symlinks"
+	if !strings.Contains(shortText, "files") && !strings.Contains(shortText, "directories") && !strings.Contains(shortText, "symlinks") {
+		t.Errorf("Short description should indicate file, directory, or symlink support, got: %s", shortText)
 	}
 }
 

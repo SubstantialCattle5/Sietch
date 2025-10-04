@@ -79,6 +79,23 @@ func VerifyFileAndReturnFileInfo(filePath string) (os.FileInfo, error) {
 	return fileInfo, nil
 }
 
+// VerifyPathAndReturnInfo verifies that a path exists and returns its file info
+// Accepts regular files, directories, and symlinks
+func VerifyPathAndReturnInfo(path string) (os.FileInfo, error) {
+	fileInfo, err := os.Stat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("path does not exist: %s", path)
+		}
+		if os.IsPermission(err) {
+			return nil, fmt.Errorf("permission denied: %s", path)
+		}
+		return nil, fmt.Errorf("error accessing path: %v", err)
+	}
+
+	return fileInfo, nil
+}
+
 func VerifyFileAndReturnFile(filePath string) (*os.File, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -88,4 +105,65 @@ func VerifyFileAndReturnFile(filePath string) (*os.File, error) {
 		return nil, fmt.Errorf("error opening file: %v", err)
 	}
 	return file, nil
+}
+
+// CollectFilesRecursively recursively collects all regular files from a directory
+// Follows symlinks and adds their target files
+func CollectFilesRecursively(path string) ([]string, error) {
+	var files []string
+
+	// Get file info (follows symlinks by default)
+	fileInfo, err := os.Stat(path)
+	if err != nil {
+		return nil, fmt.Errorf("error accessing %s: %v", path, err)
+	}
+
+	// If it's a regular file, return it directly
+	if fileInfo.Mode().IsRegular() {
+		return []string{path}, nil
+	}
+
+	// If it's a directory, walk through it
+	if fileInfo.IsDir() {
+		// Resolve the path if it's a symlink to ensure filepath.Walk can traverse it
+		resolvedPath := path
+		if linkInfo, err := os.Lstat(path); err == nil && linkInfo.Mode()&os.ModeSymlink != 0 {
+			if target, err := filepath.EvalSymlinks(path); err == nil {
+				resolvedPath = target
+			}
+		}
+
+		err := filepath.Walk(resolvedPath, func(filePath string, info os.FileInfo, err error) error {
+			if err != nil {
+				// Check if it's a permission error
+				if os.IsPermission(err) {
+					fmt.Printf("Warning: Permission denied for %s, skipping\n", filePath)
+					return nil // Skip this file but continue walking
+				}
+				return err
+			}
+
+			// Check if it's a symlink
+			if info.Mode()&os.ModeSymlink != 0 {
+				// Skip symlinks - filepath.Walk will follow them and process the target
+				return nil
+			}
+
+			// Add regular files
+			if info.Mode().IsRegular() {
+				files = append(files, filePath)
+			}
+
+			return nil
+		})
+
+		if err != nil {
+			return nil, err
+		}
+
+		return files, nil
+	}
+
+	// If it's a symlink (shouldn't happen as os.Stat follows symlinks, but just in case)
+	return nil, fmt.Errorf("unexpected file type for %s", path)
 }
