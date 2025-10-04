@@ -28,6 +28,25 @@ import (
 	"github.com/substantialcattle5/sietch/util"
 )
 
+// verifyManifestsSaved checks if manifest file exists
+func verifyManifestsSaved(vaultRoot string) bool {
+	manifestPath := filepath.Join(vaultRoot, "manifest.json") // adjust path if needed
+	info, err := os.Stat(manifestPath)
+	return err == nil && !info.IsDir()
+}
+
+// verifyFilesAccessible checks if vault has any files
+func verifyFilesAccessible(vaultRoot string) bool {
+	filesPath := filepath.Join(vaultRoot, "files") // adjust path if needed
+	info, err := os.Stat(filesPath)
+	if err != nil || !info.IsDir() {
+		return false
+	}
+	files, err := os.ReadDir(filesPath)
+	return err == nil && len(files) > 0
+}
+
+
 // syncCmd represents the sync command
 var syncCmd = &cobra.Command{
 	Use:   "sync [peer-address]",
@@ -180,7 +199,7 @@ Examples:
 			}
 
 			// Display sync results
-			displaySyncResults(result)
+			displaySyncResults(result, vaultRoot)
 			return nil
 		}
 
@@ -268,7 +287,7 @@ Examples:
 			}
 
 			// Display sync results
-			displaySyncResults(result)
+			displaySyncResults(result, vaultRoot)
 
 		case <-timeoutCtx.Done():
 			return fmt.Errorf("discovery timed out after %d seconds, no peers found", timeout)
@@ -322,14 +341,46 @@ func promptForTrust() bool {
 }
 
 // displaySyncResults shows the results of a sync operation
-func displaySyncResults(result *p2p.SyncResult) {
+// func displaySyncResults(result *p2p.SyncResult) {
+// 	fmt.Println("\n✅ Synchronization complete!")
+// 	fmt.Printf("   Files transferred:    %d\n", result.FileCount)
+// 	fmt.Printf("   Chunks transferred:   %d\n", result.ChunksTransferred)
+// 	fmt.Printf("   Chunks deduplicated:  %d\n", result.ChunksDeduplicated)
+// 	fmt.Printf("   Data transferred:     %s\n", util.HumanReadableSize(result.BytesTransferred))
+// 	fmt.Printf("   Duration:             %s\n", result.Duration.Round(time.Millisecond))
+// }
+
+func displaySyncResults(result *p2p.SyncResult, vaultRoot string) {
+	manifestsSaved := verifyManifestsSaved(vaultRoot)
+	filesAccessible := verifyFilesAccessible(vaultRoot)
+
+	if !manifestsSaved || !filesAccessible {
+		fmt.Println("\n⚠️  Sync incomplete due to:")
+		if !manifestsSaved {
+			fmt.Println("   - Manifest file missing")
+		}
+		if !filesAccessible {
+			fmt.Println("   - Vault files missing or inaccessible")
+		}
+		fmt.Println("\n🔹 Sync details:")
+		fmt.Printf("   Files transferred:    %d\n", result.FileCount)
+		fmt.Printf("   Chunks transferred:   %d\n", result.ChunksTransferred)
+		fmt.Printf("   Chunks deduplicated:  %d\n", result.ChunksDeduplicated)
+		fmt.Printf("   Data transferred:     %s\n", util.HumanReadableSize(result.BytesTransferred))
+		fmt.Printf("   Duration:             %s\n", result.Duration.Round(time.Millisecond))
+		return
+	}
+
 	fmt.Println("\n✅ Synchronization complete!")
 	fmt.Printf("   Files transferred:    %d\n", result.FileCount)
 	fmt.Printf("   Chunks transferred:   %d\n", result.ChunksTransferred)
 	fmt.Printf("   Chunks deduplicated:  %d\n", result.ChunksDeduplicated)
 	fmt.Printf("   Data transferred:     %s\n", util.HumanReadableSize(result.BytesTransferred))
 	fmt.Printf("   Duration:             %s\n", result.Duration.Round(time.Millisecond))
+	fmt.Println("   Verification:         Passed ✅")
 }
+
+
 
 func init() {
 	rootCmd.AddCommand(syncCmd)
