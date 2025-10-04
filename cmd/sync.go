@@ -26,6 +26,9 @@ import (
 	"github.com/substantialcattle5/sietch/internal/fs"
 	"github.com/substantialcattle5/sietch/internal/p2p"
 	"github.com/substantialcattle5/sietch/util"
+
+	"github.com/substantialcattle5/sietch/internal/history"
+	"github.com/google/uuid"
 )
 
 // syncCmd represents the sync command
@@ -264,11 +267,40 @@ Examples:
 			// Sync with the peer
 			result, err := syncService.SyncWithPeer(ctx, peerInfo.ID)
 			if err != nil {
+				// Save failed sync
+				record := history.SyncRecord{
+					ID:        uuid.New().String(),
+					Timestamp: time.Now().UTC().Format(time.RFC3339),
+					PeerID:    peerInfo.ID.String(),
+					PeerName:  "vault-peer",
+					Status:    "failed",
+					Error:     err.Error(),
+				}
+				_ = history.AddRecord(filepath.Join(vaultRoot, ".sietch", "sync-history.json"), record)
 				return fmt.Errorf("sync failed: %v", err)
 			}
 
 			// Display sync results
 			displaySyncResults(result)
+			
+			// Create a sync history record
+			record := history.SyncRecord{
+				ID:                 uuid.New().String(),
+				Timestamp:          time.Now().UTC().Format(time.RFC3339),
+				PeerID:             peerInfo.ID.String(),
+				PeerName:           "vault-peer", // optional: put a real name if you have it
+				FilesTransferred:   result.FileCount,
+				ChunksTransferred:  result.ChunksTransferred,
+				ChunksDeduplicated: result.ChunksDeduplicated,
+				BytesTransferred:   result.BytesTransferred,
+				DurationMs:         result.Duration.Milliseconds(),
+				Status:             "success",
+				Files: FileInfosToPaths(result.FileListWithSizes), // make sure result has this info
+				Error:              "",
+			}
+
+			// Save the record to .sietch/sync-history.json
+			_ = history.AddRecord(filepath.Join(vaultRoot, ".sietch", "sync-history.json"), record)
 
 		case <-timeoutCtx.Done():
 			return fmt.Errorf("discovery timed out after %d seconds, no peers found", timeout)
@@ -313,6 +345,14 @@ func rsaToLibp2pPrivateKey(privateKey *rsa.PrivateKey) (crypto.PrivKey, error) {
 	return crypto.UnmarshalRsaPrivateKey(privateKeyBytes)
 }
 
+func FileInfosToPaths(files []p2p.FileInfo) []string {
+    paths := make([]string, len(files))
+    for i, f := range files {
+        paths[i] = f.Path
+    }
+    return paths
+}
+
 // promptForTrust asks the user whether to trust a new peer
 func promptForTrust() bool {
 	fmt.Print("\nDo you want to trust this peer? (y/n): ")
@@ -331,6 +371,28 @@ func displaySyncResults(result *p2p.SyncResult) {
 	fmt.Printf("   Duration:             %s\n", result.Duration.Round(time.Millisecond))
 }
 
+var historyCmd = &cobra.Command{
+    Use:   "history",
+    Short: "Show recent syncs",
+    RunE: func(cmd *cobra.Command, args []string) error {
+        vaultRoot, err := fs.FindVaultRoot()
+        if err != nil {
+            return fmt.Errorf("not inside a vault: %v", err)
+        }
+
+        historyPath := filepath.Join(vaultRoot, ".sietch", "sync-history.json")
+        h, _ := history.LoadHistory(historyPath)
+
+        fmt.Println("Last syncs:")
+        for i, r := range h.Syncs {
+            if i >= 10 { break }
+            fmt.Printf("%s  %s  %d files  %d B  %s\n", r.Timestamp, r.PeerName, r.FilesTransferred, r.BytesTransferred, r.Status)
+        }
+        return nil
+    },
+}
+
+
 func init() {
 	rootCmd.AddCommand(syncCmd)
 
@@ -339,4 +401,7 @@ func init() {
 	syncCmd.Flags().IntP("timeout", "t", 60, "Discovery timeout in seconds (for auto-discovery)")
 	syncCmd.Flags().BoolP("force-trust", "f", false, "Automatically trust new peers without prompting")
 	syncCmd.Flags().BoolP("read-only", "r", false, "Only receive files, don't send")
+
+	// Register history subcommand
+    syncCmd.AddCommand(historyCmd)
 }
