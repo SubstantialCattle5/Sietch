@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/substantialcattle5/sietch/internal/config"
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 )
 
 // Analyze performs analysis of what would be transferred
@@ -352,12 +352,19 @@ func (st *SneakTransfer) generateManifestFilename(filePath string) string {
 
 // saveFileManifest saves a file manifest
 func (st *SneakTransfer) saveFileManifest(manifestPath string, fileManifest config.FileManifest) error {
-	// Marshal the file manifest to YAML
-	data, err := yaml.Marshal(fileManifest)
+	// Create the file
+	file, err := os.Create(manifestPath)
 	if err != nil {
-		return fmt.Errorf("failed to marshal manifest: %v", err)
+		return fmt.Errorf("failed to create manifest file: %v", err)
+	}
+	defer file.Close()
+
+	// Encode the manifest to YAML with proper indentation
+	encoder := yaml.NewEncoder(file)
+	encoder.SetIndent(2)
+	if err := encoder.Encode(fileManifest); err != nil {
+		return fmt.Errorf("failed to encode manifest: %v", err)
 	}
 
-	// Write the YAML data to file
-	return os.WriteFile(manifestPath, data, 0o644)
+	return nil
 }

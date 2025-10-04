@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/substantialcattle5/sietch/internal/config"
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 )
 
 func TestSaveFileManifest(t *testing.T) {
