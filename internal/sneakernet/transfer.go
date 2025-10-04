@@ -2,13 +2,13 @@ package sneakernet
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/substantialcattle5/sietch/internal/config"
+	"gopkg.in/yaml.v2"
 )
 
 // Analyze performs analysis of what would be transferred
@@ -350,31 +350,14 @@ func (st *SneakTransfer) generateManifestFilename(filePath string) string {
 	return safe + ".yaml"
 }
 
-// saveFileManifest saves a file manifest (placeholder implementation)
+// saveFileManifest saves a file manifest
 func (st *SneakTransfer) saveFileManifest(manifestPath string, fileManifest config.FileManifest) error {
-	// This would need to be implemented to match the existing YAML format
-	// For now, create an empty file to satisfy the interface
-	file, err := os.Create(manifestPath)
+	// Marshal the file manifest to YAML
+	data, err := yaml.Marshal(fileManifest)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to marshal manifest: %v", err)
 	}
-	defer file.Close()
 
-	// Write a placeholder YAML content
-	content := fmt.Sprintf(`file: %s
-size: %d
-mtime: %s
-chunks: []
-destination: %s
-added_at: %s
-`,
-		fileManifest.FilePath,
-		fileManifest.Size,
-		fileManifest.ModTime,
-		fileManifest.Destination,
-		fileManifest.AddedAt.Format(time.RFC3339),
-	)
-
-	_, err = io.WriteString(file, content)
-	return err
+	// Write the YAML data to file
+	return os.WriteFile(manifestPath, data, 0o644)
 }
