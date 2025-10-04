@@ -300,7 +300,10 @@ func processChunkWithRetry(chunkPath, chunkHash string, chunkRef config.ChunkRef
 					fmt.Printf("   Options: [c]ontinue with corrupted data, [s]kip chunk, [a]bort: ")
 
 					var response string
-					fmt.Scanln(&response)
+					_, err := fmt.Scanln(&response)
+					if err != nil {
+						return nil, fmt.Errorf("failed to read user input: %v", err)
+					}
 					switch strings.ToLower(strings.TrimSpace(response)) {
 					case "c", "continue":
 						fmt.Printf("   Continuing with corrupted chunk...\n")
