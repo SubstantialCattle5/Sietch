@@ -9,9 +9,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 
+	"github.com/substantialcattle5/sietch/internal/chunk"
 	"github.com/substantialcattle5/sietch/internal/compression"
 	"github.com/substantialcattle5/sietch/internal/config"
 	"github.com/substantialcattle5/sietch/internal/encryption"
@@ -83,6 +85,7 @@ func findFileManifest(vaultRoot, filePath string) (*config.FileManifest, error) 
 const (
 	force          = "force"
 	skipDecryption = "skip-decryption"
+	skipIntegrity  = "skip-integrity"
 )
 
 // getCmd represents the get command
@@ -121,6 +124,7 @@ Example:
 		// Get flags
 		force, _ := cmd.Flags().GetBool(force)
 		skipEncryption, _ := cmd.Flags().GetBool(skipDecryption)
+		skipIntegrityCheck, _ := cmd.Flags().GetBool(skipIntegrity)
 
 		fmt.Printf("Retrieving %s from vault\n", filePath)
 
@@ -171,63 +175,10 @@ Example:
 			// Get the chunk path
 			chunkPath := filepath.Join(vaultRoot, ".sietch", "chunks", chunkHash)
 
-			// Check if chunk exists
-			if _, err := os.Stat(chunkPath); os.IsNotExist(err) {
-				return fmt.Errorf("chunk %s not found", chunkHash)
-			}
-
-			// Read the chunk data
-			chunkData, err := os.ReadFile(chunkPath)
+			// Process chunk with retry logic for integrity failures
+			chunkData, err := processChunkWithRetry(chunkPath, chunkHash, chunkRef, vaultConfig, passphrase, skipEncryption, skipIntegrityCheck, i+1)
 			if err != nil {
-				return fmt.Errorf("failed to read chunk: %v", err)
-			}
-
-			// Decrypt the chunk if encryption is enabled and not skipped
-			if !skipEncryption && vaultConfig.Encryption.Type != "none" {
-				if len(chunkData) == 0 {
-					return fmt.Errorf("chunk %s is empty", chunkHash)
-				}
-
-				// Decrypt the data using the appropriate method based on passphrase protection
-				var decryptedData string
-				if vaultConfig.Encryption.PassphraseProtected {
-					decryptedData, err = encryption.DecryptDataWithPassphrase(
-						string(chunkData),
-						vaultRoot,
-						passphrase,
-					)
-				} else {
-					decryptedData, err = encryption.DecryptData(
-						string(chunkData),
-						vaultRoot,
-					)
-				}
-				if err != nil {
-					return fmt.Errorf("failed to decrypt chunk %s: %v", chunkHash, err)
-				}
-
-				// TODO: Implement chunk integrity verification
-				// if !skipEncryption && chunkRef.Hash != "" {
-				//     if util.SHA256Sum([]byte(decryptedData)) != chunkRef.Hash {
-				//         return fmt.Errorf("chunk integrity check failed")
-				//     }
-				// }
-
-				// The original data was base64-encoded before encryption. Decode back to bytes.
-				decodedBytes, err := base64.StdEncoding.DecodeString(decryptedData)
-				if err != nil {
-					return fmt.Errorf("failed to base64-decode decrypted chunk %s: %v", chunkHash, err)
-				}
-				chunkData = decodedBytes
-			}
-
-			// Decompress the chunk if it was compressed
-			if chunkRef.Compressed {
-				decompressedData, err := compression.DecompressData(chunkData, vaultConfig.Compression)
-				if err != nil {
-					return fmt.Errorf("failed to decompress chunk %s: %v", chunkHash, err)
-				}
-				chunkData = decompressedData
+				return fmt.Errorf("failed to process chunk %d: %v", i+1, err)
 			}
 
 			// Write the chunk to the output file
@@ -262,6 +213,145 @@ func init() {
 	// Add flags
 	getCmd.Flags().BoolP(force, "f", false, "Force overwrite if file exists at destination")
 	getCmd.Flags().Bool(skipDecryption, false, "Skip decryption and retrieve raw chunks (for recovery)")
+	getCmd.Flags().Bool(skipIntegrity, false, "Skip integrity verification (for recovery from corrupted vaults)")
+}
+
+// processChunkWithRetry processes a chunk with retry logic for integrity failures
+func processChunkWithRetry(chunkPath, chunkHash string, chunkRef config.ChunkRef, vaultConfig *config.VaultConfig, passphrase string, skipEncryption, skipIntegrityCheck bool, chunkIndex int) ([]byte, error) {
+	const maxRetries = 3
+
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		// Check if chunk exists
+		if _, err := os.Stat(chunkPath); os.IsNotExist(err) {
+			return nil, fmt.Errorf("chunk %s not found", chunkHash)
+		}
+
+		// Read the chunk data
+		chunkData, err := os.ReadFile(chunkPath)
+		if err != nil {
+			if attempt < maxRetries-1 {
+				fmt.Printf("Failed to read chunk %d (attempt %d/%d), retrying...\n", chunkIndex, attempt+1, maxRetries)
+				continue
+			}
+			return nil, fmt.Errorf("failed to read chunk: %v", err)
+		}
+
+		// Decrypt the chunk if encryption is enabled and not skipped
+		if !skipEncryption && vaultConfig.Encryption.Type != "none" {
+			if len(chunkData) == 0 {
+				return nil, fmt.Errorf("chunk %s is empty", chunkHash)
+			}
+
+			// Decrypt the data using the appropriate method based on passphrase protection
+			var decryptedData string
+			if vaultConfig.Encryption.PassphraseProtected {
+				decryptedData, err = encryption.DecryptDataWithPassphrase(
+					string(chunkData),
+					filepath.Dir(filepath.Dir(chunkPath)), // vaultRoot
+					passphrase,
+				)
+			} else {
+				decryptedData, err = encryption.DecryptData(
+					string(chunkData),
+					filepath.Dir(filepath.Dir(chunkPath)), // vaultRoot
+				)
+			}
+			if err != nil {
+				if attempt < maxRetries-1 {
+					fmt.Printf("Failed to decrypt chunk %d (attempt %d/%d), retrying...\n", chunkIndex, attempt+1, maxRetries)
+					continue
+				}
+				return nil, fmt.Errorf("failed to decrypt chunk %s: %v", chunkHash, err)
+			}
+
+			// Verify chunk integrity after decryption if not skipped
+			if !skipIntegrityCheck && chunkRef.Hash != "" {
+				// Create hasher using the configured algorithm
+				hasher, err := chunk.CreateHasher(vaultConfig.Chunking.HashAlgorithm)
+				if err != nil {
+					return nil, fmt.Errorf("failed to create hasher for integrity check: %v", err)
+				}
+
+				// The original data was base64-encoded before encryption. Decode back to bytes.
+				decodedBytes, err := base64.StdEncoding.DecodeString(decryptedData)
+				if err != nil {
+					return nil, fmt.Errorf("failed to base64-decode decrypted chunk %s: %v", chunkHash, err)
+				}
+
+				// Calculate hash of the decoded data
+				hasher.Write(decodedBytes)
+				computedHash := fmt.Sprintf("%x", hasher.Sum(nil))
+
+				// Verify the hash matches
+				if computedHash != chunkRef.Hash {
+					if attempt < maxRetries-1 {
+						fmt.Printf("⚠️  Chunk %d integrity check FAILED (attempt %d/%d)!\n", chunkIndex, attempt+1, maxRetries)
+						fmt.Printf("   Expected: %s\n", chunkRef.Hash)
+						fmt.Printf("   Computed: %s\n", computedHash)
+						fmt.Printf("   Retrying...\n")
+						continue
+					}
+
+					// Last attempt failed - ask user what to do
+					fmt.Printf("⚠️  CRITICAL: Chunk %d integrity check FAILED after %d attempts!\n", chunkIndex, maxRetries)
+					fmt.Printf("   Expected hash: %s\n", chunkRef.Hash)
+					fmt.Printf("   Computed hash: %s\n", computedHash)
+					fmt.Printf("   Chunk may be corrupted or tampered with.\n")
+					fmt.Printf("   Options: [c]ontinue with corrupted data, [s]kip chunk, [a]bort: ")
+
+					var response string
+					_, err := fmt.Scanln(&response)
+					if err != nil {
+						return nil, fmt.Errorf("failed to read user input: %v", err)
+					}
+					switch strings.ToLower(strings.TrimSpace(response)) {
+					case "c", "continue":
+						fmt.Printf("   Continuing with corrupted chunk...\n")
+						chunkData = decodedBytes
+					case "s", "skip":
+						fmt.Printf("   Skipping corrupted chunk...\n")
+						return []byte{}, nil // Return empty slice to indicate skipped chunk
+					case "a", "abort":
+						fallthrough
+					default:
+						return nil, fmt.Errorf("aborted due to chunk corruption")
+					}
+				} else {
+					if attempt > 0 {
+						fmt.Printf("✓ Chunk %d integrity verified (after %d retries)\n", chunkIndex, attempt+1)
+					} else {
+						fmt.Printf("✓ Chunk %d integrity verified\n", chunkIndex)
+					}
+					chunkData = decodedBytes
+				}
+			} else {
+				// No integrity check - just decode
+				decodedBytes, err := base64.StdEncoding.DecodeString(decryptedData)
+				if err != nil {
+					return nil, fmt.Errorf("failed to base64-decode decrypted chunk %s: %v", chunkHash, err)
+				}
+				chunkData = decodedBytes
+			}
+		}
+
+		// Decompress the chunk if it was compressed
+		if chunkRef.Compressed {
+			decompressedData, err := compression.DecompressData(chunkData, vaultConfig.Compression)
+			if err != nil {
+				if attempt < maxRetries-1 {
+					fmt.Printf("Failed to decompress chunk %d (attempt %d/%d), retrying...\n", chunkIndex, attempt+1, maxRetries)
+					continue
+				}
+				return nil, fmt.Errorf("failed to decompress chunk %s: %v", chunkHash, err)
+			}
+			chunkData = decompressedData
+		}
+
+		// Success - return the processed chunk data
+		return chunkData, nil
+	}
+
+	return nil, fmt.Errorf("failed to process chunk after %d attempts", maxRetries)
 }
 
 //TODO: Implement parallel chunk retrieval

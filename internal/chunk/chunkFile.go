@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/substantialcattle5/sietch/internal/compression"
 	"github.com/substantialcattle5/sietch/internal/config"
@@ -57,7 +58,7 @@ func ChunkFile(filePath string, chunkSize int64, vaultRoot string, passphrase st
 		return nil, fmt.Errorf("failed to initialize deduplication manager: %v", err)
 	}
 
-	chunkRefs, err := processFileChunks(file, chunkSize, *vaultConfig, passphrase, dedupManager)
+	chunkRefs, err := processFileChunks(file, chunkSize, *vaultConfig, passphrase, dedupManager, vaultRoot)
 	if err != nil {
 		return nil, err
 	}
@@ -70,7 +71,7 @@ func ChunkFile(filePath string, chunkSize int64, vaultRoot string, passphrase st
 	return chunkRefs, nil
 }
 
-func processFileChunks(file *os.File, chunkSize int64, vaultConfig config.VaultConfig, passphrase string, dedupManager *deduplication.Manager) ([]config.ChunkRef, error) {
+func processFileChunks(file *os.File, chunkSize int64, vaultConfig config.VaultConfig, passphrase string, dedupManager *deduplication.Manager, vaultRoot string) ([]config.ChunkRef, error) {
 	// Create a buffer for reading chunks
 	buffer := make([]byte, chunkSize)
 	chunkCount := 0
@@ -165,6 +166,11 @@ func processFileChunks(file *os.File, chunkSize int64, vaultConfig config.VaultC
 			}
 			chunkRef = updatedChunkRef
 
+			// Verify chunk integrity by reading it back
+			if err := verifyChunkIntegrity(vaultRoot, encryptedHash, []byte(encryptedData)); err != nil {
+				return nil, fmt.Errorf("chunk %d integrity verification failed: %v", chunkCount, err)
+			}
+
 			// Display chunk information using helper function
 			FormatChunkInfo(chunkCount, bytesRead, chunkHash, vaultConfig, chunkDataToProcess, deduplicated, true)
 		} else {
@@ -174,6 +180,11 @@ func processFileChunks(file *os.File, chunkSize int64, vaultConfig config.VaultC
 				return nil, fmt.Errorf("failed to process chunk %d with deduplication (unencrypted, hash: %s): %v", chunkCount, chunkHash[:HashDisplayLength], err)
 			}
 			chunkRef = updatedChunkRef
+
+			// Verify chunk integrity by reading it back
+			if err := verifyChunkIntegrity(vaultRoot, chunkHash, chunkDataToProcess); err != nil {
+				return nil, fmt.Errorf("chunk %d integrity verification failed: %v", chunkCount, err)
+			}
 
 			// Display chunk information using helper function
 			FormatChunkInfo(chunkCount, bytesRead, chunkHash, vaultConfig, chunkDataToProcess, deduplicated, false)
@@ -191,4 +202,29 @@ func processFileChunks(file *os.File, chunkSize int64, vaultConfig config.VaultC
 	fmt.Printf("Total bytes processed: %s\n", util.HumanReadableSize(totalBytes))
 
 	return chunkRefs, nil
+}
+
+// verifyChunkIntegrity reads a chunk back from storage and verifies it matches the expected data
+func verifyChunkIntegrity(vaultRoot, chunkHash string, expectedData []byte) error {
+	chunkPath := filepath.Join(fs.GetChunkDirectory(vaultRoot), chunkHash)
+
+	// Read the chunk back from storage
+	storedData, err := os.ReadFile(chunkPath)
+	if err != nil {
+		return fmt.Errorf("failed to read stored chunk %s: %v", chunkHash[:HashDisplayLength], err)
+	}
+
+	// Verify the data matches what we stored
+	if len(storedData) != len(expectedData) {
+		return fmt.Errorf("chunk %s size mismatch: expected %d bytes, got %d bytes",
+			chunkHash[:HashDisplayLength], len(expectedData), len(storedData))
+	}
+
+	for i, b := range expectedData {
+		if storedData[i] != b {
+			return fmt.Errorf("chunk %s data mismatch at byte %d", chunkHash[:HashDisplayLength], i)
+		}
+	}
+
+	return nil
 }
