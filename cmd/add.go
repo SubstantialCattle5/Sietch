@@ -4,6 +4,7 @@ Copyright © 2025 SubstantialCattle5, nilaysharan.com
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -17,6 +18,7 @@ import (
 	"github.com/substantialcattle5/sietch/internal/constants"
 	"github.com/substantialcattle5/sietch/internal/fs"
 	"github.com/substantialcattle5/sietch/internal/manifest"
+	"github.com/substantialcattle5/sietch/internal/progress"
 	"github.com/substantialcattle5/sietch/internal/ui"
 	"github.com/substantialcattle5/sietch/util"
 )
@@ -78,6 +80,10 @@ Examples:
 			tags = strings.Split(tagsFlag, ",")
 		}
 
+		// Get global flags
+		verbose, _ := cmd.Flags().GetBool("verbose")
+		quiet, _ := cmd.Flags().GetBool("quiet")
+
 		vaultRoot, err := fs.FindVaultRoot()
 		if err != nil {
 			return fmt.Errorf("not inside a vault: %v", err)
@@ -108,6 +114,16 @@ Examples:
 		if err != nil {
 			return err
 		}
+
+		// Create progress manager
+		progressMgr := progress.NewManager(progress.Options{
+			Quiet:   quiet,
+			Verbose: verbose,
+		})
+
+		// Create context with cancellation
+		ctx := context.Background()
+		ctx = progressMgr.SetupCancellation(ctx)
 
 		// Process each file pair
 		successCount := 0
@@ -176,7 +192,6 @@ Examples:
 				sizeReadable := util.HumanReadableSize(sizeInBytes)
 
 				// Display file metadata for confirmation (only for single files or when verbose)
-				verbose, _ := cmd.Flags().GetBool("verbose")
 				if len(filePairs) == 1 || verbose {
 					fmt.Printf("    %s: %s (%d bytes)\n", filepath.Base(sourceFile), sizeReadable, sizeInBytes)
 					if verbose {
@@ -201,7 +216,7 @@ Examples:
 
 				// Process the file and store chunks
 				var chunkRefs []config.ChunkRef
-				chunkRefs, err = chunk.ChunkFile(sourceFile, chunkSize, vaultRoot, passphrase)
+				chunkRefs, err = chunk.ChunkFile(ctx, sourceFile, chunkSize, vaultRoot, passphrase, progressMgr)
 
 				if err != nil {
 					errorMsg := fmt.Sprintf("✗ %s: chunking failed - %v", filepath.Base(sourceFile), err)
@@ -253,6 +268,9 @@ Examples:
 			}
 		}
 
+		// Cleanup progress manager
+		progressMgr.Cleanup()
+
 		// Enhanced summary
 		fmt.Printf("\n=== Batch Processing Summary ===\n")
 		fmt.Printf("Total files: %d\n", len(filePairs))
@@ -276,6 +294,25 @@ Examples:
 
 		if successCount > 0 {
 			fmt.Printf("\n✓ %d file(s) successfully added to vault\n", successCount)
+
+			// Show vault configuration details
+			fmt.Printf("\n📋 Vault Configuration:\n")
+			fmt.Printf("  • Encryption: %s", vaultConfig.Encryption.Type)
+			if vaultConfig.Encryption.PassphraseProtected {
+				fmt.Printf(" (passphrase protected)")
+			}
+			fmt.Println()
+
+			fmt.Printf("  • Compression: %s\n", vaultConfig.Compression)
+
+			// Calculate and show space savings if compression is used
+			if vaultConfig.Compression != "none" {
+				// TODO: Calculate actual space savings during processing
+				// For now, show compression info
+				fmt.Printf("  • Compression: %s (space savings calculated during processing)\n", vaultConfig.Compression)
+			}
+
+			fmt.Printf("  • Chunking: %s (size: %s)\n", vaultConfig.Chunking.Strategy, vaultConfig.Chunking.ChunkSize)
 		}
 
 		// Return error only if all files failed
