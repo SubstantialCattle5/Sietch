@@ -226,7 +226,6 @@ Built with ❤️ in Go by the open source community.
 Thanks to all our amazing contributors!  
 
 [![Contributors](https://contrib.rocks/image?repo=substantialcattle5/sietch)](https://github.com/substantialcattle5/sietch/graphs/contributors)
-[![Contributors](https://contrib.rocks/image?repo=MrKeiKun/sietch)](https://github.com/MrKeiKun/sietch/graphs/contributors)
 
 ## License
 
