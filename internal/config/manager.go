@@ -214,7 +214,10 @@ func (m *Manager) RebuildReferences() error {
 	fmt.Printf("Reference rebuild completed successfully. Referenced: %d, Orphaned: %d\n", len(referenced), len(orphaned))
 	return nil
 }
-
+// VaultRoot returns the root directory of the vault.
+func (m *Manager) VaultRoot() string {
+    return m.vaultRoot
+}
 // Helper function to load a file manifest
 func loadFileManifest(path string) (*FileManifest, error) {
 	// Read manifest file

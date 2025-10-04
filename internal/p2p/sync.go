@@ -21,6 +21,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/protocol"
 
 	"github.com/substantialcattle5/sietch/internal/config"
+	"github.com/substantialcattle5/sietch/internal/manifest" //golangci-lint error
 )
 
 const (
@@ -916,8 +917,38 @@ func (s *SyncService) SyncWithPeer(ctx context.Context, peerID peer.ID) (*SyncRe
 		result.BytesTransferred += int64(size)
 	}
 
-	// Step 5: Update file manifests
-	result.FileCount = len(remoteManifest.Files) - len(localManifest.Files)
+	// Step 5: Save file manifests for synced files
+	fmt.Println("Saving file manifests...")
+	savedCount := 0
+	for _, remoteFile := range remoteManifest.Files {
+		// Check if this file already exists locally
+		exists := false
+		for _, localFile := range localManifest.Files {
+			if localFile.FilePath == remoteFile.FilePath {
+				exists = true
+				break
+			}
+		}
+
+		if !exists {
+			// Create a copy of the file manifest to avoid pointer issues
+			fileManifest := remoteFile
+
+			err := manifest.StoreFileManifest(
+				s.vaultMgr.VaultRoot(),
+				fileManifest.FilePath,
+				&fileManifest,
+			)
+			if err != nil {
+				return nil, fmt.Errorf("failed to save manifest for %s: %v",
+					fileManifest.FilePath, err)
+			}
+			fmt.Printf("Saved manifest for: %s\n", fileManifest.FilePath)
+			savedCount++
+		}
+	}
+	fmt.Printf("Saved %d file manifests\n", savedCount)
+	result.FileCount = savedCount
 
 	// Step 6: Rebuild references
 	if err := s.vaultMgr.RebuildReferences(); err != nil {
