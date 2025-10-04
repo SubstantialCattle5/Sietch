@@ -3,8 +3,6 @@ package discover
 import (
 	"testing"
 
-	"github.com/libp2p/go-libp2p/core/host"
-
 	"github.com/substantialcattle5/sietch/internal/config"
 	"github.com/substantialcattle5/sietch/internal/p2p"
 )
@@ -39,6 +37,5 @@ func TestCreateSyncService_NoRSA(t *testing.T) {
 		t.Fatalf("CreateSyncService returned nil service")
 	}
 
-	// Ensure the returned value implements the expected type (host is accessible)
-	var _ host.Host = h
+	_ = h
 }
