@@ -432,3 +432,300 @@ func BenchmarkCreateVaultStructureExisting(b *testing.B) {
 		}
 	}
 }
+
+// Tests for VerifyPathAndReturnInfo
+func TestVerifyPathAndReturnInfo(t *testing.T) {
+	tests := []struct {
+		name      string
+		setupFunc func(t *testing.T) string
+		wantErr   bool
+		errMsg    string
+	}{
+		{
+			name: "valid regular file",
+			setupFunc: func(t *testing.T) string {
+				dir := testutil.TempDir(t, "verify-file")
+				return testutil.CreateTestFile(t, dir, "test.txt", "content")
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid directory",
+			setupFunc: func(t *testing.T) string {
+				return testutil.TempDir(t, "verify-dir")
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid symlink",
+			setupFunc: func(t *testing.T) string {
+				dir := testutil.TempDir(t, "verify-symlink")
+				target := testutil.CreateTestFile(t, dir, "target.txt", "content")
+				symlink := filepath.Join(dir, "link.txt")
+				if err := os.Symlink(target, symlink); err != nil {
+					t.Fatalf("Failed to create symlink: %v", err)
+				}
+				return symlink
+			},
+			wantErr: false,
+		},
+		{
+			name: "nonexistent path",
+			setupFunc: func(t *testing.T) string {
+				return "/nonexistent/path/to/file"
+			},
+			wantErr: true,
+			errMsg:  "path does not exist",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := tt.setupFunc(t)
+			info, err := VerifyPathAndReturnInfo(path)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("VerifyPathAndReturnInfo() expected error but got none")
+				}
+				if tt.errMsg != "" && err != nil {
+					if !contains(err.Error(), tt.errMsg) {
+						t.Errorf("VerifyPathAndReturnInfo() error = %v, want error containing %q", err, tt.errMsg)
+					}
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("VerifyPathAndReturnInfo() unexpected error: %v", err)
+				return
+			}
+
+			if info == nil {
+				t.Error("VerifyPathAndReturnInfo() returned nil info")
+			}
+		})
+	}
+}
+
+// Tests for CollectFilesRecursively
+func TestCollectFilesRecursively(t *testing.T) {
+	tests := []struct {
+		name          string
+		setupFunc     func(t *testing.T) string
+		expectedCount int
+		wantErr       bool
+	}{
+		{
+			name: "single regular file",
+			setupFunc: func(t *testing.T) string {
+				dir := testutil.TempDir(t, "single-file")
+				return testutil.CreateTestFile(t, dir, "file.txt", "content")
+			},
+			expectedCount: 1,
+			wantErr:       false,
+		},
+		{
+			name: "directory with multiple files",
+			setupFunc: func(t *testing.T) string {
+				dir := testutil.TempDir(t, "multi-files")
+				testutil.CreateTestFile(t, dir, "file1.txt", "content1")
+				testutil.CreateTestFile(t, dir, "file2.txt", "content2")
+				testutil.CreateTestFile(t, dir, "file3.txt", "content3")
+				return dir
+			},
+			expectedCount: 3,
+			wantErr:       false,
+		},
+		{
+			name: "directory with subdirectories",
+			setupFunc: func(t *testing.T) string {
+				dir := testutil.TempDir(t, "nested-dirs")
+				testutil.CreateTestFile(t, dir, "file1.txt", "content1")
+				testutil.CreateTestFile(t, dir, "subdir/file2.txt", "content2")
+				testutil.CreateTestFile(t, dir, "subdir/nested/file3.txt", "content3")
+				return dir
+			},
+			expectedCount: 3,
+			wantErr:       false,
+		},
+		{
+			name: "symlink to file",
+			setupFunc: func(t *testing.T) string {
+				dir := testutil.TempDir(t, "symlink-file")
+				target := testutil.CreateTestFile(t, dir, "target.txt", "content")
+				symlink := filepath.Join(dir, "link.txt")
+				if err := os.Symlink(target, symlink); err != nil {
+					t.Fatalf("Failed to create symlink: %v", err)
+				}
+				return symlink
+			},
+			expectedCount: 1,
+			wantErr:       false,
+		},
+		{
+			name: "symlink to directory",
+			setupFunc: func(t *testing.T) string {
+				dir := testutil.TempDir(t, "symlink-dir")
+				targetDir := filepath.Join(dir, "target")
+				os.MkdirAll(targetDir, 0o755)
+				testutil.CreateTestFile(t, targetDir, "file1.txt", "content1")
+				testutil.CreateTestFile(t, targetDir, "file2.txt", "content2")
+				symlink := filepath.Join(dir, "link")
+				if err := os.Symlink(targetDir, symlink); err != nil {
+					t.Fatalf("Failed to create symlink: %v", err)
+				}
+				return symlink
+			},
+			expectedCount: 2,
+			wantErr:       false,
+		},
+		{
+			name: "empty directory",
+			setupFunc: func(t *testing.T) string {
+				return testutil.TempDir(t, "empty-dir")
+			},
+			expectedCount: 0,
+			wantErr:       false,
+		},
+		{
+			name: "directory with hidden files",
+			setupFunc: func(t *testing.T) string {
+				dir := testutil.TempDir(t, "hidden-files")
+				testutil.CreateTestFile(t, dir, "visible.txt", "content")
+				testutil.CreateTestFile(t, dir, ".hidden.txt", "hidden content")
+				return dir
+			},
+			expectedCount: 2,
+			wantErr:       false,
+		},
+		{
+			name: "nonexistent path",
+			setupFunc: func(t *testing.T) string {
+				return "/nonexistent/path"
+			},
+			expectedCount: 0,
+			wantErr:       true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := tt.setupFunc(t)
+			files, err := CollectFilesRecursively(path)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("CollectFilesRecursively() expected error but got none")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("CollectFilesRecursively() unexpected error: %v", err)
+				return
+			}
+
+			if len(files) != tt.expectedCount {
+				t.Errorf("CollectFilesRecursively() got %d files, want %d", len(files), tt.expectedCount)
+			}
+
+			// Verify all returned paths are regular files
+			for _, file := range files {
+				info, err := os.Stat(file)
+				if err != nil {
+					t.Errorf("File %s does not exist: %v", file, err)
+					continue
+				}
+				if !info.Mode().IsRegular() {
+					t.Errorf("File %s is not a regular file", file)
+				}
+			}
+		})
+	}
+}
+
+func TestCollectFilesRecursivelySymlinkHandling(t *testing.T) {
+	dir := testutil.TempDir(t, "symlink-test")
+
+	// Create a directory structure with symlinks
+	targetDir := filepath.Join(dir, "target")
+	os.MkdirAll(targetDir, 0o755)
+	testutil.CreateTestFile(t, targetDir, "file1.txt", "content1")
+	testutil.CreateTestFile(t, targetDir, "file2.txt", "content2")
+
+	// Create symlink to the directory
+	symlinkDir := filepath.Join(dir, "link_to_target")
+	if err := os.Symlink(targetDir, symlinkDir); err != nil {
+		t.Fatalf("Failed to create directory symlink: %v", err)
+	}
+
+	// Create symlink to a file
+	targetFile := testutil.CreateTestFile(t, dir, "single_file.txt", "single content")
+	symlinkFile := filepath.Join(dir, "link_to_file.txt")
+	if err := os.Symlink(targetFile, symlinkFile); err != nil {
+		t.Fatalf("Failed to create file symlink: %v", err)
+	}
+
+	// Collect files from the main directory
+	files, err := CollectFilesRecursively(dir)
+	if err != nil {
+		t.Fatalf("CollectFilesRecursively() failed: %v", err)
+	}
+
+	// Should find: file1.txt, file2.txt, single_file.txt
+	// Symlinks should be followed and their targets added
+	if len(files) < 3 {
+		t.Errorf("CollectFilesRecursively() got %d files, want at least 3", len(files))
+	}
+
+	// Verify all are regular files
+	for _, file := range files {
+		info, err := os.Stat(file)
+		if err != nil {
+			t.Errorf("File %s does not exist: %v", file, err)
+			continue
+		}
+		if !info.Mode().IsRegular() {
+			t.Errorf("File %s is not a regular file", file)
+		}
+	}
+}
+
+func TestCollectFilesRecursivelyBrokenSymlink(t *testing.T) {
+	dir := testutil.TempDir(t, "broken-symlink")
+
+	// Create a broken symlink
+	brokenLink := filepath.Join(dir, "broken_link")
+	if err := os.Symlink("/nonexistent/target", brokenLink); err != nil {
+		t.Fatalf("Failed to create broken symlink: %v", err)
+	}
+
+	// Create a valid file so the directory is not empty
+	testutil.CreateTestFile(t, dir, "valid.txt", "content")
+
+	// Should not error, but should skip the broken symlink
+	files, err := CollectFilesRecursively(dir)
+	if err != nil {
+		t.Errorf("CollectFilesRecursively() with broken symlink failed: %v", err)
+	}
+
+	// Should only find the valid file
+	if len(files) != 1 {
+		t.Errorf("CollectFilesRecursively() got %d files, want 1", len(files))
+	}
+}
+
+// Helper function for string contains check
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(substr) == 0 || (len(s) > 0 && len(substr) > 0 && containsHelper(s, substr)))
+}
+
+func containsHelper(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
