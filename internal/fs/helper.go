@@ -125,7 +125,15 @@ func CollectFilesRecursively(path string) ([]string, error) {
 
 	// If it's a directory, walk through it
 	if fileInfo.IsDir() {
-		err := filepath.Walk(path, func(filePath string, info os.FileInfo, err error) error {
+		// Resolve the path if it's a symlink to ensure filepath.Walk can traverse it
+		resolvedPath := path
+		if linkInfo, err := os.Lstat(path); err == nil && linkInfo.Mode()&os.ModeSymlink != 0 {
+			if target, err := filepath.EvalSymlinks(path); err == nil {
+				resolvedPath = target
+			}
+		}
+
+		err := filepath.Walk(resolvedPath, func(filePath string, info os.FileInfo, err error) error {
 			if err != nil {
 				// Check if it's a permission error
 				if os.IsPermission(err) {
@@ -137,37 +145,7 @@ func CollectFilesRecursively(path string) ([]string, error) {
 
 			// Check if it's a symlink
 			if info.Mode()&os.ModeSymlink != 0 {
-				// Resolve symlink
-				target, err := os.Readlink(filePath)
-				if err != nil {
-					fmt.Printf("Warning: Cannot read symlink %s: %v, skipping\n", filePath, err)
-					return nil
-				}
-
-				// Make target path absolute if it's relative
-				if !filepath.IsAbs(target) {
-					target = filepath.Join(filepath.Dir(filePath), target)
-				}
-
-				// Get info about the symlink target
-				targetInfo, err := os.Stat(target)
-				if err != nil {
-					fmt.Printf("Warning: Cannot access symlink target %s -> %s: %v, skipping\n", filePath, target, err)
-					return nil
-				}
-
-				// If target is a regular file, add it
-				if targetInfo.Mode().IsRegular() {
-					files = append(files, target)
-				} else if targetInfo.IsDir() {
-					// If target is a directory, recursively collect files from it
-					dirFiles, err := CollectFilesRecursively(target)
-					if err != nil {
-						fmt.Printf("Warning: Error collecting files from symlinked directory %s: %v, skipping\n", target, err)
-						return nil
-					}
-					files = append(files, dirFiles...)
-				}
+				// Skip symlinks - filepath.Walk will follow them and process the target
 				return nil
 			}
 
