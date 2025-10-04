@@ -88,6 +88,9 @@ func shortHelp(cmd *cobra.Command) {
 		
 	# AES with custom scrypt parameters
 	sietch init --key-type aes --passphrase --use-scrypt --scrypt-n 32768 --scrypt-r 8 --scrypt-p 1
+
+	# ChaCha20 encryption with passphrase
+	sietch init --key-type chacha20 --passphrase
   `)
 }
 
@@ -138,7 +141,7 @@ func init() {
 	initCmd.Flags().StringVar(&vaultPath, "path", ".", "Path to create the vault")
 
 	// Encryption vars
-	initCmd.Flags().StringVar(&keyType, "key-type", "aes", "Type of encryption key (aes, gpg, none)")
+	initCmd.Flags().StringVar(&keyType, "key-type", "aes", "Type of encryption key (aes, chacha20, gpg, none)")
 	initCmd.Flags().BoolVar(&usePassphrase, "passphrase", false, "Protect key with passphrase")
 	initCmd.Flags().StringVar(&keyFile, "key-file", "", "Path to key file (for importing an existing key)")
 	initCmd.Flags().StringVar(&passphraseValue, "passphrase-value", "", "Passphrase for encryption (NOT RECOMMENDED: passphrase will be visible in command history)")
@@ -272,14 +275,15 @@ func runInit(cmd *cobra.Command) error {
 	// Generate vault ID
 	vaultID := uuid.New().String()
 
-	// Create the key path for storing the key file (only for AES encryption)
+	// Create the key path for storing the key file (for AES and ChaCha20 encryption)
 	var keyPath string
-	if keyType == constants.EncryptionTypeAES {
+	if keyType == constants.EncryptionTypeAES || keyType == constants.EncryptionTypeChaCha20 {
 		keyPath = filepath.Join(absVaultPath, ".sietch", "keys", "secret.key")
 	}
 
 	// Write the key to file if it exists
-	if keyType == constants.EncryptionTypeAES && keyConfig != nil && keyConfig.AESConfig != nil && keyConfig.AESConfig.Key != "" {
+	if (keyType == constants.EncryptionTypeAES || keyType == constants.EncryptionTypeChaCha20) && keyConfig != nil {
+
 		// Decode the base64-encoded key
 		keyMaterial, err := base64.StdEncoding.DecodeString(keyConfig.AESConfig.Key)
 		if err != nil {
@@ -399,6 +403,23 @@ func handleInteractiveMode() (*config.VaultConfig, error) {
 		// Handle key file settings
 		if vaultConfig.Encryption.KeyFile {
 			keyFile = vaultConfig.Encryption.KeyFilePath
+		}
+	}
+
+	// Handle ChaCha20-specific encryption configuration
+	if keyType == constants.EncryptionTypeChaCha20 && vaultConfig.Encryption.ChaChaConfig != nil {
+		// ChaCha20 uses scrypt by default, but we can set the parameters if specified
+		if vaultConfig.Encryption.ChaChaConfig.KDF == constants.KDFScrypt {
+			useScrypt = true
+			scryptN = vaultConfig.Encryption.ChaChaConfig.ScryptN
+			scryptR = vaultConfig.Encryption.ChaChaConfig.ScryptR
+			scryptP = vaultConfig.Encryption.ChaChaConfig.ScryptP
+		} else {
+			// Default to scrypt for ChaCha20
+			useScrypt = true
+			scryptN = constants.DefaultScryptN
+			scryptR = constants.DefaultScryptR
+			scryptP = constants.DefaultScryptP
 		}
 	}
 

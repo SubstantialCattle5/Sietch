@@ -12,6 +12,7 @@ import (
 	"io"
 	"os"
 
+	"golang.org/x/crypto/chacha20poly1305"
 	"golang.org/x/crypto/pbkdf2"
 	"golang.org/x/crypto/scrypt"
 
@@ -311,29 +312,66 @@ func loadEncryptionKeyWithPassphrase(keyPath string, passphrase string, encConfi
 		return nil, fmt.Errorf("passphrase required for encrypted vault but not provided")
 	}
 
-	// Ensure AESConfig exists
-	if encConfig.AESConfig == nil {
-		return nil, fmt.Errorf("missing AES configuration for passphrase-protected key")
+	// Determine key size based on encryption type
+	var keySize int
+	switch encConfig.Type {
+	case constants.EncryptionTypeAES:
+		keySize = 32 // AES-256
+	case constants.EncryptionTypeChaCha20:
+		keySize = chacha20poly1305.KeySize // 32 bytes for ChaCha20
+	default:
+		return nil, fmt.Errorf("unsupported encryption type for passphrase protection: %s", encConfig.Type)
 	}
 
-	// Get salt from config
-	salt, err := base64.StdEncoding.DecodeString(encConfig.AESConfig.Salt)
+	// Get config and salt based on encryption type
+	var salt string
+	var kdf string
+	var scryptN, scryptR, scryptP, pbkdf2I int
+	var keyCheck string
+
+	switch encConfig.Type {
+	case constants.EncryptionTypeAES:
+		if encConfig.AESConfig == nil {
+			return nil, fmt.Errorf("missing AES configuration for passphrase-protected key")
+		}
+		salt = encConfig.AESConfig.Salt
+		kdf = encConfig.AESConfig.KDF
+		scryptN = encConfig.AESConfig.ScryptN
+		scryptR = encConfig.AESConfig.ScryptR
+		scryptP = encConfig.AESConfig.ScryptP
+		pbkdf2I = encConfig.AESConfig.PBKDF2I
+		keyCheck = encConfig.AESConfig.KeyCheck
+	case constants.EncryptionTypeChaCha20:
+		if encConfig.ChaChaConfig == nil {
+			return nil, fmt.Errorf("missing ChaCha20 configuration for passphrase-protected key")
+		}
+		salt = encConfig.ChaChaConfig.Salt
+		kdf = encConfig.ChaChaConfig.KDF
+		scryptN = encConfig.ChaChaConfig.ScryptN
+		scryptR = encConfig.ChaChaConfig.ScryptR
+		scryptP = encConfig.ChaChaConfig.ScryptP
+		pbkdf2I = encConfig.ChaChaConfig.PBKDF2I
+		keyCheck = encConfig.ChaChaConfig.KeyCheck
+	}
+
+	// Decode salt
+	saltBytes, err := base64.StdEncoding.DecodeString(salt)
 	if err != nil {
 		return nil, fmt.Errorf("error decoding salt: %w", err)
 	}
 
 	// Derive key using appropriate KDF
 	var derivedKey []byte
-	switch encConfig.AESConfig.KDF {
+	switch kdf {
 	case "scrypt":
 		// Use scrypt KDF
 		derivedKey, err = scrypt.Key(
 			[]byte(passphrase),
-			salt,
-			encConfig.AESConfig.ScryptN,
-			encConfig.AESConfig.ScryptR,
-			encConfig.AESConfig.ScryptP,
-			32, // 32 bytes for AES-256
+			saltBytes,
+			scryptN,
+			scryptR,
+			scryptP,
+			keySize,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("error deriving key with scrypt: %w", err)
@@ -342,24 +380,32 @@ func loadEncryptionKeyWithPassphrase(keyPath string, passphrase string, encConfi
 		// Use PBKDF2 KDF
 		derivedKey = pbkdf2.Key(
 			[]byte(passphrase),
-			salt,
-			encConfig.AESConfig.PBKDF2I,
-			32, // 32 bytes for AES-256
+			saltBytes,
+			pbkdf2I,
+			keySize,
 			sha256.New,
 		)
 	default:
-		return nil, fmt.Errorf("unsupported KDF algorithm: %s", encConfig.AESConfig.KDF)
+		return nil, fmt.Errorf("unsupported KDF algorithm: %s", kdf)
 	}
 
 	// Verify the key using the key check value if available
-	if encConfig.AESConfig.KeyCheck != "" {
-		if !verifyKeyCheck(derivedKey, encConfig.AESConfig.KeyCheck) {
+	if keyCheck != "" {
+		if !verifyKeyCheck(derivedKey, keyCheck) {
 			return nil, fmt.Errorf("incorrect passphrase: key verification failed")
 		}
 	}
 
 	// Decrypt the encryption key with the derived key
-	decryptedKey, err := decryptKeyWithDerivedKey(encryptedKey, derivedKey, encConfig.AESConfig)
+	var decryptedKey []byte
+	switch encConfig.Type {
+	case constants.EncryptionTypeAES:
+		decryptedKey, err = decryptKeyWithDerivedKey(encryptedKey, derivedKey, encConfig.AESConfig)
+	case constants.EncryptionTypeChaCha20:
+		decryptedKey, err = decryptKeyWithDerivedKeyChaCha20(encryptedKey, derivedKey, encConfig.ChaChaConfig)
+	default:
+		return nil, fmt.Errorf("unsupported encryption type: %s", encConfig.Type)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to decrypt key: %w", err)
 	}
@@ -374,8 +420,19 @@ func verifyKeyCheck(derivedKey []byte, keyCheck string) bool {
 		return false
 	}
 
-	// Create cipher block
-	block, err := aes.NewCipher(derivedKey)
+	// Try ChaCha20-Poly1305 first (since it's more modern)
+	if aead, err := chacha20poly1305.New(derivedKey); err == nil {
+		nonceSize := aead.NonceSize()
+		if len(keyCheckData) >= nonceSize {
+			nonce, ciphertext := keyCheckData[:nonceSize], keyCheckData[nonceSize:]
+			if plaintext, err := aead.Open(nil, nonce, ciphertext, nil); err == nil {
+				return string(plaintext) == constants.KeyValidationString
+			}
+		}
+	}
+
+	// Fall back to AES-GCM for backward compatibility
+	block, err := aes.NewCipher(derivedKey[:32]) // Use first 32 bytes for AES
 	if err != nil {
 		return false
 	}
@@ -400,7 +457,7 @@ func verifyKeyCheck(derivedKey []byte, keyCheck string) bool {
 	}
 
 	// Check if decrypted value matches expected validation string
-	return string(plaintext) == "sietch-key-validation"
+	return string(plaintext) == constants.KeyValidationString
 }
 
 // decryptKeyWithDerivedKey decrypts the encryption key using the derived key
@@ -464,4 +521,29 @@ func decryptKeyWithDerivedKey(encryptedKey, derivedKey []byte, aesConfig *config
 	}
 
 	return nil, fmt.Errorf("unsupported encryption mode: %s", mode)
+}
+
+// decryptKeyWithDerivedKeyChaCha20 decrypts the key using ChaCha20
+func decryptKeyWithDerivedKeyChaCha20(encryptedKey, derivedKey []byte, chachaConfig *config.ChaChaConfig) ([]byte, error) {
+	// Create ChaCha20-Poly1305 AEAD cipher
+	aead, err := chacha20poly1305.New(derivedKey)
+	if err != nil {
+		return nil, fmt.Errorf("error creating ChaCha20-Poly1305 cipher: %w", err)
+	}
+
+	// Extract nonce
+	nonceSize := aead.NonceSize()
+	if len(encryptedKey) < nonceSize {
+		return nil, fmt.Errorf("encrypted key too short to contain nonce")
+	}
+
+	nonce, ciphertext := encryptedKey[:nonceSize], encryptedKey[nonceSize:]
+
+	// Decrypt
+	plaintext, err := aead.Open(nil, nonce, ciphertext, nil)
+	if err != nil {
+		return nil, fmt.Errorf("error decrypting key (incorrect passphrase?): %w", err)
+	}
+
+	return plaintext, nil
 }
