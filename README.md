@@ -33,16 +33,22 @@ sietch init --name dune --key-type aes        # AES-256-GCM encryption
 sietch init --name dune --key-type chacha20   # ChaCha20-Poly1305 encryption
 ```
 
-**Add files**
+**Add files, directories, and symlinks**
 ```bash
 # Single file
 sietch add ./secrets/thumper-plans.pdf documents/
 
+# Entire directory (recursive)
+sietch add ~/photos vault/photos/
+
 # Multiple files with individual destinations
 sietch add file1.txt dest1/ file2.txt dest2/
 
-# Multiple files to single destination
-sietch add ~/photos/img1.jpg ~/photos/img2.jpg vault/photos/
+# Multiple sources to single destination
+sietch add ~/photos/img1.jpg ~/docs/ vault/backup/
+
+# Symlinks (follows and adds target content)
+sietch add ~/link-to-file.txt vault/files/
 ```
 
 **Sync over LAN**
@@ -63,6 +69,8 @@ sietch get thumper-plans.pdf ./retrieved/
 | -------------------- | --------------------------------------------------------------------- |
 | **AES256/GPG**       | Files are chunked and encrypted with strong symmetric/asymmetric keys |
 | **ChaCha20**         | Modern authenticated encryption with ChaCha20-Poly1305 AEAD           |
+| **Directory Support**| Recursively add entire directories while preserving structure         |
+| **Symlink Handling** | Automatically follows symlinks and stores target content              |
 | **Offline Sync**     | Rsync-style syncing over TCP or LibP2P                                |
 | **Gossip Discovery** | Lightweight peer discovery protocol for LAN environments              |
 | **CLI First UX**     | Fast, minimal CLI to manage vaults and syncs                          |
@@ -72,6 +80,13 @@ sietch get thumper-plans.pdf ./retrieved/
 ### Chunking & Deduplication
 * Files are split into configurable chunks (default: 4MB)
 * Identical chunks across files are deduplicated to save space
+
+### Directory & Symlink Handling
+* **Directories**: Recursively processes all files while preserving directory structure
+* **Symlinks to files**: Follows the symlink and stores the target file content
+* **Symlinks to directories**: Recursively processes all files in the target directory
+* **Hidden files**: Included automatically (files starting with `.`)
+* **Nested structures**: Full directory hierarchy is maintained in the vault
 
 ### Encryption
 Each chunk is encrypted before storage using:
