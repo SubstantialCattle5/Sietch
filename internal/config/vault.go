@@ -166,6 +166,7 @@ type ChunkRef struct {
 	Hash            string `yaml:"hash"`                       // Hash of chunk content (pre-encryption)
 	EncryptedHash   string `yaml:"encrypted_hash,omitempty"`   // Hash of encrypted chunk (filename in storage)
 	Size            int64  `yaml:"size"`                       // Size of plaintext chunk
+	CompressedSize  int64  `yaml:"compressed_size,omitempty"`  // Size after compression but before encryption
 	EncryptedSize   int64  `yaml:"encrypted_size,omitempty"`   // Size after encryption
 	Index           int    `yaml:"index"`                      // Position in the file
 	Deduplicated    bool   `yaml:"deduplicated,omitempty"`     // Whether this chunk was deduplicated
