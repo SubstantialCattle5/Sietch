@@ -1,0 +1,21 @@
+{
+  "name": "Code Vault",
+  "description": "Optimized for code repositories and build artifacts with fingerprint deduplication, fast hashing, and moderate chunk sizes",
+  "version": "1.0.0",
+  "author": "Sietch Team",
+  "tags": ["code", "source", "repository", "artifacts"],
+  "config": {
+    "chunking_strategy": "fixed",
+    "chunk_size": "4MB",
+    "hash_algorithm": "sha256",
+    "compression": "gzip",
+    "sync_mode": "manual",
+    "enable_dedup": true,
+    "dedup_strategy": "content",
+    "dedup_min_size": "256KB",
+    "dedup_max_size": "16MB",
+    "dedup_gc_threshold": 2000,
+    "dedup_index_enabled": true,
+    "dedup_cross_file": true
+  }
+}
