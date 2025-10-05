@@ -5,7 +5,7 @@
 Sietch Vault uses **content-defined chunking** and **cryptographic deduplication** to minimize redundant data storage.  
 Instead of storing an entire file whenever it changes, Sietch breaks each file into small, fixed- or variable-sized chunks (default: 4 MB), computes unique hashes for each chunk, and only stores chunks that haven't been stored before.
 
-This makes syncing and storage highly efficient — identical data across files, folders, or even vaults are stored only once, reducing disk space and sync time.
+This makes syncing and storage highly efficient i.e identical data across files, folders, or even vaults are stored only once, reducing disk space and sync time.
 
 ---
 
@@ -56,7 +56,7 @@ By separating these two, Sietch maintains **efficient deduplication** while ensu
 
 ---
 
-## Migration Guide — Enabling Dedup on an Existing Vault
+## Migration Guide - Enabling Dedup on an Existing Vault
 
 If you created a vault before deduplication was enabled, follow this step-by-step process to migrate safely.
 
@@ -133,7 +133,7 @@ Chunk size directly affects both storage efficiency and CPU performance:
 ## Best Practices
 
 - Run `sietch dedup stats` regularly to monitor chunk reuse and storage savings.
-- Avoid changing chunk size after initial vault creation — this can break dedup references.
+- Avoid changing chunk size after initial vault creation as this can break dedup references.
 - Use `sietch dedup optimize` monthly to defragment storage.
 - Keep your manifests backed up; they're critical for mapping files to chunks.
 - Use `--dry-run` with dedup operations before running them in production.
@@ -175,7 +175,7 @@ Optimization Complete: OK
 
 ## Future Improvements (Planned)
 
-- **Adaptive Chunking** — variable chunk sizes based on content entropy.
-- **Cross-Vault Dedup** — share dedup indices securely across multiple vaults.
-- **Dedup Metrics API** — expose storage savings via REST/CLI metrics.
+- **Adaptive Chunking** --> variable chunk sizes based on content entropy.
+- **Cross-Vault Dedup** --> share dedup indices securely across multiple vaults.
+- **Dedup Metrics API** --> expose storage savings via REST/CLI metrics.
 ```
