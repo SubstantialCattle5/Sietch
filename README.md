@@ -225,9 +225,10 @@ Built with ❤️ in Go by the open source community.
 
 ## Contributors
 
-Thanks to all our amazing contributors!  
+Thanks to all our amazing contributors!
 
-[![Contributors](https://contrib.rocks/image?repo=substantialcattle5/sietch)](https://github.com/substantialcattle5/sietch/graphs/contributors)
+<!-- readme: contributors -start -->
+<!-- readme: contributors -end -->
 
 ## License
 
