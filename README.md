@@ -63,7 +63,7 @@ sietch get thumper-plans.pdf ./retrieved/
 ### Chunking & Deduplication
 * Files are split into configurable chunks (default: 4MB)
 * Identical chunks across files are deduplicated to save space
-* Please Refer [this](docs/deduplication.md) documentation to understand how Deduplication works.
+* Refer [this](DEDUPLICATION.md) documentation to understand how Deduplication works.
 
 ### Encryption
 Each chunk is encrypted before storage using:
