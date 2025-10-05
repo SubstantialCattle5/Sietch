@@ -6,6 +6,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -59,6 +60,16 @@ Examples:
 
 		// Parse file pairs from arguments
 		filePairs, err := parseFileArguments(args)
+		if err != nil {
+			return err
+		}
+
+		// Get recursive and includeHidden flags
+		recursive, _ := cmd.Flags().GetBool("recursive")
+		includeHidden, _ := cmd.Flags().GetBool("include-hidden")
+
+		// Expand directories if needed
+		filePairs, err = expandDirectories(filePairs, recursive, includeHidden)
 		if err != nil {
 			return err
 		}
@@ -138,10 +149,56 @@ Examples:
 				fmt.Printf("Processing: %s\n", pair.Source)
 			}
 
-			// Check if file exists and that it is not a directory or symlink
-			fileInfo, err := fs.VerifyFileAndReturnFileInfo(pair.Source)
+			// Determine path type and handle accordingly
+			fileInfo, pathType, err := fs.GetPathInfo(pair.Source)
 			if err != nil {
 				errorMsg := fmt.Sprintf("✗ %s: %v", filepath.Base(pair.Source), err)
+				fmt.Println(errorMsg)
+				failedFiles = append(failedFiles, errorMsg)
+				continue
+			}
+
+			// Handle different path types
+			var actualSourcePath string
+			switch pathType {
+			case fs.PathTypeFile:
+				// Regular file - use as is
+				actualSourcePath = pair.Source
+
+			case fs.PathTypeSymlink:
+				// Resolve symlink and verify target is a regular file
+				targetPath, targetInfo, targetType, err := fs.ResolveSymlink(pair.Source)
+				if err != nil {
+					errorMsg := fmt.Sprintf("✗ %s: %v", filepath.Base(pair.Source), err)
+					fmt.Println(errorMsg)
+					failedFiles = append(failedFiles, errorMsg)
+					continue
+				}
+
+				if targetType != fs.PathTypeFile {
+					errorMsg := fmt.Sprintf("✗ %s: symlink target is not a regular file", filepath.Base(pair.Source))
+					fmt.Println(errorMsg)
+					failedFiles = append(failedFiles, errorMsg)
+					continue
+				}
+
+				// Use the resolved target path for processing
+				actualSourcePath = targetPath
+				fileInfo = targetInfo
+
+				if verbose {
+					fmt.Printf("  Resolved symlink: %s → %s\n", pair.Source, targetPath)
+				}
+
+			case fs.PathTypeDir:
+				// Directories should have been expanded already
+				errorMsg := fmt.Sprintf("✗ %s: unexpected directory in processing loop", filepath.Base(pair.Source))
+				fmt.Println(errorMsg)
+				failedFiles = append(failedFiles, errorMsg)
+				continue
+
+			default:
+				errorMsg := fmt.Sprintf("✗ %s: unsupported file type", filepath.Base(pair.Source))
 				fmt.Println(errorMsg)
 				failedFiles = append(failedFiles, errorMsg)
 				continue
@@ -163,7 +220,7 @@ Examples:
 
 			// Process the file and store chunks - using the appropriate chunking function
 			var chunkRefs []config.ChunkRef
-			chunkRefs, err = chunk.ChunkFile(ctx, pair.Source, chunkSize, vaultRoot, passphrase, progressMgr)
+			chunkRefs, err = chunk.ChunkFile(ctx, actualSourcePath, chunkSize, vaultRoot, passphrase, progressMgr)
 
 			if err != nil {
 				errorMsg := fmt.Sprintf("✗ %s: chunking failed - %v", filepath.Base(pair.Source), err)
@@ -357,6 +414,80 @@ func parseFileArguments(args []string) ([]FilePair, error) {
 	return pairs, nil
 }
 
+// expandDirectories expands directories into file pairs if recursive flag is set
+func expandDirectories(pairs []FilePair, recursive bool, includeHidden bool) ([]FilePair, error) {
+	var expandedPairs []FilePair
+
+	for _, pair := range pairs {
+		// Get path info to determine type
+		fileInfo, pathType, err := fs.GetPathInfo(pair.Source)
+		if err != nil {
+			return nil, err
+		}
+
+		switch pathType {
+		case fs.PathTypeFile:
+			// Regular file - add as is
+			expandedPairs = append(expandedPairs, pair)
+
+		case fs.PathTypeSymlink:
+			// Symlink - will be handled in processing loop, add as is
+			expandedPairs = append(expandedPairs, pair)
+
+		case fs.PathTypeDir:
+			// Directory - expand if recursive, otherwise error
+			if !recursive {
+				return nil, fmt.Errorf("'%s' is a directory. Use --recursive flag to add directories", pair.Source)
+			}
+
+			// Walk the directory tree
+			err := filepath.WalkDir(pair.Source, func(path string, d os.DirEntry, err error) error {
+				if err != nil {
+					return err
+				}
+
+				// Skip hidden files/directories if includeHidden is false
+				if fs.ShouldSkipHidden(d.Name(), includeHidden) {
+					if d.IsDir() {
+						return filepath.SkipDir
+					}
+					return nil
+				}
+
+				// Only add regular files and symlinks
+				if !d.IsDir() {
+					// Compute relative path from source directory
+					relPath, err := filepath.Rel(pair.Source, path)
+					if err != nil {
+						return fmt.Errorf("failed to compute relative path: %v", err)
+					}
+
+					// Preserve directory structure in destination
+					destPath := filepath.Join(pair.Destination, relPath)
+
+					expandedPairs = append(expandedPairs, FilePair{
+						Source:      path,
+						Destination: destPath,
+					})
+				}
+
+				return nil
+			})
+
+			if err != nil {
+				return nil, fmt.Errorf("error walking directory '%s': %v", pair.Source, err)
+			}
+
+		default:
+			return nil, fmt.Errorf("'%s' is not a regular file, directory, or symlink", pair.Source)
+		}
+
+		_ = fileInfo // fileInfo might be used for verbose output later
+	}
+
+	return expandedPairs, nil
+}
+
 func init() {
 	rootCmd.AddCommand(addCmd)
 
@@ -368,6 +499,5 @@ func init() {
 	addCmd.Flags().BoolP("include-hidden", "H", false, "Include hidden files and directories")
 }
 
-//TODO: Add support for directories and symlinks
 //TODO: Need to check how symlinks will be handled
 //TODO: Interactive mode with real time progress indicators
