@@ -178,4 +178,3 @@ Optimization Complete: OK
 - **Adaptive Chunking** --> variable chunk sizes based on content entropy.
 - **Cross-Vault Dedup** --> share dedup indices securely across multiple vaults.
 - **Dedup Metrics API** --> expose storage savings via REST/CLI metrics.
-```
