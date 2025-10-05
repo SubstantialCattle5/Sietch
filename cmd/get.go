@@ -15,6 +15,7 @@ import (
 
 	"github.com/substantialcattle5/sietch/internal/compression"
 	"github.com/substantialcattle5/sietch/internal/config"
+	"github.com/substantialcattle5/sietch/internal/deduplication"
 	"github.com/substantialcattle5/sietch/internal/encryption"
 	"github.com/substantialcattle5/sietch/internal/fs"
 	"github.com/substantialcattle5/sietch/internal/progress"
@@ -163,6 +164,12 @@ Example:
 			return fmt.Errorf("failed to get passphrase: %v", err)
 		}
 
+		// Initialize deduplication manager
+		dedupManager, err := deduplication.NewManager(vaultRoot, vaultConfig.Deduplication)
+		if err != nil {
+			return fmt.Errorf("failed to initialize deduplication manager: %v", err)
+		}
+
 		// Create progress manager
 		progressMgr := progress.NewManager(progress.Options{
 			Quiet:   quiet,
@@ -204,18 +211,11 @@ Example:
 				chunkHash = chunkRef.EncryptedHash
 			}
 
-			// Get the chunk path
-			chunkPath := filepath.Join(vaultRoot, ".sietch", "chunks", chunkHash)
-
-			// Check if chunk exists
-			if _, err := os.Stat(chunkPath); os.IsNotExist(err) {
-				return fmt.Errorf("chunk %s not found", chunkHash)
-			}
-
-			// Read the chunk data
-			chunkData, err := os.ReadFile(chunkPath)
+			// Read the chunk data using deduplication manager
+			// This properly resolves chunks through the deduplication index
+			chunkData, err := dedupManager.GetChunk(chunkHash)
 			if err != nil {
-				return fmt.Errorf("failed to read chunk: %v", err)
+				return fmt.Errorf("failed to read chunk %s: %v", chunkHash, err)
 			}
 
 			// Decrypt the chunk if encryption is enabled and not skipped
