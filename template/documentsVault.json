@@ -1,0 +1,21 @@
+{
+  "name": "Documents Vault",
+  "description": "Optimized for Office documents and PDFs with high compression, content deduplication, and indexing enabled",
+  "version": "1.0.0",
+  "author": "Sietch Team",
+  "tags": ["documents", "office", "pdf", "text"],
+  "config": {
+    "chunking_strategy": "fixed",
+    "chunk_size": "2MB",
+    "hash_algorithm": "sha256",
+    "compression": "gzip",
+    "sync_mode": "manual",
+    "enable_dedup": true,
+    "dedup_strategy": "content",
+    "dedup_min_size": "512KB",
+    "dedup_max_size": "32MB",
+    "dedup_gc_threshold": 1500,
+    "dedup_index_enabled": true,
+    "dedup_cross_file": true
+  }
+}
