@@ -63,19 +63,19 @@ func GetPassphraseForVault(cmd *cobra.Command, vaultConfig *config.VaultConfig) 
 
 		if usePromptUI {
 			// Use promptui for interactive sessions (better UX)
-		passphrasePrompt := promptui.Prompt{
-			Label: "Enter encryption passphrase",
-			Mask:  '*',
-			Validate: func(input string) error {
-				result := passphrasevalidation.ValidateHybrid(input)
-				if !result.Valid || len(result.Warnings) > 0 {
-					return fmt.Errorf("%s", passphrasevalidation.GetHybridErrorMessage(result))
-				}
-				return nil
-			},
-		}
+			passphrasePrompt := promptui.Prompt{
+				Label: "Enter encryption passphrase",
+				Mask:  '*',
+				Validate: func(input string) error {
+					result := passphrasevalidation.ValidateHybrid(input)
+					if !result.Valid || len(result.Warnings) > 0 {
+						return fmt.Errorf("%s", passphrasevalidation.GetHybridErrorMessage(result))
+					}
+					return nil
+				},
+			}
 
-		passphrase, err = passphrasePrompt.Run()
+			passphrase, err = passphrasePrompt.Run()
 			if err != nil {
 				return "", fmt.Errorf("failed to get passphrase: %w", err)
 			}

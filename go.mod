@@ -7,6 +7,7 @@ toolchain go1.24.6
 require (
 	github.com/klauspost/compress v1.18.0
 	github.com/manifoldco/promptui v0.9.0
+	github.com/nbutton23/zxcvbn-go v0.0.0-20210217022336-fa2cb2858354
 	github.com/schollz/progressbar/v3 v3.18.0
 	github.com/zeebo/blake3 v0.2.4
 	golang.org/x/crypto v0.42.0
@@ -65,7 +66,6 @@ require (
 	github.com/multiformats/go-multistream v0.6.0 // indirect
 	github.com/multiformats/go-varint v0.0.7 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
-	github.com/nbutton23/zxcvbn-go v0.0.0-20210217022336-fa2cb2858354 // indirect
 	github.com/onsi/ginkgo/v2 v2.22.2 // indirect
 	github.com/opencontainers/runtime-spec v1.2.0 // indirect
 	github.com/pbnjay/memory v0.0.0-20210728143218-7b4eea64cf58 // indirect
