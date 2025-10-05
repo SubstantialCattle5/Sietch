@@ -238,3 +238,10 @@ jobs:
           git diff
           exit 1
         fi
+
+  ai-moderator:
+    runs-on: ubuntu-latest
+    needs: [test]
+    steps:
+    - name: AI Issue and Comment Moderator
+      uses: github/ai-moderator@v1.1.2
