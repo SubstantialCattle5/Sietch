@@ -252,6 +252,13 @@ Thanks to all our amazing contributors!
                     <sub><b>Abhinav Garg</b></sub>
                 </a>
             </td>
+            <td align="center">
+                <a href="https://github.com/anuja12mishra">
+                    <img src="https://avatars.githubusercontent.com/u/109236275?v=4" width="100;" alt="anuja12mishra"/>
+                    <br />
+                    <sub><b>Anuja Mishra</b></sub>
+                </a>
+            </td>
 		</tr>
 	<tbody>
 </table>
