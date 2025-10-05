@@ -64,6 +64,7 @@ type SyncResult struct {
 	ChunksDeduplicated int
 	BytesTransferred   int64
 	Duration           time.Duration
+	FileListWithSizes           []FileInfo
 }
 
 // NewSyncService creates a new sync service
@@ -850,10 +851,31 @@ func (s *SyncService) SyncWithPeer(ctx context.Context, peerID peer.ID) (*SyncRe
 	fmt.Printf("Starting key verification with peer %s...\n", peerID.String())
 	trusted, err := s.VerifyAndExchangeKeys(timeoutCtx, peerID)
 	if err != nil {
+		appendSyncHistory(SyncHistoryEntry{
+			ID:        fmt.Sprintf("%d", time.Now().UnixNano()),
+			Timestamp: time.Now().UTC().Format(time.RFC3339),
+			PeerID:    peerID.String(),
+			PeerName:  s.trustedPeers[peerID].Name, // may need safe-check if nil
+			Status:    "failed",
+			Error:     fmt.Sprintf("Key exchange failed: %v", err),
+			Files: result.FileListWithSizes,
+    	})
+
 		return nil, fmt.Errorf("key exchange failed: %w", err)
 	}
 
 	if !trusted {
+		historyEntry := SyncHistoryEntry{
+			ID:        fmt.Sprintf("%d", time.Now().UnixNano()),
+			Timestamp: time.Now().UTC().Format(time.RFC3339),
+			PeerID:    peerID.String(),
+			PeerName:  "", // trusted peer not found
+			Status:    "failed",
+			Error:     fmt.Sprintf("peer %s is not trusted", peerID.String()),
+			Files: result.FileListWithSizes,
+		}
+		_ = appendSyncHistory(historyEntry)
+
 		return nil, fmt.Errorf("peer %s is not trusted", peerID.String())
 	}
 	fmt.Printf("Peer %s is trusted, proceeding with sync\n", peerID.String())
@@ -862,13 +884,48 @@ func (s *SyncService) SyncWithPeer(ctx context.Context, peerID peer.ID) (*SyncRe
 	fmt.Printf("Retrieving manifest from peer %s...\n", peerID.String())
 	remoteManifest, err := s.getRemoteManifest(timeoutCtx, peerID)
 	if err != nil {
+		historyEntry := SyncHistoryEntry{
+			ID:        fmt.Sprintf("%d", time.Now().UnixNano()),
+			Timestamp: time.Now().UTC().Format(time.RFC3339),
+			PeerID:    peerID.String(),
+			PeerName:  s.trustedPeers[peerID].Name,
+			Status:    "failed",
+			Error:     fmt.Sprintf("failed to get remote manifest: %v", err),
+			Files: result.FileListWithSizes,
+		}
+		_ = appendSyncHistory(historyEntry)
+
 		return nil, fmt.Errorf("failed to get remote manifest: %v", err)
 	}
 	fmt.Printf("Retrieved manifest from peer with %d files\n", len(remoteManifest.Files))
 
+	// populate FileListWithSizes for history
+	result.FileListWithSizes = []FileInfo{}
+	for _, f := range remoteManifest.Files {
+		size := int64(0)
+		for _, c := range f.Chunks {
+			size += c.Size
+		}
+		result.FileListWithSizes = append(result.FileListWithSizes, FileInfo{
+			Path: f.FilePath,
+			Size: size,
+		})
+	}
+
 	// Step 2: Get local manifest
 	localManifest, err := s.vaultMgr.GetManifest()
 	if err != nil {
+		historyEntry := SyncHistoryEntry{
+			ID:        fmt.Sprintf("%d", time.Now().UnixNano()),
+			Timestamp: time.Now().UTC().Format(time.RFC3339),
+			PeerID:    peerID.String(),
+			PeerName:  s.trustedPeers[peerID].Name,
+			Status:    "failed",
+			Error:     fmt.Sprintf("failed to get local manifest: %v", err),
+			Files: result.FileListWithSizes,
+		}
+		_ = appendSyncHistory(historyEntry)
+
 		return nil, fmt.Errorf("failed to get local manifest: %v", err)
 	}
 
@@ -905,11 +962,34 @@ func (s *SyncService) SyncWithPeer(ctx context.Context, peerID peer.ID) (*SyncRe
 		// Pass the encrypted hash directly to fetchChunk
 		chunkData, size, err := s.fetchChunk(timeoutCtx, peerID, chunkHash, encryptedHash)
 		if err != nil {
+			historyEntry := SyncHistoryEntry{
+				ID:        fmt.Sprintf("%d", time.Now().UnixNano()),
+				Timestamp: time.Now().UTC().Format(time.RFC3339),
+				PeerID:    peerID.String(),
+				PeerName:  s.trustedPeers[peerID].Name,
+				Status:    "failed",
+				Error:     fmt.Sprintf("failed to fetch chunk %s: %v", chunkHash, err),
+				Files: result.FileListWithSizes,
+			}
+			_ = appendSyncHistory(historyEntry)
+
 			return nil, fmt.Errorf("failed to fetch chunk %s: %v", chunkHash, err)
 		}
 
 		// Store the chunk with both hashes if needed
 		if err := s.StoreChunk(chunkHash, chunkData, encryptedHash); err != nil {
+
+			historyEntry := SyncHistoryEntry{
+				ID:        fmt.Sprintf("%d", time.Now().UnixNano()),
+				Timestamp: time.Now().UTC().Format(time.RFC3339),
+				PeerID:    peerID.String(),
+				PeerName:  s.trustedPeers[peerID].Name,
+				Status:    "failed",
+				Error:     fmt.Sprintf("failed to store chunk %s: %v", chunkHash, err),
+				Files: result.FileListWithSizes,
+			}
+			_ = appendSyncHistory(historyEntry)
+
 			return nil, fmt.Errorf("failed to store chunk %s: %v", chunkHash, err)
 		}
 
@@ -952,12 +1032,43 @@ func (s *SyncService) SyncWithPeer(ctx context.Context, peerID peer.ID) (*SyncRe
 
 	// Step 6: Rebuild references
 	if err := s.vaultMgr.RebuildReferences(); err != nil {
+
+		historyEntry := SyncHistoryEntry{
+			ID:        fmt.Sprintf("%d", time.Now().UnixNano()),
+			Timestamp: time.Now().UTC().Format(time.RFC3339),
+			PeerID:    peerID.String(),
+			PeerName:  s.trustedPeers[peerID].Name,
+			Status:    "failed",
+			Error:     fmt.Sprintf("failed to rebuild references: %v", err),
+			Files: result.FileListWithSizes,
+		}
+		_ = appendSyncHistory(historyEntry)
+
 		return nil, fmt.Errorf("failed to rebuild references: %v", err)
 	}
 
 	result.Duration = time.Since(startTime)
 	fmt.Printf("Sync completed in %v: %d files, %d chunks transferred, %d chunks reused\n",
 		result.Duration, result.FileCount, result.ChunksTransferred, result.ChunksDeduplicated)
+
+	// Record history
+	historyEntry := SyncHistoryEntry{
+		ID:                fmt.Sprintf("%d", time.Now().UnixNano()),
+		Timestamp:         time.Now().UTC().Format(time.RFC3339),
+		PeerID:            peerID.String(),
+		PeerName:          s.trustedPeers[peerID].Name,
+		FilesTransferred:  result.FileCount,
+		ChunksTransferred: result.ChunksTransferred,
+		ChunksDeduped:     result.ChunksDeduplicated,
+		BytesTransferred:  result.BytesTransferred,
+		DurationMs:        result.Duration.Milliseconds(),
+		Status:            "success",
+		Files:             result.FileListWithSizes,
+	}
+
+	if err := appendSyncHistory(historyEntry); err != nil {
+		fmt.Println("Failed to append sync history:", err)
+	}
 
 	return result, nil
 }
