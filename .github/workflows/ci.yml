@@ -10,7 +10,9 @@ on:
   issue_comment:
     types: [created, edited]
   pull_request_target:
-    types: [opened, edited]
+    types: [opened, edited, synchronize]
+  pull_request_review_comment:
+    types: [created, edited]
 
 permissions:
   contents: read
@@ -21,6 +23,7 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
     strategy:
       matrix:
         go-version: ['1.24']
@@ -72,6 +75,7 @@ jobs:
 
   lint:
     runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -93,6 +97,7 @@ jobs:
 
   security:
     runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
     permissions:
       security-events: write
       actions: read
@@ -132,6 +137,7 @@ jobs:
 
   build:
     runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
     needs: [test, lint]
     strategy:
       matrix:
@@ -174,6 +180,7 @@ jobs:
 
   integration:
     runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
     needs: [test]
     steps:
     - name: Checkout code
@@ -222,6 +229,7 @@ jobs:
 
   dependency-check:
     runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -247,9 +255,30 @@ jobs:
           exit 1
         fi
 
-  ai-moderator:
+  ai-pr-detection:
     runs-on: ubuntu-latest
-    if: github.event_name == 'issues' || github.event_name == 'issue_comment' || github.event_name == 'pull_request_target'
+    if: github.event_name == 'pull_request_target' || github.event_name == 'pull_request_review_comment'
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+    - name: AI PR Detection
+      uses: github/ai-moderator@v1.1.2
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        spam-label: spam
+        ai-label: ai-generated
+        minimize-detected-comments: false
+        enable-spam-detection: false
+        enable-link-spam-detection: fa lse
+        enable-ai-detection: true
+
+  ai-issue-moderation:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'issues' || github.event_name == 'issue_comment'
+    permissions:
+      issues: write
+      pull-requests: write
     steps:
     - name: AI Issue and Comment Moderator
       uses: github/ai-moderator@v1.1.2
