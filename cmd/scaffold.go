@@ -178,13 +178,36 @@ var scaffoldCmd = &cobra.Command{
 	Use:   "scaffold",
 	Short: "Scaffold a new Sietch vault",
 	Long: `Scaffold a new Sietch vault with secure encryption and configurable options.
-	This creates the necessary directory structure and configuration files for your vault.
-	
-	Examples:
-		sietch scaffold --template photoVault
-		sietch scaffold --template photoVault --name "My Photo Vault"
-		sietch scaffold --template photoVault --name "My Photo Vault" --path /path/to/vault
-		sietch scaffold --template photoVault --name "My Photo Vault" --path /path/to/vault --force`,
+This creates the necessary directory structure and configuration files for your vault
+using pre-configured templates optimized for different use cases.
+
+Available Templates:
+  Photos & Media:
+    photoVault     - Photo storage with strong dedup and high compression
+    videoVault     - Video storage with large chunks and light compression
+    audioLibrary   - Audio/podcast storage with balanced settings
+
+  Documents & Knowledge:
+    documentsVault - Office/PDF documents with aggressive compression
+    codeVault      - Code repositories with fine-grained deduplication
+    reporterVault  - Journalism/sensitive documents with manual sync
+
+  Backups & Archives:
+    systemBackup   - System backups optimized for performance
+    coldArchive    - Long-term archival with maximum compression
+
+Examples:
+  List all available templates:
+    sietch scaffold --list
+
+  Create a vault from a template:
+    sietch scaffold --template photoVault
+    sietch scaffold --template videoVault --name "My Movies"
+    sietch scaffold --template documentsVault --name "Work Docs" --path ~/Documents
+    sietch scaffold --template codeVault --name "Projects" --path ~/Code --force
+
+  Learn more about templates:
+    See ~/.config/sietch/templates/README.md for detailed comparison`,
 
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Check if user wants to list templates
