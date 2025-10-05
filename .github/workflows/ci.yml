@@ -270,7 +270,7 @@ jobs:
         ai-label: ai-generated
         minimize-detected-comments: false
         enable-spam-detection: false
-        enable-link-spam-detection: fa lse
+        enable-link-spam-detection: false
         enable-ai-detection: true
 
   ai-issue-moderation:
@@ -290,3 +290,15 @@ jobs:
         enable-spam-detection: true
         enable-link-spam-detection: true
         enable-ai-detection: true
+
+  contributors-readme:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+    - name: Contribute List
+      uses: akhilmhdh/contributors-readme-action@v2.3.11
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
