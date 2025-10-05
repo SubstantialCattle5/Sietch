@@ -5,14 +5,25 @@ on:
     branches: [ main, dev ]
   pull_request:
     branches: [ main, dev ]
+  issues:
+    types: [opened, edited]
+  issue_comment:
+    types: [created, edited]
+  pull_request_target:
+    types: [opened, edited, synchronize]
+  pull_request_review_comment:
+    types: [created, edited]
 
 permissions:
   contents: read
   security-events: write
+  issues: write
+  pull-requests: write
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
     strategy:
       matrix:
         go-version: ['1.24']
@@ -64,6 +75,7 @@ jobs:
 
   lint:
     runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -85,6 +97,7 @@ jobs:
 
   security:
     runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
     permissions:
       security-events: write
       actions: read
@@ -124,6 +137,7 @@ jobs:
 
   build:
     runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
     needs: [test, lint]
     strategy:
       matrix:
@@ -166,6 +180,7 @@ jobs:
 
   integration:
     runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
     needs: [test]
     steps:
     - name: Checkout code
@@ -214,6 +229,7 @@ jobs:
 
   dependency-check:
     runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -238,3 +254,51 @@ jobs:
           git diff
           exit 1
         fi
+
+  ai-pr-detection:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request_target' || github.event_name == 'pull_request_review_comment'
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+    - name: AI PR Detection
+      uses: github/ai-moderator@v1.1.2
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        spam-label: spam
+        ai-label: ai-generated
+        minimize-detected-comments: false
+        enable-spam-detection: false
+        enable-link-spam-detection: false
+        enable-ai-detection: true
+
+  ai-issue-moderation:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'issues' || github.event_name == 'issue_comment'
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+    - name: AI Issue and Comment Moderator
+      uses: github/ai-moderator@v1.1.2
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        spam-label: spam
+        ai-label: ai-generated
+        minimize-detected-comments: true
+        enable-spam-detection: true
+        enable-link-spam-detection: true
+        enable-ai-detection: true
+
+  contributors-readme:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+    - name: Contribute List
+      uses: akhilmhdh/contributors-readme-action@v2.3.11
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

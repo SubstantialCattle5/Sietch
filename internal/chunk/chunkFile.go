@@ -138,6 +138,7 @@ func processFileChunks(ctx context.Context, file *os.File, chunkSize int64, vaul
 		chunkRef := config.ChunkRef{
 			Hash:            chunkHash,
 			Size:            int64(bytesRead),
+			CompressedSize:  int64(len(compressedData)),
 			Index:           chunkCount - 1, // Convert 1-based chunkCount to 0-based index
 			Compressed:      vaultConfig.Compression != "none",
 			CompressionType: vaultConfig.Compression,

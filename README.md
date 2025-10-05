@@ -225,9 +225,37 @@ Built with ❤️ in Go by the open source community.
 
 ## Contributors
 
-Thanks to all our amazing contributors!  
+Thanks to all our amazing contributors!
 
-[![Contributors](https://contrib.rocks/image?repo=substantialcattle5/sietch)](https://github.com/substantialcattle5/sietch/graphs/contributors)
+<!-- readme: contributors -start -->
+<table>
+	<tbody>
+		<tr>
+            <td align="center">
+                <a href="https://github.com/SubstantialCattle5">
+                    <img src="https://avatars.githubusercontent.com/u/92233871?v=4" width="100;" alt="SubstantialCattle5"/>
+                    <br />
+                    <sub><b>Nilay Nath Sharan</b></sub>
+                </a>
+            </td>
+            <td align="center">
+                <a href="https://github.com/MrKeiKun">
+                    <img src="https://avatars.githubusercontent.com/u/4362134?v=4" width="100;" alt="MrKeiKun"/>
+                    <br />
+                    <sub><b>Lorenzo (Kei) Buitizon</b></sub>
+                </a>
+            </td>
+            <td align="center">
+                <a href="https://github.com/ABHINAVGARG05">
+                    <img src="https://avatars.githubusercontent.com/u/143117260?v=4" width="100;" alt="ABHINAVGARG05"/>
+                    <br />
+                    <sub><b>Abhinav Garg</b></sub>
+                </a>
+            </td>
+		</tr>
+	<tbody>
+</table>
+<!-- readme: contributors -end -->
 
 ## License
 

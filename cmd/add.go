@@ -22,6 +22,14 @@ import (
 	"github.com/substantialcattle5/sietch/util"
 )
 
+// SpaceSavings represents space savings statistics for a file
+type SpaceSavings struct {
+	OriginalSize   int64
+	CompressedSize int64
+	SpaceSaved     int64
+	SpaceSavedPct  float64
+}
+
 // addCmd represents the add command
 var addCmd = &cobra.Command{
 	Use:   "add <source_path> <destination_path> [source_path2] [destination_path2]...",
@@ -114,6 +122,7 @@ Examples:
 		// Process each file pair
 		successCount := 0
 		var failedFiles []string
+		var totalSpaceSavings SpaceSavings
 
 		// Show initial progress for multiple files
 		if len(filePairs) > 1 {
@@ -188,16 +197,34 @@ Examples:
 				continue
 			}
 
+			// Calculate space savings for this file
+			spaceSavings := calculateSpaceSavings(chunkRefs)
+
 			// Success message
 			if len(filePairs) > 1 {
-				fmt.Printf("✓ %s (%d chunks)\n", filepath.Base(pair.Source), len(chunkRefs))
+				fmt.Printf("✓ %s (%d chunks", filepath.Base(pair.Source), len(chunkRefs))
+				if spaceSavings.SpaceSaved > 0 {
+					fmt.Printf(", %s saved", util.HumanReadableSize(spaceSavings.SpaceSaved))
+				}
+				fmt.Printf(")\n")
 			} else {
 				fmt.Printf("✓ File added to vault: %s\n", filepath.Base(pair.Source))
 				fmt.Printf("✓ %d chunks stored in vault\n", len(chunkRefs))
+				if spaceSavings.SpaceSaved > 0 {
+					fmt.Printf("✓ Space saved: %s (%.1f%%)\n",
+						util.HumanReadableSize(spaceSavings.SpaceSaved),
+						spaceSavings.SpaceSavedPct)
+				}
 				fmt.Printf("✓ Manifest written to .sietch/manifests/%s.yaml\n", filepath.Base(pair.Source))
 			}
 
 			successCount++
+
+			// Add to total space savings
+			fileSavings := calculateSpaceSavings(chunkRefs)
+			totalSpaceSavings.OriginalSize += fileSavings.OriginalSize
+			totalSpaceSavings.CompressedSize += fileSavings.CompressedSize
+			totalSpaceSavings.SpaceSaved += fileSavings.SpaceSaved
 		}
 
 		// Cleanup progress manager
@@ -237,14 +264,21 @@ Examples:
 
 			fmt.Printf("  • Compression: %s\n", vaultConfig.Compression)
 
-			// Calculate and show space savings if compression is used
-			if vaultConfig.Compression != "none" {
-				// TODO: Calculate actual space savings during processing
-				// For now, show compression info
-				fmt.Printf("  • Compression: %s (space savings calculated during processing)\n", vaultConfig.Compression)
-			}
-
 			fmt.Printf("  • Chunking: %s (size: %s)\n", vaultConfig.Chunking.Strategy, vaultConfig.Chunking.ChunkSize)
+
+			// Show total space savings if compression is used
+			if vaultConfig.Compression != "none" && totalSpaceSavings.SpaceSaved > 0 {
+				totalSpaceSavedPct := float64(0)
+				if totalSpaceSavings.OriginalSize > 0 {
+					totalSpaceSavedPct = float64(totalSpaceSavings.SpaceSaved) / float64(totalSpaceSavings.OriginalSize) * 100
+				}
+				fmt.Printf("\n💾 Total Space Savings:\n")
+				fmt.Printf("  • Original size: %s\n", util.HumanReadableSize(totalSpaceSavings.OriginalSize))
+				fmt.Printf("  • Compressed size: %s\n", util.HumanReadableSize(totalSpaceSavings.CompressedSize))
+				fmt.Printf("  • Space saved: %s (%.1f%%)\n",
+					util.HumanReadableSize(totalSpaceSavings.SpaceSaved),
+					totalSpaceSavedPct)
+			}
 		}
 
 		// Return error only if all files failed
@@ -260,6 +294,35 @@ Examples:
 type FilePair struct {
 	Source      string
 	Destination string
+}
+
+// calculateSpaceSavings calculates space savings for a file based on its chunks
+func calculateSpaceSavings(chunks []config.ChunkRef) SpaceSavings {
+	originalSize := int64(0)
+	compressedSize := int64(0)
+
+	for _, chunk := range chunks {
+		originalSize += chunk.Size
+		if chunk.CompressedSize > 0 {
+			compressedSize += chunk.CompressedSize
+		} else {
+			// If no compressed size is recorded, use original size
+			compressedSize += chunk.Size
+		}
+	}
+
+	spaceSaved := originalSize - compressedSize
+	var spaceSavedPct float64
+	if originalSize > 0 {
+		spaceSavedPct = float64(spaceSaved) / float64(originalSize) * 100
+	}
+
+	return SpaceSavings{
+		OriginalSize:   originalSize,
+		CompressedSize: compressedSize,
+		SpaceSaved:     spaceSaved,
+		SpaceSavedPct:  spaceSavedPct,
+	}
 }
 
 // parseFileArguments parses command line arguments into source-destination pairs
