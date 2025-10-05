@@ -177,6 +177,11 @@ Examples:
 			// Save the manifest
 			err = manifest.StoreFileManifest(vaultRoot, filepath.Base(pair.Source), fileManifest)
 			if err != nil {
+				if err.Error() == "skipped" {
+					errorMsg := fmt.Sprintf("✗ '%s': skipped", fileManifest.Destination+filepath.Base(pair.Source))
+					fmt.Println(errorMsg)
+					continue
+				}
 				errorMsg := fmt.Sprintf("✗ %s: manifest storage failed - %v", filepath.Base(pair.Source), err)
 				fmt.Println(errorMsg)
 				failedFiles = append(failedFiles, errorMsg)

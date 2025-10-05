@@ -1,9 +1,11 @@
 package manifest
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 
@@ -54,9 +56,26 @@ func StoreFileManifest(vaultRoot string, fileName string, manifest *config.FileM
 	}
 
 	// Create manifest file path
-	manifestPath := filepath.Join(manifestsDir, fileName+".yaml")
+	destination := strings.ReplaceAll(manifest.Destination, "/", ".")
+	uniqueFileIdentifier := destination + fileName + ".yaml"
+	manifestPath := filepath.Join(manifestsDir, uniqueFileIdentifier)
 
-	// Create the file
+	// Check if file exists
+	_, err := os.Stat(manifestPath)
+	fmt.Println(manifestPath)
+	if err == nil {
+		fmt.Printf("'%s' already exists. Overwrite? (y/N): ", uniqueFileIdentifier)
+		reader := bufio.NewReader(os.Stdin)
+		response, _ := reader.ReadString('\n')
+		response = strings.TrimSpace(strings.ToLower(response))
+
+		if response != "y" && response != "yes" {
+			fmt.Printf("'%s' skipped\n", manifest.Destination+fileName)
+			return fmt.Errorf("skipped")
+		}
+	}
+
+	// Create/Overwrite the file
 	file, err := os.Create(manifestPath)
 	if err != nil {
 		return fmt.Errorf("failed to create manifest file: %v", err)
