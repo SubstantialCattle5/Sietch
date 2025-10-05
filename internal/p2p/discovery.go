@@ -2,7 +2,6 @@ package p2p
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/multiformats/go-multiaddr"
@@ -24,7 +23,5 @@ func (f *Factory) CreateMDNS(h host.Host) (config.Discovery, error) {
 
 // CreateDHT creates a DHT-based discovery service
 func (f *Factory) CreateDHT(ctx context.Context, h host.Host, bootstrapAddrs []multiaddr.Multiaddr) (config.Discovery, error) {
-	// This would be implemented later
-	// For now just return an error
-	return nil, fmt.Errorf("DHT discovery not yet implemented")
+	return NewDHTDiscovery(ctx, h, bootstrapAddrs)
 }
