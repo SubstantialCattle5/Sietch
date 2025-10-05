@@ -1,4 +1,3 @@
-```markdown
 # 🔁 Deduplication in Sietch Vault
 
 ## Overview
