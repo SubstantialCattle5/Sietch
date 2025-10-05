@@ -259,6 +259,13 @@ Thanks to all our amazing contributors!
                     <sub><b>Anuja Mishra</b></sub>
                 </a>
             </td>
+            <td align="center">
+                <a href="https://github.com/harshalranjhani">
+                    <img src="https://avatars.githubusercontent.com/u/94748669?v=4" width="100;" alt="harshalranjhani"/>
+                    <br />
+                    <sub><b>Harshal Ranjhani</b></sub>
+                </a>
+            </td>
 		</tr>
 	<tbody>
 </table>
