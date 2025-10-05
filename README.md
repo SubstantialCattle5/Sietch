@@ -254,6 +254,13 @@ Thanks to all our amazing contributors!
                 </a>
             </td>
             <td align="center">
+                <a href="https://github.com/Akash29g">
+                    <img src="https://avatars.githubusercontent.com/u/77738997?v=4" width="100;" alt="Akash29g"/>
+                    <br />
+                    <sub><b>Akash Goswami</b></sub>
+                </a>
+            </td>
+            <td align="center">
                 <a href="https://github.com/anuja12mishra">
                     <img src="https://avatars.githubusercontent.com/u/109236275?v=4" width="100;" alt="anuja12mishra"/>
                     <br />
