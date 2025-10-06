@@ -72,6 +72,7 @@ sietch get thumper-plans.pdf ./retrieved/
 ### Chunking & Deduplication
 * Files are split into configurable chunks (default: 4MB)
 * Identical chunks across files are deduplicated to save space
+* Please Refer [this](internal/deduplication/README.md) documentation to understand how Deduplication works.
 
 ### Encryption
 Each chunk is encrypted before storage using:
@@ -250,6 +251,27 @@ Thanks to all our amazing contributors!
                     <img src="https://avatars.githubusercontent.com/u/143117260?v=4" width="100;" alt="ABHINAVGARG05"/>
                     <br />
                     <sub><b>Abhinav Garg</b></sub>
+                </a>
+            </td>
+            <td align="center">
+                <a href="https://github.com/Akash29g">
+                    <img src="https://avatars.githubusercontent.com/u/77738997?v=4" width="100;" alt="Akash29g"/>
+                    <br />
+                    <sub><b>Akash Goswami</b></sub>
+                </a>
+            </td>
+            <td align="center">
+                <a href="https://github.com/anuja12mishra">
+                    <img src="https://avatars.githubusercontent.com/u/109236275?v=4" width="100;" alt="anuja12mishra"/>
+                    <br />
+                    <sub><b>Anuja Mishra</b></sub>
+                </a>
+            </td>
+            <td align="center">
+                <a href="https://github.com/harshalranjhani">
+                    <img src="https://avatars.githubusercontent.com/u/94748669?v=4" width="100;" alt="harshalranjhani"/>
+                    <br />
+                    <sub><b>Harshal Ranjhani</b></sub>
                 </a>
             </td>
 		</tr>
