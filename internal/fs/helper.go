@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // EnsureDirectory ensures a directory exists, creating it if necessary
@@ -88,4 +89,65 @@ func VerifyFileAndReturnFile(filePath string) (*os.File, error) {
 		return nil, fmt.Errorf("error opening file: %v", err)
 	}
 	return file, nil
+}
+
+// PathType represents the type of a file system path
+type PathType int
+
+const (
+	PathTypeFile PathType = iota
+	PathTypeDir
+	PathTypeSymlink
+	PathTypeOther
+)
+
+// GetPathInfo returns file info and the type of path (file/dir/symlink)
+func GetPathInfo(path string) (os.FileInfo, PathType, error) {
+	// Use Lstat to get info about the path itself (not following symlinks)
+	fileInfo, err := os.Lstat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, PathTypeOther, fmt.Errorf("path does not exist: %s", path)
+		}
+		return nil, PathTypeOther, fmt.Errorf("error accessing path: %v", err)
+	}
+
+	// Determine path type
+	mode := fileInfo.Mode()
+	switch {
+	case mode&os.ModeSymlink != 0:
+		return fileInfo, PathTypeSymlink, nil
+	case mode.IsDir():
+		return fileInfo, PathTypeDir, nil
+	case mode.IsRegular():
+		return fileInfo, PathTypeFile, nil
+	default:
+		return fileInfo, PathTypeOther, fmt.Errorf("unsupported file type: %s", path)
+	}
+}
+
+// ResolveSymlink resolves a symlink to its target path and returns the target's info and type
+func ResolveSymlink(symlinkPath string) (targetPath string, targetInfo os.FileInfo, targetType PathType, err error) {
+	// Resolve the symlink
+	targetPath, err = filepath.EvalSymlinks(symlinkPath)
+	if err != nil {
+		return "", nil, PathTypeOther, fmt.Errorf("failed to resolve symlink: %v", err)
+	}
+
+	// Get info about the target
+	targetInfo, targetType, err = GetPathInfo(targetPath)
+	if err != nil {
+		return "", nil, PathTypeOther, fmt.Errorf("symlink target error: %v", err)
+	}
+
+	return targetPath, targetInfo, targetType, nil
+}
+
+// ShouldSkipHidden determines if a file/directory should be skipped based on hidden file rules
+func ShouldSkipHidden(name string, includeHidden bool) bool {
+	if includeHidden {
+		return false
+	}
+	// Skip files/directories starting with '.' (hidden on Unix-like systems)
+	return strings.HasPrefix(name, ".")
 }
