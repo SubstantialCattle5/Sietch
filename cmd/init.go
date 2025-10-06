@@ -28,10 +28,9 @@ var (
 	vaultPath string
 
 	// Security key generation
-	keyType         string
-	usePassphrase   bool
-	keyFile         string
-	passphraseValue string
+	keyType       string
+	usePassphrase bool
+	keyFile       string
 
 	// aes specific keys
 	aesMode   string
@@ -144,7 +143,6 @@ func init() {
 	initCmd.Flags().StringVar(&keyType, "key-type", "aes", "Type of encryption key (aes, chacha20, gpg, none)")
 	initCmd.Flags().BoolVar(&usePassphrase, "passphrase", false, "Protect key with passphrase")
 	initCmd.Flags().StringVar(&keyFile, "key-file", "", "Path to key file (for importing an existing key)")
-	initCmd.Flags().StringVar(&passphraseValue, "passphrase-value", "", "Passphrase for encryption (NOT RECOMMENDED: passphrase will be visible in command history)")
 
 	// AES specific parameters
 	initCmd.Flags().StringVar(&aesMode, "aes-mode", "gcm", "AES encryption mode (gcm, cbc)")

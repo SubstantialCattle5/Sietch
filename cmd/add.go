@@ -499,7 +499,6 @@ func init() {
 	// Optional flags for the add command
 	addCmd.Flags().BoolP("force", "f", false, "Force add without confirmation")
 	addCmd.Flags().StringP("tags", "t", "", "Comma-separated tags to associate with the file")
-	addCmd.Flags().StringP("passphrase-value", "p", "", "Passphrase for encrypted vault (if required)")
 	addCmd.Flags().BoolP("recursive", "r", false, "Recursively add directories")
 	addCmd.Flags().BoolP("include-hidden", "H", false, "Include hidden files and directories")
 }

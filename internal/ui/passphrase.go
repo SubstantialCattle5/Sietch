@@ -25,28 +25,8 @@ func GetPassphraseForVault(cmd *cobra.Command, vaultConfig *config.VaultConfig) 
 		return "", nil
 	}
 
-	// Try to get passphrase from command line flag - check both flags
+	// Passphrase is no longer accepted via command line flags for security reasons
 	passphrase := ""
-	var err error
-
-	// Try "passphrase" flag first
-	if cmd.Flags().Lookup("passphrase") != nil {
-		// Only try to get string value if the flag exists and is a string
-		if flag := cmd.Flags().Lookup("passphrase"); flag != nil && flag.Value.Type() == "string" {
-			passphrase, err = cmd.Flags().GetString("passphrase")
-			if err != nil {
-				return "", fmt.Errorf("error parsing passphrase flag: %w", err)
-			}
-		}
-	}
-
-	// If not found, try "passphrase-value" flag
-	if passphrase == "" && cmd.Flags().Lookup("passphrase-value") != nil {
-		passphrase, err = cmd.Flags().GetString("passphrase-value")
-		if err != nil {
-			return "", fmt.Errorf("error parsing passphrase-value flag: %w", err)
-		}
-	}
 
 	// If not provided as flag, check environment variable
 	if passphrase == "" {
@@ -75,6 +55,7 @@ func GetPassphraseForVault(cmd *cobra.Command, vaultConfig *config.VaultConfig) 
 				},
 			}
 
+			var err error
 			passphrase, err = passphrasePrompt.Run()
 			if err != nil {
 				return "", fmt.Errorf("failed to get passphrase: %w", err)
@@ -121,19 +102,7 @@ func GetPassphraseForInitialization(cmd *cobra.Command, requireConfirmation bool
 		return "", nil
 	}
 
-	// Try to get passphrase from command line value flag first
-	passphraseValue, err := cmd.Flags().GetString("passphrase-value")
-	if err != nil {
-		return "", fmt.Errorf("error parsing passphrase-value flag: %w", err)
-	}
-
-	if passphraseValue != "" {
-		result := passphrasevalidation.ValidateHybrid(passphraseValue)
-		if !result.Valid || len(result.Warnings) > 0 {
-			return "", fmt.Errorf("%s", passphrasevalidation.GetHybridErrorMessage(result))
-		}
-		return passphraseValue, nil
-	}
+	// Passphrase is no longer accepted via command line flags for security reasons
 
 	// Check environment variable
 	passphraseEnv := os.Getenv("SIETCH_PASSPHRASE")
