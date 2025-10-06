@@ -88,7 +88,7 @@ Example:
 		}
 
 		// Create sync service (with or without RSA)
-		syncService, err := discover.CreateSyncService(host, vaultMgr, vaultConfig, vaultPath)
+		syncService, err := discover.CreateSyncService(host, vaultMgr, vaultConfig, vaultPath, verbose)
 		if err != nil {
 			return fmt.Errorf("failed to create sync service: %v", err)
 		}

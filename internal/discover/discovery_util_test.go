@@ -29,7 +29,7 @@ func TestCreateSyncService_NoRSA(t *testing.T) {
 	vc := &config.VaultConfig{}
 	vc.Sync.Enabled = false
 
-	svc, err := CreateSyncService(h, vm, vc, ".")
+	svc, err := CreateSyncService(h, vm, vc, ".", false)
 	if err != nil {
 		t.Fatalf("CreateSyncService returned error: %v", err)
 	}
