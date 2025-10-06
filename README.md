@@ -247,6 +247,13 @@ Thanks to all our amazing contributors!
                 </a>
             </td>
             <td align="center">
+                <a href="https://github.com/harshalranjhani">
+                    <img src="https://avatars.githubusercontent.com/u/94748669?v=4" width="100;" alt="harshalranjhani"/>
+                    <br />
+                    <sub><b>Harshal Ranjhani</b></sub>
+                </a>
+            </td>
+            <td align="center">
                 <a href="https://github.com/ABHINAVGARG05">
                     <img src="https://avatars.githubusercontent.com/u/143117260?v=4" width="100;" alt="ABHINAVGARG05"/>
                     <br />
@@ -265,13 +272,6 @@ Thanks to all our amazing contributors!
                     <img src="https://avatars.githubusercontent.com/u/109236275?v=4" width="100;" alt="anuja12mishra"/>
                     <br />
                     <sub><b>Anuja Mishra</b></sub>
-                </a>
-            </td>
-            <td align="center">
-                <a href="https://github.com/harshalranjhani">
-                    <img src="https://avatars.githubusercontent.com/u/94748669?v=4" width="100;" alt="harshalranjhani"/>
-                    <br />
-                    <sub><b>Harshal Ranjhani</b></sub>
                 </a>
             </td>
 		</tr>
