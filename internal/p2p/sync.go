@@ -46,6 +46,7 @@ type SyncService struct {
 	trustedPeers  map[peer.ID]*PeerInfo
 	vaultConfig   *config.VaultConfig
 	trustAllPeers bool // New flag to automatically trust all peers
+	verbose       bool // Flag to enable verbose debug output
 }
 
 // PeerInfo contains information about a trusted peer
@@ -115,26 +116,34 @@ func NewSecureSyncService(
 			// Parse the peer ID
 			peerID, err := peer.Decode(trustedPeer.ID)
 			if err != nil {
+				if s.verbose {
 				fmt.Printf("Warning: Failed to decode peer ID %s: %v\n", trustedPeer.ID, err)
+			}
 				continue
 			}
 
 			// Parse the public key
 			block, _ := pem.Decode([]byte(trustedPeer.PublicKey))
 			if block == nil {
-				fmt.Printf("Warning: Failed to decode public key for peer %s\n", trustedPeer.ID)
+				if s.verbose {
+					fmt.Printf("Warning: Failed to decode public key for peer %s\n", trustedPeer.ID)
+				}
 				continue
 			}
 
 			pub, err := x509.ParsePKIXPublicKey(block.Bytes)
 			if err != nil {
-				fmt.Printf("Warning: Failed to parse public key for peer %s: %v\n", trustedPeer.ID, err)
+				if s.verbose {
+					fmt.Printf("Warning: Failed to parse public key for peer %s: %v\n", trustedPeer.ID, err)
+				}
 				continue
 			}
 
 			rsaPublicKey, ok := pub.(*rsa.PublicKey)
 			if !ok {
-				fmt.Printf("Warning: Public key for peer %s is not an RSA key\n", trustedPeer.ID)
+				if s.verbose {
+					fmt.Printf("Warning: Public key for peer %s is not an RSA key\n", trustedPeer.ID)
+				}
 				continue
 			}
 
@@ -172,7 +181,14 @@ func (s *SyncService) RegisterProtocols(ctx context.Context) {
 // SetTrustAllPeers sets whether to automatically trust all peers
 func (s *SyncService) SetTrustAllPeers(trustAll bool) {
 	s.trustAllPeers = trustAll
-	fmt.Printf("Trust all peers set to: %v\n", trustAll)
+	if s.verbose {
+		fmt.Printf("Trust all peers set to: %v\n", trustAll)
+	}
+}
+
+// SetVerbose enables or disables verbose debug output
+func (s *SyncService) SetVerbose(verbose bool) {
+	s.verbose = verbose
 }
 
 // handleKeyExchange handles key exchange requests from peers
@@ -181,7 +197,9 @@ func (s *SyncService) handleKeyExchange(stream network.Stream) {
 	defer stream.Close()
 
 	if s.publicKey == nil {
-		fmt.Println("Cannot perform key exchange: no public key available")
+		if s.verbose {
+			fmt.Println("Cannot perform key exchange: no public key available")
+		}
 		return
 	}
 
@@ -197,7 +215,9 @@ func (s *SyncService) handleKeyExchange(stream network.Stream) {
 			break
 		}
 		if err != nil {
-			fmt.Printf("Error reading peer's public key: %v\n", err)
+			if s.verbose {
+				fmt.Printf("Error reading peer's public key: %v\n", err)
+			}
 			return
 		}
 		pemData = append(pemData, buffer[:n]...)
@@ -212,7 +232,9 @@ func (s *SyncService) handleKeyExchange(stream network.Stream) {
 	// Parse peer's public key
 	block, _ := pem.Decode(pemData)
 	if block == nil {
-		fmt.Println("Failed to decode peer's public key: empty block")
+		if s.verbose {
+			fmt.Println("Failed to decode peer's public key: empty block")
+		}
 		return
 	}
 
@@ -225,7 +247,9 @@ func (s *SyncService) handleKeyExchange(stream network.Stream) {
 		// Try PKCS1 format
 		directKey, err := x509.ParsePKCS1PublicKey(block.Bytes)
 		if err != nil {
-			fmt.Printf("Failed to parse as PKCS1: %v\n", err)
+			if s.verbose {
+				fmt.Printf("Failed to parse as PKCS1: %v\n", err)
+			}
 		} else {
 			peerPubKey = directKey
 		}
@@ -233,24 +257,32 @@ func (s *SyncService) handleKeyExchange(stream network.Stream) {
 		// Try PKIX format
 		pub, err := x509.ParsePKIXPublicKey(block.Bytes)
 		if err != nil {
-			fmt.Printf("Failed to parse peer's public key: %v\n", err)
+			if s.verbose {
+				fmt.Printf("Failed to parse peer's public key: %v\n", err)
+			}
 			return
 		}
 		var ok bool
 		peerPubKey, ok = pub.(*rsa.PublicKey)
 		if !ok {
-			fmt.Println("Peer's key is not an RSA public key")
+			if s.verbose {
+				fmt.Println("Peer's key is not an RSA public key")
+			}
 			return
 		}
 	default:
-		fmt.Printf("Unknown key format: %s\n", block.Type)
+		if s.verbose {
+			fmt.Printf("Unknown key format: %s\n", block.Type)
+		}
 		return
 	}
 
 	// Calculate fingerprint
 	publicKeyDER, err := x509.MarshalPKIXPublicKey(peerPubKey)
 	if err != nil {
-		fmt.Printf("Failed to marshal peer's public key: %v\n", err)
+		if s.verbose {
+			fmt.Printf("Failed to marshal peer's public key: %v\n", err)
+		}
 		return
 	}
 
@@ -260,7 +292,9 @@ func (s *SyncService) handleKeyExchange(stream network.Stream) {
 	// Send our public key in response
 	ourPublicKeyDER, err := x509.MarshalPKIXPublicKey(s.publicKey)
 	if err != nil {
-		fmt.Printf("Failed to marshal our public key: %v\n", err)
+		if s.verbose {
+			fmt.Printf("Failed to marshal our public key: %v\n", err)
+		}
 		return
 	}
 
@@ -272,7 +306,9 @@ func (s *SyncService) handleKeyExchange(stream network.Stream) {
 	ourPubKeyPEM := pem.EncodeToMemory(ourPublicKeyBlock)
 	_, err = stream.Write(ourPubKeyPEM)
 	if err != nil {
-		fmt.Printf("Failed to send our public key: %v\n", err)
+		if s.verbose {
+			fmt.Printf("Failed to send our public key: %v\n", err)
+		}
 		return
 	}
 
@@ -285,7 +321,9 @@ func (s *SyncService) handleKeyExchange(stream network.Stream) {
 		TrustedSince: time.Now(),
 	}
 
-	fmt.Printf("Key exchange completed with peer %s (fingerprint: %s)\n", peerID.String(), fingerprint)
+	if s.verbose {
+		fmt.Printf("Key exchange completed with peer %s (fingerprint: %s)\n", peerID.String(), fingerprint)
+	}
 }
 
 // handleAuthentication handles authentication requests from peers
@@ -300,7 +338,9 @@ func (s *SyncService) handleAuthentication(stream network.Stream) {
 	}
 
 	if err := json.NewDecoder(stream).Decode(&challenge); err != nil {
-		fmt.Printf("Error reading authentication challenge: %v\n", err)
+		if s.verbose {
+			fmt.Printf("Error reading authentication challenge: %v\n", err)
+		}
 		return
 	}
 
@@ -308,7 +348,9 @@ func (s *SyncService) handleAuthentication(stream network.Stream) {
 	challengeHash := sha256.Sum256(challenge.Challenge)
 	signature, err := rsa.SignPKCS1v15(rand.Reader, s.privateKey, crypto.SHA256, challengeHash[:])
 	if err != nil {
-		fmt.Printf("Error signing challenge: %v\n", err)
+		if s.verbose {
+			fmt.Printf("Error signing challenge: %v\n", err)
+		}
 		return
 	}
 
@@ -325,7 +367,9 @@ func (s *SyncService) handleAuthentication(stream network.Stream) {
 	}
 
 	if err := json.NewEncoder(stream).Encode(response); err != nil {
-		fmt.Printf("Error sending authentication response: %v\n", err)
+		if s.verbose {
+			fmt.Printf("Error sending authentication response: %v\n", err)
+		}
 	}
 }
 
@@ -338,7 +382,9 @@ func (s *SyncService) handleManifestRequest(stream network.Stream) {
 	// If we have RSA keys and not trusting all peers, verify the peer is trusted
 	if s.privateKey != nil && !s.trustAllPeers {
 		if _, ok := s.trustedPeers[peerID]; !ok {
-			fmt.Printf("Rejecting manifest request from untrusted peer: %s\n", peerID.String())
+			if s.verbose {
+				fmt.Printf("Rejecting manifest request from untrusted peer: %s\n", peerID.String())
+			}
 			// Send error response
 			errorResponse := struct {
 				Error string `json:"error"`
@@ -353,7 +399,9 @@ func (s *SyncService) handleManifestRequest(stream network.Stream) {
 	// Get our vault manifest
 	manifest, err := s.vaultMgr.GetManifest()
 	if err != nil {
-		fmt.Printf("Error getting manifest: %v\n", err)
+		if s.verbose {
+			fmt.Printf("Error getting manifest: %v\n", err)
+		}
 
 		// Send error response
 		errorResponse := struct {
@@ -382,7 +430,9 @@ func (s *SyncService) handleManifestRequest(stream network.Stream) {
 	// Encode and send the manifest with timeout
 	_ = stream.SetWriteDeadline(time.Now().Add(30 * time.Second))
 	if err := json.NewEncoder(stream).Encode(response); err != nil {
-		fmt.Printf("Error sending manifest: %v\n", err)
+		if s.verbose {
+			fmt.Printf("Error sending manifest: %v\n", err)
+		}
 	}
 }
 
@@ -398,7 +448,9 @@ func (s *SyncService) handleChunkRequest(stream network.Stream) {
 		var ok bool
 		peerInfo, ok = s.trustedPeers[peerID]
 		if !ok {
-			fmt.Printf("Rejecting chunk request from untrusted peer: %s\n", peerID.String())
+			if s.verbose {
+				fmt.Printf("Rejecting chunk request from untrusted peer: %s\n", peerID.String())
+			}
 
 			// Send error response
 			errorResponse := struct {
@@ -420,27 +472,37 @@ func (s *SyncService) handleChunkRequest(stream network.Stream) {
 	}
 
 	if err := json.NewDecoder(stream).Decode(&chunkRequest); err != nil {
-		fmt.Printf("Error reading chunk request: %v\n", err)
+		if s.verbose {
+			fmt.Printf("Error reading chunk request: %v\n", err)
+		}
 		return
 	}
 
 	// First try using the primary hash
 	chunkHash := chunkRequest.Hash
-	fmt.Printf("Looking for chunk with hash: %s\n", chunkHash)
+	if s.verbose {
+		fmt.Printf("Looking for chunk with hash: %s\n", chunkHash)
+	}
 	chunkData, err := s.vaultMgr.GetChunk(chunkHash)
 
 	// If that fails and we have an encrypted hash, try that
 	if err != nil && chunkRequest.EncryptedHash != "" {
-		fmt.Printf("Chunk not found, trying encrypted hash: %s\n", chunkRequest.EncryptedHash)
+		if s.verbose {
+			fmt.Printf("Chunk not found, trying encrypted hash: %s\n", chunkRequest.EncryptedHash)
+		}
 		chunkData, err = s.vaultMgr.GetChunk(chunkRequest.EncryptedHash)
 		if err == nil {
-			fmt.Printf("Found chunk using encrypted hash\n")
+			if s.verbose {
+				fmt.Printf("Found chunk using encrypted hash\n")
+			}
 		}
 	}
 
 	// If still not found, return error
 	if err != nil {
-		fmt.Printf("Chunk not found with either hash\n")
+		if s.verbose {
+			fmt.Printf("Chunk not found with either hash\n")
+		}
 		response := struct {
 			Error string `json:"error"`
 		}{
@@ -471,7 +533,9 @@ func (s *SyncService) handleChunkRequest(stream network.Stream) {
 	}
 
 	if err := json.NewEncoder(stream).Encode(response); err != nil {
-		fmt.Printf("Error sending chunk: %v\n", err)
+		if s.verbose {
+			fmt.Printf("Error sending chunk: %v\n", err)
+		}
 	}
 }
 
@@ -492,7 +556,9 @@ func (s *SyncService) encryptLargeData(data []byte, publicKey *rsa.PublicKey) []
 		chunk := data[i:end]
 		encryptedChunk, err := rsa.EncryptPKCS1v15(rand.Reader, publicKey, chunk)
 		if err != nil {
-			fmt.Printf("Error encrypting chunk: %v\n", err)
+			if s.verbose {
+				fmt.Printf("Error encrypting chunk: %v\n", err)
+			}
 			continue
 		}
 
@@ -515,13 +581,17 @@ func (s *SyncService) decryptLargeData(data []byte) []byte {
 
 		chunk := data[i:end]
 		if len(chunk) < chunkSize {
-			fmt.Printf("Warning: Incomplete chunk size %d vs %d\n", len(chunk), chunkSize)
+			if s.verbose {
+				fmt.Printf("Warning: Incomplete chunk size %d vs %d\n", len(chunk), chunkSize)
+			}
 			continue
 		}
 
 		decryptedChunk, err := rsa.DecryptPKCS1v15(rand.Reader, s.privateKey, chunk)
 		if err != nil {
-			fmt.Printf("Error decrypting chunk: %v\n", err)
+			if s.verbose {
+				fmt.Printf("Error decrypting chunk: %v\n", err)
+			}
 			continue
 		}
 
@@ -562,7 +632,9 @@ func (s *SyncService) VerifyAndExchangeKeys(ctx context.Context, peerID peer.ID)
 		if err != nil {
 			// Check if we already have peer info from reverse connection
 			if peerInfo, ok := s.trustedPeers[peerID]; ok && peerInfo.Fingerprint != "" {
-				fmt.Printf("Failed to open stream, but have fingerprint from reverse connection: %s\n", peerInfo.Fingerprint)
+				if s.verbose {
+					fmt.Printf("Failed to open stream, but have fingerprint from reverse connection: %s\n", peerInfo.Fingerprint)
+				}
 				return true, nil
 			}
 			return false, fmt.Errorf("failed to open key exchange stream: %w", err)
@@ -600,7 +672,9 @@ func (s *SyncService) VerifyAndExchangeKeys(ctx context.Context, peerID peer.ID)
 			if err != nil {
 				// Check if we already have peer info from reverse connection
 				if peerInfo, ok := s.trustedPeers[peerID]; ok && peerInfo.Fingerprint != "" {
-					fmt.Printf("Read error, but have fingerprint from reverse connection: %s\n", peerInfo.Fingerprint)
+					if s.verbose {
+						fmt.Printf("Read error, but have fingerprint from reverse connection: %s\n", peerInfo.Fingerprint)
+					}
 					return true, nil
 				}
 				return false, fmt.Errorf("failed reading key data: %w", err)
@@ -619,7 +693,9 @@ func (s *SyncService) VerifyAndExchangeKeys(ctx context.Context, peerID peer.ID)
 		if block == nil {
 			// Check if we already have peer info from reverse connection
 			if peerInfo, ok := s.trustedPeers[peerID]; ok && peerInfo.Fingerprint != "" {
-				fmt.Printf("Failed to decode PEM block, but have fingerprint from reverse connection: %s\n", peerInfo.Fingerprint)
+				if s.verbose {
+					fmt.Printf("Failed to decode PEM block, but have fingerprint from reverse connection: %s\n", peerInfo.Fingerprint)
+				}
 				return true, nil
 			}
 			return false, fmt.Errorf("failed to decode peer's public key: empty block")
@@ -634,7 +710,9 @@ func (s *SyncService) VerifyAndExchangeKeys(ctx context.Context, peerID peer.ID)
 			// Try PKCS1 format
 			directKey, err := x509.ParsePKCS1PublicKey(block.Bytes)
 			if err != nil {
-				fmt.Printf("Failed to parse as PKCS1: %v\n", err)
+				if s.verbose {
+					fmt.Printf("Failed to parse as PKCS1: %v\n", err)
+				}
 			} else {
 				peerPubKey = directKey
 			}
@@ -778,8 +856,10 @@ func (s *SyncService) AddTrustedPeer(ctx context.Context, peerID peer.ID) error 
 		for _, peer := range s.rsaConfig.TrustedPeers {
 			if peer.ID == peerID.String() || peer.Fingerprint == peerInfo.Fingerprint {
 				existingPeer = true
-				fmt.Printf("Peer already in trusted list (ID: %s, Fingerprint: %s)\n",
-					peer.ID, peer.Fingerprint)
+				if s.verbose {
+					fmt.Printf("Peer already in trusted list (ID: %s, Fingerprint: %s)\n",
+						peer.ID, peer.Fingerprint)
+				}
 				break
 			}
 		}
@@ -847,7 +927,9 @@ func (s *SyncService) SyncWithPeer(ctx context.Context, peerID peer.ID) (*SyncRe
 	result := &SyncResult{}
 
 	// First verify and exchange keys with peer (will auto-trust if trustAllPeers is true)
-	fmt.Printf("Starting key verification with peer %s...\n", peerID.String())
+	if s.verbose {
+		fmt.Printf("Starting key verification with peer %s...\n", peerID.String())
+	}
 	trusted, err := s.VerifyAndExchangeKeys(timeoutCtx, peerID)
 	if err != nil {
 		return nil, fmt.Errorf("key exchange failed: %w", err)
@@ -856,15 +938,21 @@ func (s *SyncService) SyncWithPeer(ctx context.Context, peerID peer.ID) (*SyncRe
 	if !trusted {
 		return nil, fmt.Errorf("peer %s is not trusted", peerID.String())
 	}
-	fmt.Printf("Peer %s is trusted, proceeding with sync\n", peerID.String())
+	if s.verbose {
+		fmt.Printf("Peer %s is trusted, proceeding with sync\n", peerID.String())
+	}
 
 	// Step 1: Get remote manifest
-	fmt.Printf("Retrieving manifest from peer %s...\n", peerID.String())
+	if s.verbose {
+		fmt.Printf("Retrieving manifest from peer %s...\n", peerID.String())
+	}
 	remoteManifest, err := s.getRemoteManifest(timeoutCtx, peerID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get remote manifest: %v", err)
 	}
-	fmt.Printf("Retrieved manifest from peer with %d files\n", len(remoteManifest.Files))
+	if s.verbose {
+		fmt.Printf("Retrieved manifest from peer with %d files\n", len(remoteManifest.Files))
+	}
 
 	// Step 2: Get local manifest
 	localManifest, err := s.vaultMgr.GetManifest()
@@ -874,11 +962,13 @@ func (s *SyncService) SyncWithPeer(ctx context.Context, peerID peer.ID) (*SyncRe
 
 	// Step 3: Find missing chunks
 	missingChunks := s.findMissingChunks(localManifest, remoteManifest)
-	fmt.Printf("Found %d missing chunks to fetch\n", len(missingChunks))
+	if s.verbose {
+		fmt.Printf("Found %d missing chunks to fetch\n", len(missingChunks))
+	}
 
 	// Step 4: Fetch missing chunks
 	for i, chunkHash := range missingChunks {
-		if i%10 == 0 {
+		if s.verbose && i%10 == 0 {
 			fmt.Printf("Fetching chunk %d of %d...\n", i+1, len(missingChunks))
 		}
 
@@ -918,7 +1008,9 @@ func (s *SyncService) SyncWithPeer(ctx context.Context, peerID peer.ID) (*SyncRe
 	}
 
 	// Step 5: Save file manifests for synced files
-	fmt.Println("Saving file manifests...")
+	if s.verbose {
+		fmt.Println("Saving file manifests...")
+	}
 	savedCount := 0
 	for _, remoteFile := range remoteManifest.Files {
 		// Check if this file already exists locally
@@ -943,11 +1035,15 @@ func (s *SyncService) SyncWithPeer(ctx context.Context, peerID peer.ID) (*SyncRe
 				return nil, fmt.Errorf("failed to save manifest for %s: %v",
 					fileManifest.FilePath, err)
 			}
-			fmt.Printf("Saved manifest for: %s\n", fileManifest.FilePath)
+			if s.verbose {
+				fmt.Printf("Saved manifest for: %s\n", fileManifest.FilePath)
+			}
 			savedCount++
 		}
 	}
-	fmt.Printf("Saved %d file manifests\n", savedCount)
+	if s.verbose {
+		fmt.Printf("Saved %d file manifests\n", savedCount)
+	}
 	result.FileCount = savedCount
 
 	// Step 6: Rebuild references
@@ -956,8 +1052,10 @@ func (s *SyncService) SyncWithPeer(ctx context.Context, peerID peer.ID) (*SyncRe
 	}
 
 	result.Duration = time.Since(startTime)
-	fmt.Printf("Sync completed in %v: %d files, %d chunks transferred, %d chunks reused\n",
-		result.Duration, result.FileCount, result.ChunksTransferred, result.ChunksDeduplicated)
+	if s.verbose {
+		fmt.Printf("Sync completed in %v: %d files, %d chunks transferred, %d chunks reused\n",
+			result.Duration, result.FileCount, result.ChunksTransferred, result.ChunksDeduplicated)
+	}
 
 	return result, nil
 }
@@ -1018,28 +1116,46 @@ func (s *SyncService) findMissingChunks(local, remote *config.Manifest) []string
 	encryptedToRegularHash := make(map[string]string) // Track relationship between hashes
 
 	// Log all chunk hashes for debugging
-	fmt.Println("Local chunks:")
-	for _, file := range local.Files {
-		for _, chunk := range file.Chunks {
-			localChunks[chunk.Hash] = true
-			fmt.Printf("  - Regular hash: %s\n", chunk.Hash)
+	if s.verbose {
+		fmt.Println("Local chunks:")
+		for _, file := range local.Files {
+			for _, chunk := range file.Chunks {
+				localChunks[chunk.Hash] = true
+				fmt.Printf("  - Regular hash: %s\n", chunk.Hash)
 
-			// Also add encrypted hash if available
-			if chunk.EncryptedHash != "" {
-				localChunks[chunk.EncryptedHash] = true
-				encryptedToRegularHash[chunk.EncryptedHash] = chunk.Hash
-				fmt.Printf("    Encrypted hash: %s\n", chunk.EncryptedHash)
+				// Also add encrypted hash if available
+				if chunk.EncryptedHash != "" {
+					localChunks[chunk.EncryptedHash] = true
+					encryptedToRegularHash[chunk.EncryptedHash] = chunk.Hash
+					fmt.Printf("    Encrypted hash: %s\n", chunk.EncryptedHash)
+				}
+			}
+		}
+	} else {
+		// Build maps without verbose output
+		for _, file := range local.Files {
+			for _, chunk := range file.Chunks {
+				localChunks[chunk.Hash] = true
+				if chunk.EncryptedHash != "" {
+					localChunks[chunk.EncryptedHash] = true
+					encryptedToRegularHash[chunk.EncryptedHash] = chunk.Hash
+				}
 			}
 		}
 	}
 
 	// Find chunks in remote that don't exist locally
-	fmt.Println("Remote chunks:")
+	if s.verbose {
+		fmt.Println("Remote chunks:")
+	}
+
 	for _, file := range remote.Files {
 		for _, chunk := range file.Chunks {
-			fmt.Printf("  - Checking remote chunk: %s\n", chunk.Hash)
-			if chunk.EncryptedHash != "" {
-				fmt.Printf("    With encrypted hash: %s\n", chunk.EncryptedHash)
+			if s.verbose {
+				fmt.Printf("  - Checking remote chunk: %s\n", chunk.Hash)
+				if chunk.EncryptedHash != "" {
+					fmt.Printf("    With encrypted hash: %s\n", chunk.EncryptedHash)
+				}
 			}
 
 			// Check if either regular or encrypted hash exists locally
@@ -1051,7 +1167,9 @@ func (s *SyncService) findMissingChunks(local, remote *config.Manifest) []string
 				chunkToFetch := chunk.Hash
 				alreadyAdded := slices.Contains(missingChunks, chunkToFetch)
 				if !alreadyAdded {
-					fmt.Printf("  - Adding missing chunk: %s\n", chunkToFetch)
+					if s.verbose {
+						fmt.Printf("  - Adding missing chunk: %s\n", chunkToFetch)
+					}
 					missingChunks = append(missingChunks, chunkToFetch)
 				}
 			}
@@ -1091,7 +1209,9 @@ func (s *SyncService) fetchChunk(ctx context.Context, peerID peer.ID, hash strin
 		IsEncrypted:   isEncrypted,
 	}
 
-	fmt.Printf("Requesting chunk with hash: %s, encrypted hash: %s\n", hash, encryptedHash)
+	if s.verbose {
+		fmt.Printf("Requesting chunk with hash: %s, encrypted hash: %s\n", hash, encryptedHash)
+	}
 	if err := json.NewEncoder(stream).Encode(request); err != nil {
 		return nil, 0, fmt.Errorf("failed to send chunk request: %w", err)
 	}
@@ -1136,7 +1256,9 @@ func (s *SyncService) StoreChunk(hash string, data []byte, encryptedHash string)
 	// If we have an encrypted hash, store with that too
 	if encryptedHash != "" {
 		if err := s.vaultMgr.StoreChunk(encryptedHash, data); err != nil {
-			fmt.Printf("Warning: Failed to store chunk with encrypted hash: %v\n", err)
+			if s.verbose {
+				fmt.Printf("Warning: Failed to store chunk with encrypted hash: %v\n", err)
+			}
 			// Continue anyway since we stored it with the regular hash
 		}
 	}

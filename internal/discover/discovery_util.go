@@ -14,7 +14,7 @@ import (
 )
 
 // createSyncService creates a sync service with or without RSA support
-func CreateSyncService(h host.Host, vaultMgr *config.Manager, vaultConfig *config.VaultConfig, vaultPath string) (*p2p.SyncService, error) {
+func CreateSyncService(h host.Host, vaultMgr *config.Manager, vaultConfig *config.VaultConfig, vaultPath string, verbose bool) (*p2p.SyncService, error) {
 	if vaultConfig.Sync.Enabled && vaultConfig.Sync.RSA != nil {
 		privateKey, publicKey, rsaConfig, err := keys.LoadRSAKeys(vaultPath, vaultConfig.Sync.RSA)
 		if err != nil {
@@ -26,7 +26,11 @@ func CreateSyncService(h host.Host, vaultMgr *config.Manager, vaultConfig *confi
 			return nil, fmt.Errorf("failed to create sync service: %v", err)
 		}
 
-		fmt.Println("🔐 RSA key exchange enabled with fingerprint:", rsaConfig.Fingerprint)
+		syncService.SetVerbose(verbose)
+
+		if verbose {
+			fmt.Println("🔐 RSA key exchange enabled with fingerprint:", rsaConfig.Fingerprint)
+		}
 		return syncService, nil
 	} else {
 		syncService, err := p2p.NewSyncService(h, vaultMgr)
@@ -34,7 +38,11 @@ func CreateSyncService(h host.Host, vaultMgr *config.Manager, vaultConfig *confi
 			return nil, fmt.Errorf("failed to create sync service: %v", err)
 		}
 
-		fmt.Println("⚠️ Warning: RSA key exchange not enabled in vault config")
+		syncService.SetVerbose(verbose)
+
+		if verbose {
+			fmt.Println("⚠️ Warning: RSA key exchange not enabled in vault config")
+		}
 		return syncService, nil
 	}
 }
@@ -61,7 +69,7 @@ func SetupDiscovery(ctx context.Context, h host.Host) (*p2p.MDNSDiscovery, <-cha
 
 // runDiscoveryLoop processes discovered peers until timeout or interrupted
 func RunDiscoveryLoop(ctx context.Context, h host.Host, syncService *p2p.SyncService,
-	peerChan <-chan peer.AddrInfo, timeout int, continuous bool,
+	peerChan <-chan peer.AddrInfo, timeout int, continuous bool, verbose bool,
 ) error {
 	var timeoutChan <-chan time.Time
 	if !continuous {
@@ -89,7 +97,7 @@ func RunDiscoveryLoop(ctx context.Context, h host.Host, syncService *p2p.SyncSer
 			discoveredPeers[p.ID.String()] = true
 			peerCount++
 
-			handleDiscoveredPeer(ctx, h, syncService, p, peerCount)
+			handleDiscoveredPeer(ctx, h, syncService, p, peerCount, verbose)
 
 		case <-timeoutChan:
 			fmt.Printf("\n⌛ Discovery timeout reached after %d seconds.\n", timeout)
@@ -113,13 +121,16 @@ func RunDiscoveryLoop(ctx context.Context, h host.Host, syncService *p2p.SyncSer
 
 // handleDiscoveredPeer processes a newly discovered peer
 func handleDiscoveredPeer(ctx context.Context, h host.Host, syncService *p2p.SyncService,
-	p peer.AddrInfo, peerCount int,
+	p peer.AddrInfo, peerCount int, verbose bool,
 ) {
 	fmt.Printf("✅ Discovered peer #%d\n", peerCount)
-	fmt.Printf("   ID: %s\n", p.ID.String())
-	fmt.Println("   Addresses:")
-	for _, addr := range p.Addrs {
-		fmt.Printf("     - %s\n", addr.String())
+
+	if verbose {
+		fmt.Printf("   ID: %s\n", p.ID.String())
+		fmt.Println("   Addresses:")
+		for _, addr := range p.Addrs {
+			fmt.Printf("     - %s\n", addr.String())
+		}
 	}
 
 	fmt.Printf("   Connecting and exchanging keys... ")
@@ -141,7 +152,10 @@ func handleDiscoveredPeer(ctx context.Context, h host.Host, syncService *p2p.Syn
 	if trusted {
 		fingerprint, _ := syncService.GetPeerFingerprint(p.ID)
 		fmt.Println("Key exchange successful")
-		fmt.Printf("   Fingerprint: %s\n", fingerprint)
+
+		if verbose {
+			fmt.Printf("   Fingerprint: %s\n", fingerprint)
+		}
 
 		// Attempt to add trusted peer; detect if already trusted by inspecting output of AddTrustedPeer logic.
 		// Since AddTrustedPeer itself prints when a peer already exists, suppress duplicate messaging here by
@@ -159,7 +173,9 @@ func handleDiscoveredPeer(ctx context.Context, h host.Host, syncService *p2p.Syn
 		}
 
 		if alreadyTrusted {
-			fmt.Println("Peer already trusted (verified)")
+			if verbose {
+				fmt.Println("Peer already trusted (verified)")
+			}
 		} else {
 			fmt.Println("Peer added to trusted list")
 		}

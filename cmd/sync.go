@@ -41,6 +41,9 @@ Examples:
   sietch sync                               # Auto-discover and sync with peers
   sietch sync /ip4/192.168.1.5/tcp/4001/p2p/QmPeerID  # Sync with a specific peer`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// Get verbose flag
+		verbose, _ := cmd.Flags().GetBool("verbose")
+
 		// Create a context with cancellation
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -99,10 +102,12 @@ Examples:
 
 		fmt.Printf("🔌 Started Sietch node with ID: %s\n", host.ID().String())
 
-		// Print our listen addresses
-		fmt.Println("📡 Listening on:")
-		for _, addr := range host.Addrs() {
-			fmt.Printf("   %s/p2p/%s\n", addr.String(), host.ID().String())
+		// Print our listen addresses only in verbose mode
+		if verbose {
+			fmt.Println("📡 Listening on:")
+			for _, addr := range host.Addrs() {
+				fmt.Printf("   %s/p2p/%s\n", addr.String(), host.ID().String())
+			}
 		}
 
 		// Load the vault manager
@@ -116,6 +121,9 @@ Examples:
 		if err != nil {
 			return fmt.Errorf("failed to create sync service: %v", err)
 		}
+
+		// Set verbose mode on sync service
+		syncService.SetVerbose(verbose)
 
 		// Start secure protocol handlers
 		syncService.RegisterProtocols(ctx)
@@ -339,4 +347,5 @@ func init() {
 	syncCmd.Flags().IntP("timeout", "t", 60, "Discovery timeout in seconds (for auto-discovery)")
 	syncCmd.Flags().BoolP("force-trust", "f", false, "Automatically trust new peers without prompting")
 	syncCmd.Flags().BoolP("read-only", "r", false, "Only receive files, don't send")
+	syncCmd.Flags().BoolP("verbose", "v", false, "Enable verbose debug output")
 }

@@ -88,7 +88,7 @@ Example:
 		}
 
 		// Create sync service (with or without RSA)
-		syncService, err := discover.CreateSyncService(host, vaultMgr, vaultConfig, vaultPath)
+		syncService, err := discover.CreateSyncService(host, vaultMgr, vaultConfig, vaultPath, verbose)
 		if err != nil {
 			return fmt.Errorf("failed to create sync service: %v", err)
 		}
@@ -101,7 +101,7 @@ Example:
 		defer func() { _ = discovery.Stop() }()
 
 		// Run the discovery loop
-		return discover.RunDiscoveryLoop(ctx, host, syncService, peerChan, timeout, continuous)
+		return discover.RunDiscoveryLoop(ctx, host, syncService, peerChan, timeout, continuous, verbose)
 	},
 }
 
