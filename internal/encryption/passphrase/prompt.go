@@ -6,6 +6,7 @@ import (
 	"github.com/manifoldco/promptui"
 
 	"github.com/substantialcattle5/sietch/internal/config"
+	passphrasevalidation "github.com/substantialcattle5/sietch/internal/passphrase"
 )
 
 // promptForPassphrase prompts the user for a passphrase
@@ -19,8 +20,9 @@ func PromptForPassphrase(confirm bool) (string, error) {
 		Label: promptLabel,
 		Mask:  '*',
 		Validate: func(input string) error {
-			if len(input) < 8 {
-				return fmt.Errorf("passphrase must be at least 8 characters")
+			result := passphrasevalidation.ValidateHybrid(input)
+			if !result.Valid || len(result.Warnings) > 0 {
+				return fmt.Errorf("%s", passphrasevalidation.GetHybridErrorMessage(result))
 			}
 			return nil
 		},
