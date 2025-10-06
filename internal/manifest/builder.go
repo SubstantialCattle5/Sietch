@@ -1,7 +1,6 @@
 package manifest
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,6 +9,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/substantialcattle5/sietch/internal/config"
+	"github.com/substantialcattle5/sietch/util"
 )
 
 // WriteManifest writes the vault configuration to vault.yaml
@@ -62,15 +62,10 @@ func StoreFileManifest(vaultRoot string, fileName string, manifest *config.FileM
 
 	// Check if file exists
 	_, err := os.Stat(manifestPath)
-	fmt.Println(manifestPath)
 	if err == nil {
-		fmt.Printf("'%s' already exists. Overwrite? (y/N): ", uniqueFileIdentifier)
-		reader := bufio.NewReader(os.Stdin)
-		response, _ := reader.ReadString('\n')
-		response = strings.TrimSpace(strings.ToLower(response))
-
-		if response != "y" && response != "yes" {
-			fmt.Printf("'%s' skipped\n", manifest.Destination+fileName)
+		message := fmt.Sprintf("'%s' exists. Overwrite? ", manifest.Destination+fileName)
+		response, err := util.ConfirmOverwrite(message, os.Stdin, os.Stdout)
+		if err != nil || !response {
 			return fmt.Errorf("skipped")
 		}
 	}
