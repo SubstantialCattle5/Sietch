@@ -14,7 +14,9 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/substantialcattle5/sietch/internal/config"
+	"github.com/substantialcattle5/sietch/internal/deduplication"
 	"github.com/substantialcattle5/sietch/internal/fs"
+	lsui "github.com/substantialcattle5/sietch/internal/ls"
 	"github.com/substantialcattle5/sietch/util"
 )
 
@@ -64,9 +66,16 @@ Examples:
 		long, _ := cmd.Flags().GetBool("long")
 		showTags, _ := cmd.Flags().GetBool("tags")
 		sortBy, _ := cmd.Flags().GetString("sort")
+		showDedup, _ := cmd.Flags().GetBool("dedup-stats")
 
 		// Filter and sort files
 		files := filterAndSortFiles(manifest.Files, filterPath, sortBy)
+
+		// Build chunk -> files index only if dedup stats requested
+		var chunkRefs map[string][]string
+		if showDedup {
+			chunkRefs = buildChunkIndex(manifest.Files)
+		}
 
 		// Display the files
 		if len(files) == 0 {
@@ -79,9 +88,9 @@ Examples:
 		}
 
 		if long {
-			displayLongFormat(files, showTags)
+			displayLongFormat(files, showTags, showDedup, chunkRefs)
 		} else {
-			displayShortFormat(files, showTags)
+			lsui.DisplayShortFormat(files, showTags, showDedup, chunkRefs)
 		}
 
 		return nil
@@ -125,7 +134,8 @@ func filterAndSortFiles(files []config.FileManifest, filterPath, sortBy string) 
 }
 
 // Display files in long format with detailed information
-func displayLongFormat(files []config.FileManifest, showTags bool) {
+// showDedup = whether to include dedup stats; chunkRefs is map[chunkID][]filePaths
+func displayLongFormat(files []config.FileManifest, showTags, showDedup bool, chunkRefs map[string][]string) {
 	// Create a tabwriter for aligned columns
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	defer w.Flush()
@@ -159,20 +169,47 @@ func displayLongFormat(files []config.FileManifest, showTags bool) {
 				len(file.Chunks),
 				file.Destination+file.FilePath)
 		}
+
+		// Dedup stats (print an indented stats line after the file line)
+		if showDedup && chunkRefs != nil {
+			sharedChunks, savedBytes, sharedWith := deduplication.ComputeDedupStatsForFile(file, chunkRefs)
+			// Format saved size
+			savedStr := util.HumanReadableSize(savedBytes)
+			// Format shared_with string with truncation
+			sharedWithStr := lsui.FormatSharedWith(sharedWith, 10)
+			// Print as indented info (not part of the tabwriter)
+			if len(sharedWith) == 0 {
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", "", "", "", "") // ensure tabwriter alignment
+				fmt.Fprintf(w, "    shared_chunks: %d\t saved: %s\n", sharedChunks, savedStr)
+			} else {
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", "", "", "", "") // alignment spacer
+				fmt.Fprintf(w, "    shared_chunks: %d\t saved: %s\t shared_with: %s\n", sharedChunks, savedStr, sharedWithStr)
+			}
+		}
 	}
 }
 
-// Display files in short format
-func displayShortFormat(files []config.FileManifest, showTags bool) {
-	for _, file := range files {
-		path := file.Destination + file.FilePath
-		if showTags && len(file.Tags) > 0 {
-			tags := strings.Join(file.Tags, ", ")
-			fmt.Printf("%s [%s]\n", path, tags)
-		} else {
-			fmt.Println(path)
+// buildChunkIndex creates a mapping chunkID -> []filePaths using the manifest file list.
+// Uses ChunkRef.Hash as the chunk identifier.
+func buildChunkIndex(files []config.FileManifest) map[string][]string {
+	chunkRefs := make(map[string][]string)
+	for _, f := range files {
+		fp := f.Destination + f.FilePath
+		for _, c := range f.Chunks {
+			// use the Hash field as the chunk identifier
+			chunkID := c.Hash
+			if chunkID == "" {
+				// fallback: if Hash is empty, use EncryptedHash
+				chunkID = c.EncryptedHash
+			}
+			if chunkID == "" {
+				// skip weird entries
+				continue
+			}
+			chunkRefs[chunkID] = append(chunkRefs[chunkID], fp)
 		}
 	}
+	return chunkRefs
 }
 
 func init() {
@@ -182,4 +219,7 @@ func init() {
 	lsCmd.Flags().BoolP("long", "l", false, "Use long listing format")
 	lsCmd.Flags().BoolP("tags", "t", false, "Show file tags")
 	lsCmd.Flags().StringP("sort", "s", "path", "Sort by: name, size, time, path")
+
+	// New dedup-stats flag
+	lsCmd.Flags().BoolP("dedup-stats", "d", false, "Show per-file deduplication statistics")
 }
