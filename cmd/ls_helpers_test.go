@@ -1,4 +1,3 @@
-
 package cmd
 
 import (
@@ -215,4 +214,3 @@ func TestBuildChunkIndex_DeterministicOrder(t *testing.T) {
 		t.Fatalf("sharedWith not sorted: %v", sw)
 	}
 }
-

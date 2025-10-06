@@ -1,4 +1,3 @@
-
 package deduplication
 
 import (
@@ -60,4 +59,3 @@ func ComputeDedupStatsForFile(file config.FileManifest, chunkRefs map[string][]s
 	sort.Strings(sharedWith)
 	return
 }
-

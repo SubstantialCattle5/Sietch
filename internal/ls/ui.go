@@ -1,4 +1,3 @@
-
 package ls
 
 import (
@@ -51,4 +50,3 @@ func DisplayShortFormat(files []config.FileManifest, showTags, showDedup bool, c
 		}
 	}
 }
-
