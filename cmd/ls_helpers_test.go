@@ -1,3 +1,4 @@
+
 package cmd
 
 import (
@@ -11,6 +12,8 @@ import (
 	"time"
 
 	"github.com/substantialcattle5/sietch/internal/config"
+	dedup "github.com/substantialcattle5/sietch/internal/deduplication"
+	lsui "github.com/substantialcattle5/sietch/internal/ls"
 )
 
 // Helper: capture stdout while running fn()
@@ -110,7 +113,7 @@ func TestBuildChunkIndexAndComputeDedupStats(t *testing.T) {
 		t.Fatalf("expected c2 refs length 1, got %d", len(idx["c2"]))
 	}
 
-	sharedChunks, savedBytes, sharedWith := computeDedupStatsForFile(f1, idx)
+	sharedChunks, savedBytes, sharedWith := dedup.ComputeDedupStatsForFile(f1, idx)
 	if sharedChunks != 1 {
 		t.Fatalf("expected sharedChunks 1 for f1, got %d", sharedChunks)
 	}
@@ -125,7 +128,7 @@ func TestBuildChunkIndexAndComputeDedupStats(t *testing.T) {
 	}
 
 	// file with no shared chunks
-	sc, sb, sw := computeDedupStatsForFile(f3, idx)
+	sc, sb, sw := dedup.ComputeDedupStatsForFile(f3, idx)
 	if sc != 0 || sb != 0 || len(sw) != 0 {
 		t.Fatalf("expected no shared chunks for f3, got sc=%d sb=%d sw=%v", sc, sb, sw)
 	}
@@ -137,7 +140,7 @@ func TestFormatSharedWith_Truncation(t *testing.T) {
 		// use numeric suffixes to avoid rune/int confusion
 		list = append(list, fmt.Sprintf("file%d", i))
 	}
-	out := formatSharedWith(list, 10)
+	out := lsui.FormatSharedWith(list, 10)
 	if !strings.Contains(out, "(+2 more)") {
 		t.Fatalf("expected truncation info (+2 more) in '%s'", out)
 	}
@@ -165,7 +168,7 @@ func TestDisplayShortAndLongFormat_OutputContainsStats(t *testing.T) {
 
 	// short format capture
 	outShort := captureStdout(t, func() {
-		displayShortFormat(files, true, true, chunkRefs)
+		lsui.DisplayShortFormat(files, true, true, chunkRefs)
 	})
 	if !strings.Contains(outShort, "shared_chunks:") || !strings.Contains(outShort, "saved:") {
 		t.Fatalf("short output missing dedup info: %s", outShort)
@@ -206,9 +209,10 @@ func TestBuildChunkIndex_DeterministicOrder(t *testing.T) {
 	}
 
 	// ensure computeDedupStatsForFile sorts sharedWith deterministically
-	_, _, sw := computeDedupStatsForFile(f1, idx)
+	_, _, sw := dedup.ComputeDedupStatsForFile(f1, idx)
 	// sw should be sorted (we call sort.Strings), check monotonic property
 	if !sort.StringsAreSorted(sw) {
 		t.Fatalf("sharedWith not sorted: %v", sw)
 	}
 }
+

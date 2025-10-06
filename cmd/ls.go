@@ -1,3 +1,4 @@
+
 /*
 Copyright © 2025 SubstantialCattle5, nilaysharan.com
 */
@@ -14,6 +15,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/substantialcattle5/sietch/internal/config"
+	"github.com/substantialcattle5/sietch/internal/deduplication"
+	lsui "github.com/substantialcattle5/sietch/internal/ls"
 	"github.com/substantialcattle5/sietch/internal/fs"
 	"github.com/substantialcattle5/sietch/util"
 )
@@ -88,7 +91,7 @@ Examples:
 		if long {
 			displayLongFormat(files, showTags, showDedup, chunkRefs)
 		} else {
-			displayShortFormat(files, showTags, showDedup, chunkRefs)
+			lsui.DisplayShortFormat(files, showTags, showDedup, chunkRefs)
 		}
 
 		return nil
@@ -170,11 +173,11 @@ func displayLongFormat(files []config.FileManifest, showTags, showDedup bool, ch
 
 		// Dedup stats (print an indented stats line after the file line)
 		if showDedup && chunkRefs != nil {
-			sharedChunks, savedBytes, sharedWith := computeDedupStatsForFile(file, chunkRefs)
+			sharedChunks, savedBytes, sharedWith := deduplication.ComputeDedupStatsForFile(file, chunkRefs)
 			// Format saved size
-			savedStr := util.HumanReadableSize(int64(savedBytes))
+			savedStr := util.HumanReadableSize(savedBytes)
 			// Format shared_with string with truncation
-			sharedWithStr := formatSharedWith(sharedWith, 10)
+			sharedWithStr := lsui.FormatSharedWith(sharedWith, 10)
 			// Print as indented info (not part of the tabwriter)
 			if len(sharedWith) == 0 {
 				fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", "", "", "", "") // ensure tabwriter alignment
@@ -182,31 +185,6 @@ func displayLongFormat(files []config.FileManifest, showTags, showDedup bool, ch
 			} else {
 				fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", "", "", "", "") // alignment spacer
 				fmt.Fprintf(w, "    shared_chunks: %d\t saved: %s\t shared_with: %s\n", sharedChunks, savedStr, sharedWithStr)
-			}
-		}
-	}
-}
-
-// Display files in short format
-func displayShortFormat(files []config.FileManifest, showTags, showDedup bool, chunkRefs map[string][]string) {
-	for _, file := range files {
-		path := file.Destination + file.FilePath
-		if showTags && len(file.Tags) > 0 {
-			tags := strings.Join(file.Tags, ", ")
-			fmt.Printf("%s [%s]\n", path, tags)
-		} else {
-			fmt.Println(path)
-		}
-
-		// Dedup stats line if requested
-		if showDedup && chunkRefs != nil {
-			sharedChunks, savedBytes, sharedWith := computeDedupStatsForFile(file, chunkRefs)
-			savedStr := util.HumanReadableSize(int64(savedBytes))
-			sharedWithStr := formatSharedWith(sharedWith, 10)
-			if len(sharedWith) == 0 {
-				fmt.Printf("  shared_chunks: %d  saved: %s\n", sharedChunks, savedStr)
-			} else {
-				fmt.Printf("  shared_chunks: %d  saved: %s  shared_with: %s\n", sharedChunks, savedStr, sharedWithStr)
 			}
 		}
 	}
@@ -235,72 +213,6 @@ func buildChunkIndex(files []config.FileManifest) map[string][]string {
 	return chunkRefs
 }
 
-// computeDedupStatsForFile calculates dedup stats by consulting chunkRefs map.
-// Uses EncryptedSize if present, otherwise Size, otherwise falls back to default chunk size.
-func computeDedupStatsForFile(file config.FileManifest, chunkRefs map[string][]string) (sharedChunks int, savedBytes int64, sharedWith []string) {
-	// Default chunk size assumption (matches docs): 4 MiB
-	const defaultChunkSize int64 = 4 * 1024 * 1024
-
-	sharedWithSet := make(map[string]struct{})
-	filePath := file.Destination + file.FilePath
-
-	for _, c := range file.Chunks {
-		chunkID := c.Hash
-		if chunkID == "" {
-			chunkID = c.EncryptedHash
-		}
-		if chunkID == "" {
-			continue
-		}
-
-		refs, ok := chunkRefs[chunkID]
-		if !ok {
-			continue
-		}
-		if len(refs) > 1 {
-			sharedChunks++
-
-			// Prefer encrypted size if available (actual stored size), fallback to plaintext size
-			var chunkSize int64
-			if c.EncryptedSize > 0 {
-				chunkSize = c.EncryptedSize
-			} else if c.Size > 0 {
-				chunkSize = c.Size
-			} else {
-				chunkSize = defaultChunkSize
-			}
-			savedBytes += chunkSize
-
-			for _, other := range refs {
-				if other == filePath {
-					continue
-				}
-				sharedWithSet[other] = struct{}{}
-			}
-		}
-	}
-
-	sharedWith = make([]string, 0, len(sharedWithSet))
-	for s := range sharedWithSet {
-		sharedWith = append(sharedWith, s)
-	}
-	// sort for deterministic output
-	sort.Strings(sharedWith)
-	return
-}
-
-// formatSharedWith joins sharedWith and truncates after limit entries, showing (+N more)
-func formatSharedWith(list []string, limit int) string {
-	if len(list) == 0 {
-		return ""
-	}
-	if len(list) <= limit {
-		return strings.Join(list, ", ")
-	}
-	visible := list[:limit]
-	return fmt.Sprintf("%s (+%d more)", strings.Join(visible, ", "), len(list)-limit)
-}
-
 func init() {
 	rootCmd.AddCommand(lsCmd)
 
@@ -312,3 +224,4 @@ func init() {
 	// New dedup-stats flag
 	lsCmd.Flags().BoolP("dedup-stats", "d", false, "Show per-file deduplication statistics")
 }
+
