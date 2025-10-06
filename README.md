@@ -275,6 +275,15 @@ Thanks to all our amazing contributors!
                 </a>
             </td>
 		</tr>
+		<tr>
+            <td align="center">
+                <a href="https://github.com/Udayan853">
+                    <img src="https://avatars.githubusercontent.com/u/76378994?v=4" width="100;" alt="Udayan853"/>
+                    <br />
+                    <sub><b>Udayan Kulkarni</b></sub>
+                </a>
+            </td>
+		</tr>
 	<tbody>
 </table>
 <!-- readme: contributors -end -->
