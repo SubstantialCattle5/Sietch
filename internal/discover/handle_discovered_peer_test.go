@@ -29,7 +29,7 @@ func TestHandleDiscoveredPeerExercisesPaths(t *testing.T) {
 
 	// Create non-RSA sync service
 	vc := &config.VaultConfig{}
-	svc, err := CreateSyncService(h, vm, vc, ".")
+	svc, err := CreateSyncService(h, vm, vc, ".", false)
 	if err != nil {
 		t.Fatalf("CreateSyncService failed: %v", err)
 	}
