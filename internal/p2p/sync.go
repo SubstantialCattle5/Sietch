@@ -46,6 +46,7 @@ type SyncService struct {
 	trustedPeers  map[peer.ID]*PeerInfo
 	vaultConfig   *config.VaultConfig
 	trustAllPeers bool // New flag to automatically trust all peers
+	Verbose       bool // Enable verbose debug output
 }
 
 // PeerInfo contains information about a trusted peer
@@ -426,21 +427,29 @@ func (s *SyncService) handleChunkRequest(stream network.Stream) {
 
 	// First try using the primary hash
 	chunkHash := chunkRequest.Hash
-	fmt.Printf("Looking for chunk with hash: %s\n", chunkHash)
+	if s.Verbose {
+		fmt.Printf("Looking for chunk with hash: %s\n", chunkHash)
+	}
 	chunkData, err := s.vaultMgr.GetChunk(chunkHash)
 
 	// If that fails and we have an encrypted hash, try that
 	if err != nil && chunkRequest.EncryptedHash != "" {
-		fmt.Printf("Chunk not found, trying encrypted hash: %s\n", chunkRequest.EncryptedHash)
+		if s.Verbose {
+			fmt.Printf("Chunk not found, trying encrypted hash: %s\n", chunkRequest.EncryptedHash)
+		}
 		chunkData, err = s.vaultMgr.GetChunk(chunkRequest.EncryptedHash)
 		if err == nil {
-			fmt.Printf("Found chunk using encrypted hash\n")
+			if s.Verbose {
+				fmt.Printf("Found chunk using encrypted hash\n")
+			}
 		}
 	}
 
 	// If still not found, return error
 	if err != nil {
-		fmt.Printf("Chunk not found with either hash\n")
+		if s.Verbose {
+			fmt.Printf("Chunk not found with either hash\n")
+		}
 		response := struct {
 			Error string `json:"error"`
 		}{
@@ -847,7 +856,9 @@ func (s *SyncService) SyncWithPeer(ctx context.Context, peerID peer.ID) (*SyncRe
 	result := &SyncResult{}
 
 	// First verify and exchange keys with peer (will auto-trust if trustAllPeers is true)
-	fmt.Printf("Starting key verification with peer %s...\n", peerID.String())
+	if s.Verbose {
+		fmt.Printf("Starting key verification with peer %s...\n", peerID.String())
+	}
 	trusted, err := s.VerifyAndExchangeKeys(timeoutCtx, peerID)
 	if err != nil {
 		return nil, fmt.Errorf("key exchange failed: %w", err)
@@ -856,15 +867,21 @@ func (s *SyncService) SyncWithPeer(ctx context.Context, peerID peer.ID) (*SyncRe
 	if !trusted {
 		return nil, fmt.Errorf("peer %s is not trusted", peerID.String())
 	}
-	fmt.Printf("Peer %s is trusted, proceeding with sync\n", peerID.String())
+	if s.Verbose {
+		fmt.Printf("Peer %s is trusted, proceeding with sync\n", peerID.String())
+	}
 
 	// Step 1: Get remote manifest
-	fmt.Printf("Retrieving manifest from peer %s...\n", peerID.String())
+	if s.Verbose {
+		fmt.Printf("Retrieving manifest from peer %s...\n", peerID.String())
+	}
 	remoteManifest, err := s.getRemoteManifest(timeoutCtx, peerID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get remote manifest: %v", err)
 	}
-	fmt.Printf("Retrieved manifest from peer with %d files\n", len(remoteManifest.Files))
+	if s.Verbose {
+		fmt.Printf("Retrieved manifest from peer with %d files\n", len(remoteManifest.Files))
+	}
 
 	// Step 2: Get local manifest
 	localManifest, err := s.vaultMgr.GetManifest()
@@ -874,11 +891,13 @@ func (s *SyncService) SyncWithPeer(ctx context.Context, peerID peer.ID) (*SyncRe
 
 	// Step 3: Find missing chunks
 	missingChunks := s.findMissingChunks(localManifest, remoteManifest)
-	fmt.Printf("Found %d missing chunks to fetch\n", len(missingChunks))
+	if s.Verbose {
+		fmt.Printf("Found %d missing chunks to fetch\n", len(missingChunks))
+	}
 
 	// Step 4: Fetch missing chunks
 	for i, chunkHash := range missingChunks {
-		if i%10 == 0 {
+		if s.Verbose && i%10 == 0 {
 			fmt.Printf("Fetching chunk %d of %d...\n", i+1, len(missingChunks))
 		}
 
@@ -918,7 +937,9 @@ func (s *SyncService) SyncWithPeer(ctx context.Context, peerID peer.ID) (*SyncRe
 	}
 
 	// Step 5: Save file manifests for synced files
-	fmt.Println("Saving file manifests...")
+	if s.Verbose {
+		fmt.Println("Saving file manifests...")
+	}
 	savedCount := 0
 	for _, remoteFile := range remoteManifest.Files {
 		// Check if this file already exists locally
@@ -943,11 +964,15 @@ func (s *SyncService) SyncWithPeer(ctx context.Context, peerID peer.ID) (*SyncRe
 				return nil, fmt.Errorf("failed to save manifest for %s: %v",
 					fileManifest.FilePath, err)
 			}
-			fmt.Printf("Saved manifest for: %s\n", fileManifest.FilePath)
+			if s.Verbose {
+				fmt.Printf("Saved manifest for: %s\n", fileManifest.FilePath)
+			}
 			savedCount++
 		}
 	}
-	fmt.Printf("Saved %d file manifests\n", savedCount)
+	if s.Verbose {
+		fmt.Printf("Saved %d file manifests\n", savedCount)
+	}
 	result.FileCount = savedCount
 
 	// Step 6: Rebuild references
@@ -956,8 +981,10 @@ func (s *SyncService) SyncWithPeer(ctx context.Context, peerID peer.ID) (*SyncRe
 	}
 
 	result.Duration = time.Since(startTime)
-	fmt.Printf("Sync completed in %v: %d files, %d chunks transferred, %d chunks reused\n",
-		result.Duration, result.FileCount, result.ChunksTransferred, result.ChunksDeduplicated)
+	if s.Verbose {
+		fmt.Printf("Sync completed in %v: %d files, %d chunks transferred, %d chunks reused\n",
+			result.Duration, result.FileCount, result.ChunksTransferred, result.ChunksDeduplicated)
+	}
 
 	return result, nil
 }
@@ -1018,28 +1045,38 @@ func (s *SyncService) findMissingChunks(local, remote *config.Manifest) []string
 	encryptedToRegularHash := make(map[string]string) // Track relationship between hashes
 
 	// Log all chunk hashes for debugging
-	fmt.Println("Local chunks:")
+	if s.Verbose {
+		fmt.Println("Local chunks:")
+	}
 	for _, file := range local.Files {
 		for _, chunk := range file.Chunks {
 			localChunks[chunk.Hash] = true
-			fmt.Printf("  - Regular hash: %s\n", chunk.Hash)
+			if s.Verbose {
+				fmt.Printf("  - Regular hash: %s\n", chunk.Hash)
+			}
 
 			// Also add encrypted hash if available
 			if chunk.EncryptedHash != "" {
 				localChunks[chunk.EncryptedHash] = true
 				encryptedToRegularHash[chunk.EncryptedHash] = chunk.Hash
-				fmt.Printf("    Encrypted hash: %s\n", chunk.EncryptedHash)
+				if s.Verbose {
+					fmt.Printf("    Encrypted hash: %s\n", chunk.EncryptedHash)
+				}
 			}
 		}
 	}
 
 	// Find chunks in remote that don't exist locally
-	fmt.Println("Remote chunks:")
+	if s.Verbose {
+		fmt.Println("Remote chunks:")
+	}
 	for _, file := range remote.Files {
 		for _, chunk := range file.Chunks {
-			fmt.Printf("  - Checking remote chunk: %s\n", chunk.Hash)
-			if chunk.EncryptedHash != "" {
-				fmt.Printf("    With encrypted hash: %s\n", chunk.EncryptedHash)
+			if s.Verbose {
+				fmt.Printf("  - Checking remote chunk: %s\n", chunk.Hash)
+				if chunk.EncryptedHash != "" {
+					fmt.Printf("    With encrypted hash: %s\n", chunk.EncryptedHash)
+				}
 			}
 
 			// Check if either regular or encrypted hash exists locally
@@ -1051,7 +1088,9 @@ func (s *SyncService) findMissingChunks(local, remote *config.Manifest) []string
 				chunkToFetch := chunk.Hash
 				alreadyAdded := slices.Contains(missingChunks, chunkToFetch)
 				if !alreadyAdded {
-					fmt.Printf("  - Adding missing chunk: %s\n", chunkToFetch)
+					if s.Verbose {
+						fmt.Printf("  - Adding missing chunk: %s\n", chunkToFetch)
+					}
 					missingChunks = append(missingChunks, chunkToFetch)
 				}
 			}
@@ -1091,7 +1130,9 @@ func (s *SyncService) fetchChunk(ctx context.Context, peerID peer.ID, hash strin
 		IsEncrypted:   isEncrypted,
 	}
 
-	fmt.Printf("Requesting chunk with hash: %s, encrypted hash: %s\n", hash, encryptedHash)
+	if s.Verbose {
+		fmt.Printf("Requesting chunk with hash: %s, encrypted hash: %s\n", hash, encryptedHash)
+	}
 	if err := json.NewEncoder(stream).Encode(request); err != nil {
 		return nil, 0, fmt.Errorf("failed to send chunk request: %w", err)
 	}
