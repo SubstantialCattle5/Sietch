@@ -307,69 +307,6 @@ func getEnhancedPassphrase(requireConfirmation bool) (string, error) {
 	return passphrase, nil
 }
 
-// showEnhancedFeedback displays compact real-time feedback as part of the validation error
-func showEnhancedFeedback(passphrase string, result passphrasevalidation.HybridValidationResult) string {
-	if passphrase == "" {
-		return ""
-	}
-
-	var feedback strings.Builder
-
-	// Check individual requirements and create compact status
-	requirements := []struct {
-		label    string
-		met      bool
-		progress string
-	}{
-		{"12+ chars", len(passphrase) >= 12, fmt.Sprintf("(%d/12)", len(passphrase))},
-		{"Upper", hasUppercaseChar(passphrase), ""},
-		{"Lower", hasLowercaseChar(passphrase), ""},
-		{"Digit", hasDigitChar(passphrase), ""},
-		{"Special", hasSpecialCharacter(passphrase), ""},
-	}
-
-	// Create a compact one-line status
-	var statusParts []string
-	for _, req := range requirements {
-		symbol := "✗"
-		if req.met {
-			symbol = "✓"
-		}
-
-		label := req.label
-		if req.progress != "" {
-			label += req.progress
-		}
-
-		statusParts = append(statusParts, fmt.Sprintf("%s%s", symbol, label))
-	}
-
-	// Add strength meter
-	score := calculatePassphraseStrength(passphrase, result)
-	strengthLabel := getPassphraseStrengthLabel(score)
-
-	filledBars := score / 2 // Scale to 5 bars max for compactness
-	if filledBars > 5 {
-		filledBars = 5
-	}
-	emptyBars := 5 - filledBars
-
-	meter := strings.Repeat("█", filledBars) + strings.Repeat("░", emptyBars)
-
-	feedback.WriteString(fmt.Sprintf("Status: %s | Strength: %s %s (%d/10)",
-		strings.Join(statusParts, " "),
-		strengthLabel,
-		meter,
-		score))
-
-	// Add warnings if any
-	if len(result.Warnings) > 0 {
-		feedback.WriteString(fmt.Sprintf(" | ⚠️ %s", result.Warnings[0]))
-	}
-
-	return feedback.String()
-}
-
 // Helper functions for character validation
 func hasUppercaseChar(s string) bool {
 	for _, r := range s {
