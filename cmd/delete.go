@@ -129,39 +129,6 @@ Examples:
 	},
 }
 
-// cleanupOrphanedChunks removes chunks that are no longer referenced by any file
-func cleanupOrphanedChunks(vaultRoot string, deletedChunks []config.ChunkRef, remainingManifest *config.Manifest) error { // legacy left for reference
-	// Create a map of all chunks still in use
-	chunksInUse := make(map[string]bool)
-	for _, file := range remainingManifest.Files {
-		for _, chunk := range file.Chunks {
-			chunksInUse[chunk.Hash] = true
-		}
-	}
-
-	// Delete chunks that are no longer in use
-	deletedCount := 0
-	var lastError error
-
-	for _, chunk := range deletedChunks {
-		if !chunksInUse[chunk.Hash] {
-			// This chunk is not referenced by any other file, safe to delete
-			chunkPath := filepath.Join(vaultRoot, ".sietch", "chunks", chunk.Hash)
-			if err := os.Remove(chunkPath); err != nil {
-				lastError = err
-				fmt.Printf("Warning: Failed to delete chunk %s: %v\n", chunk.Hash, err)
-			} else {
-				deletedCount++
-			}
-		}
-	}
-
-	if deletedCount > 0 {
-		fmt.Printf("✓ Removed %d orphaned chunks\n", deletedCount)
-	}
-
-	return lastError
-}
 
 // stageOrphanedChunkDeletes stages deletions for chunks no longer referenced.
 func stageOrphanedChunkDeletes(txn *atomic.Transaction, vaultRoot string, deletedChunks []config.ChunkRef, remainingManifest *config.Manifest) error {
