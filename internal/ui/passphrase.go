@@ -314,7 +314,7 @@ func showEnhancedFeedback(passphrase string, result passphrasevalidation.HybridV
 	}
 
 	var feedback strings.Builder
-	
+
 	// Check individual requirements and create compact status
 	requirements := []struct {
 		label    string
@@ -335,38 +335,38 @@ func showEnhancedFeedback(passphrase string, result passphrasevalidation.HybridV
 		if req.met {
 			symbol = "✓"
 		}
-		
+
 		label := req.label
 		if req.progress != "" {
 			label += req.progress
 		}
-		
+
 		statusParts = append(statusParts, fmt.Sprintf("%s%s", symbol, label))
 	}
-	
-	// Add strength meter  
+
+	// Add strength meter
 	score := calculatePassphraseStrength(passphrase, result)
 	strengthLabel := getPassphraseStrengthLabel(score)
-	
+
 	filledBars := score / 2 // Scale to 5 bars max for compactness
 	if filledBars > 5 {
 		filledBars = 5
 	}
 	emptyBars := 5 - filledBars
-	
+
 	meter := strings.Repeat("█", filledBars) + strings.Repeat("░", emptyBars)
-	
-	feedback.WriteString(fmt.Sprintf("Status: %s | Strength: %s %s (%d/10)", 
-		strings.Join(statusParts, " "), 
-		strengthLabel, 
-		meter, 
+
+	feedback.WriteString(fmt.Sprintf("Status: %s | Strength: %s %s (%d/10)",
+		strings.Join(statusParts, " "),
+		strengthLabel,
+		meter,
 		score))
-	
+
 	// Add warnings if any
 	if len(result.Warnings) > 0 {
 		feedback.WriteString(fmt.Sprintf(" | ⚠️ %s", result.Warnings[0]))
 	}
-	
+
 	return feedback.String()
 }
 
@@ -458,20 +458,20 @@ func getPassphraseStrengthLabel(score int) string {
 // getPassphraseWithInPlaceFeedback implements true in-place real-time feedback
 func getPassphraseWithInPlaceFeedback(label string) (string, error) {
 	fmt.Printf("%s: ", label)
-	
+
 	// Initialize feedback area - show it once and then only update it
 	fmt.Print("\n\nStatus: ✗12+ ✗Upper ✗Lower ✗Digit ✗Special | Strength: Weak ░░░░░ (0/10)\n")
 	fmt.Printf("\033[1A\033[%dC", len(label)+2) // Move cursor back to input position
-	
+
 	var passphrase []rune
-	
+
 	// Set terminal to raw mode for character-by-character input
 	oldState, err := term.MakeRaw(int(syscall.Stdin))
 	if err != nil {
 		return "", fmt.Errorf("failed to set raw mode: %w", err)
 	}
 	defer term.Restore(int(syscall.Stdin), oldState)
-	
+
 	for {
 		// Read single character
 		var buf [3]byte // UTF-8 can be up to 3 bytes
@@ -479,10 +479,10 @@ func getPassphraseWithInPlaceFeedback(label string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		
+
 		if n == 1 {
 			char := buf[0]
-			
+
 			switch char {
 			case 13: // Enter key
 				currentPass := string(passphrase)
@@ -496,18 +496,18 @@ func getPassphraseWithInPlaceFeedback(label string) (string, error) {
 					// Beep and stay in place (password invalid)
 					fmt.Print("\a") // Bell sound
 				}
-				
+
 			case 3: // Ctrl+C
 				fmt.Print("\n")
 				return "", fmt.Errorf("^C")
-				
+
 			case 127, 8: // Backspace/Delete
 				if len(passphrase) > 0 {
 					passphrase = passphrase[:len(passphrase)-1]
 					fmt.Print("\b \b") // Erase character visually
 					updateStatusLine(string(passphrase))
 				}
-				
+
 			default:
 				if char >= 32 && char <= 126 { // Printable ASCII
 					passphrase = append(passphrase, rune(char))
@@ -523,28 +523,28 @@ func getPassphraseWithInPlaceFeedback(label string) (string, error) {
 func updateStatusLine(passphrase string) {
 	if len(passphrase) == 0 {
 		// Reset to initial state
-		fmt.Print("\033[s") // Save cursor position
+		fmt.Print("\033[s")  // Save cursor position
 		fmt.Print("\033[1B") // Move down one line to status line
 		fmt.Print("\033[2K") // Clear entire line
 		fmt.Print("Status: ✗12+ ✗Upper ✗Lower ✗Digit ✗Special | Strength: Weak ░░░░░ (0/10)")
 		fmt.Print("\033[u") // Restore cursor position
 		return
 	}
-	
+
 	// Save current cursor position
 	fmt.Print("\033[s")
-	
+
 	// Move to status line (one line down)
 	fmt.Print("\033[1B")
 	fmt.Print("\033[2K") // Clear the line
-	
+
 	// Check requirements
 	hasLength := len(passphrase) >= 12
 	hasUpper := hasUppercaseChar(passphrase)
 	hasLower := hasLowercaseChar(passphrase)
 	hasDigit := hasDigitChar(passphrase)
 	hasSpecial := hasSpecialCharacter(passphrase)
-	
+
 	// Build status with colors
 	statusParts := []string{
 		fmt.Sprintf("%s12+", getSymbol(hasLength)),
@@ -553,37 +553,37 @@ func updateStatusLine(passphrase string) {
 		fmt.Sprintf("%sDigit", getSymbol(hasDigit)),
 		fmt.Sprintf("%sSpecial", getSymbol(hasSpecial)),
 	}
-	
+
 	if hasLength {
 		statusParts[0] = fmt.Sprintf("%s12+(%d)", getSymbol(hasLength), len(passphrase))
 	}
-	
+
 	// Calculate strength
 	result := passphrasevalidation.ValidateHybrid(passphrase)
 	score := calculatePassphraseStrength(passphrase, result)
 	strengthLabel := getPassphraseStrengthLabel(score)
-	
+
 	// Create compact strength meter (5 bars)
 	filledBars := (score + 1) / 2 // 0-10 -> 0-5
 	if filledBars > 5 {
 		filledBars = 5
 	}
 	emptyBars := 5 - filledBars
-	
+
 	meter := strings.Repeat("█", filledBars) + strings.Repeat("░", emptyBars)
-	
+
 	// Write the complete status line
-	fmt.Printf("Status: %s | Strength: %s %s (%d/10)", 
-		strings.Join(statusParts, " "), 
-		strengthLabel, 
-		meter, 
+	fmt.Printf("Status: %s | Strength: %s %s (%d/10)",
+		strings.Join(statusParts, " "),
+		strengthLabel,
+		meter,
 		score)
-	
+
 	// Add warning if common password
 	if result.IsCommon {
 		fmt.Print(" | ⚠️ Common")
 	}
-	
+
 	// Restore cursor position
 	fmt.Print("\033[u")
 }
