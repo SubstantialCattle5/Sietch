@@ -83,6 +83,8 @@ const (
 	CompressionTypeGzip = "gzip"
 	CompressionTypeZstd = "zstd"
 	CompressionTypeNone = "none"
+	CompressionTypeLZ4  = "lz4"
+
 
 	// Maximum decompression size to prevent decompression bombs
 	// This should be large enough for legitimate chunks but prevent DoS attacks
