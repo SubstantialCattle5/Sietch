@@ -2,7 +2,9 @@ package deduplication
 
 import (
 	"fmt"
+	"path/filepath"
 
+	"github.com/substantialcattle5/sietch/internal/atomic"
 	"github.com/substantialcattle5/sietch/internal/config"
 	"github.com/substantialcattle5/sietch/internal/fs"
 	"github.com/substantialcattle5/sietch/util"
@@ -108,6 +110,44 @@ func (m *Manager) shouldDeduplicateChunk(chunkSize int64) bool {
 // storeChunk stores a chunk to the filesystem
 func (m *Manager) storeChunk(storageHash string, chunkData []byte) error {
 	return fs.StoreChunk(m.vaultRoot, storageHash, chunkData)
+}
+
+// storeChunkTransactional stages a chunk into the active transaction instead of writing directly.
+func (m *Manager) storeChunkTransactional(txn *atomic.Transaction, storageHash string, chunkData []byte) error {
+	rel := filepath.ToSlash(filepath.Join(".sietch", "chunks", storageHash))
+	w, err := txn.StageCreate(rel)
+	if err != nil { return fmt.Errorf("stage chunk %s: %w", storageHash, err) }
+	if _, err := w.Write(chunkData); err != nil { _ = w.Close(); return fmt.Errorf("write staged chunk %s: %w", storageHash, err) }
+	if err := w.Close(); err != nil { return fmt.Errorf("close staged chunk %s: %w", storageHash, err) }
+	return nil
+}
+
+// ProcessChunkTransactional mirrors ProcessChunk but stores new chunk content via the transaction staging area.
+func (m *Manager) ProcessChunkTransactional(txn *atomic.Transaction, chunkRef config.ChunkRef, chunkData []byte, storageHash string) (config.ChunkRef, bool, error) {
+	if !m.config.Enabled {
+		if err := m.storeChunkTransactional(txn, storageHash, chunkData); err != nil { return chunkRef, false, err }
+		return chunkRef, false, nil
+	}
+	if !m.shouldDeduplicateChunk(chunkRef.Size) {
+		if err := m.storeChunkTransactional(txn, storageHash, chunkData); err != nil { return chunkRef, false, err }
+		return chunkRef, false, nil
+	}
+	entry, deduplicated := m.index.AddChunk(chunkRef, storageHash)
+	if deduplicated {
+		chunkRef.Deduplicated = true
+		if m.progressMgr != nil {
+			m.progressMgr.PrintVerbose("  └─ Deduplicated chunk %s (ref count: %d)\n", chunkRef.Hash[:12], entry.RefCount)
+		}
+		return chunkRef, true, nil
+	}
+	if err := m.storeChunkTransactional(txn, storageHash, chunkData); err != nil {
+		if m.index.RemoveChunk(chunkRef.Hash) != nil {
+			fmt.Printf("Warning: failed to remove chunk %s from index after transactional store failure\n", chunkRef.Hash)
+		}
+		return chunkRef, false, err
+	}
+	chunkRef.Deduplicated = false
+	return chunkRef, false, nil
 }
 
 // GetStats returns deduplication statistics

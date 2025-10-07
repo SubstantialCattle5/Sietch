@@ -12,6 +12,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/substantialcattle5/sietch/internal/atomic"
 	"github.com/substantialcattle5/sietch/internal/config"
 	"github.com/substantialcattle5/sietch/internal/fs"
 )
@@ -82,13 +83,18 @@ Examples:
 			}
 		}
 
-		// Step 1: Remove the manifest file
+		// Begin transaction for delete operation
+		txn, err := atomic.Begin(vaultRoot, map[string]any{"command": "delete", "file": filePath})
+		if err != nil { return fmt.Errorf("begin transaction: %v", err) }
+		committed := false
+		defer func(){ if !committed { _ = txn.Rollback() } }()
+
+		// Step 1: Stage removal of the manifest file
 		destination := strings.ReplaceAll(targetFile.Destination, "/", ".")
 		uniqueFileIdentifier := destination + fileBaseName + ".yaml"
-		manifestPath := filepath.Join(vaultRoot, ".sietch", "manifests", uniqueFileIdentifier)
-		if err := os.Remove(manifestPath); err != nil {
-			return fmt.Errorf("failed to remove manifest file: %v", err)
-		}
+		// relative manifest path inside vault root
+		relManifest := filepath.ToSlash(filepath.Join(".sietch", "manifests", uniqueFileIdentifier))
+		if err := txn.StageDelete(relManifest); err != nil { return fmt.Errorf("stage manifest delete: %v", err) }
 
 		// Step 2: Clean up orphaned chunks if --keep-chunks is not specified
 		keepChunks, _ := cmd.Flags().GetBool("keep-chunks")
@@ -99,11 +105,12 @@ Examples:
 				fmt.Printf("Warning: Failed to check for orphaned chunks: %v\n", err)
 			} else {
 				// Find and remove orphaned chunks
-				if err := cleanupOrphanedChunks(vaultRoot, targetFile.Chunks, remainingManifest); err != nil {
-					fmt.Printf("Warning: Failed to clean up some orphaned chunks: %v\n", err)
-				}
+				if err := stageOrphanedChunkDeletes(txn, vaultRoot, targetFile.Chunks, remainingManifest); err != nil { fmt.Printf("Warning: Failed to stage some orphaned chunks: %v\n", err) }
 			}
 		}
+
+		if err := txn.Commit(); err != nil { return fmt.Errorf("commit delete transaction: %v", err) }
+		committed = true
 
 		fmt.Printf("✓ Successfully deleted '%s' from vault\n", filePath)
 		return nil
@@ -111,7 +118,7 @@ Examples:
 }
 
 // cleanupOrphanedChunks removes chunks that are no longer referenced by any file
-func cleanupOrphanedChunks(vaultRoot string, deletedChunks []config.ChunkRef, remainingManifest *config.Manifest) error {
+func cleanupOrphanedChunks(vaultRoot string, deletedChunks []config.ChunkRef, remainingManifest *config.Manifest) error { // legacy left for reference
 	// Create a map of all chunks still in use
 	chunksInUse := make(map[string]bool)
 	for _, file := range remainingManifest.Files {
@@ -142,6 +149,19 @@ func cleanupOrphanedChunks(vaultRoot string, deletedChunks []config.ChunkRef, re
 	}
 
 	return lastError
+}
+
+// stageOrphanedChunkDeletes stages deletions for chunks no longer referenced.
+func stageOrphanedChunkDeletes(txn *atomic.Transaction, vaultRoot string, deletedChunks []config.ChunkRef, remainingManifest *config.Manifest) error {
+	chunksInUse := make(map[string]bool)
+	for _, file := range remainingManifest.Files { for _, ch := range file.Chunks { chunksInUse[ch.Hash] = true } }
+	var lastErr error
+	for _, ch := range deletedChunks {
+		if chunksInUse[ch.Hash] { continue }
+		rel := filepath.ToSlash(filepath.Join(".sietch", "chunks", ch.Hash))
+		if err := txn.StageDelete(rel); err != nil { lastErr = err }
+	}
+	return lastErr
 }
 
 func init() {

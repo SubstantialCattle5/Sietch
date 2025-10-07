@@ -1,3 +1,24 @@
+### Atomic Transactions (Experimental)
+
+Add and delete operations are executed via a lightweight transactional journal to prevent partial state (half-written manifests or orphaned chunks).
+
+Workflow:
+1. Start a transaction: new/replacement files written under `.txn/<id>/new/`.
+2. Deletions move originals to `.txn/<id>/trash/`.
+3. Commit promotes all staged files (atomic renames) and removes trash.
+4. Rollback removes staged files and restores trash originals.
+
+Manual recovery:
+```
+sietch recover --retention 24h
+```
+Scans `.txn/` for incomplete transactions and resumes or rolls them back. Completed journals older than the retention window are purged.
+
+Limitations / Next Steps:
+* Current scope covers `add` and `delete` commands.
+* Further commands (sync, sneakernet transfer) can adopt the same API later.
+* Fault injection hooks for deterministic testing are planned.
+
 # Sietch Vault
 
 [![CI](https://github.com/substantialcattle5/sietch/actions/workflows/ci.yml/badge.svg)](https://github.com/substantialcattle5/sietch/actions/workflows/ci.yml)
