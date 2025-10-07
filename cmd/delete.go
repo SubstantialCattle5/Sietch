@@ -129,7 +129,6 @@ Examples:
 	},
 }
 
-
 // stageOrphanedChunkDeletes stages deletions for chunks no longer referenced.
 func stageOrphanedChunkDeletes(txn *atomic.Transaction, vaultRoot string, deletedChunks []config.ChunkRef, remainingManifest *config.Manifest) error {
 	chunksInUse := make(map[string]bool)
