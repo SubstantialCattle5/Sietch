@@ -85,16 +85,24 @@ Examples:
 
 		// Begin transaction for delete operation
 		txn, err := atomic.Begin(vaultRoot, map[string]any{"command": "delete", "file": filePath})
-		if err != nil { return fmt.Errorf("begin transaction: %v", err) }
+		if err != nil {
+			return fmt.Errorf("begin transaction: %v", err)
+		}
 		committed := false
-		defer func(){ if !committed { _ = txn.Rollback() } }()
+		defer func() {
+			if !committed {
+				_ = txn.Rollback()
+			}
+		}()
 
 		// Step 1: Stage removal of the manifest file
 		destination := strings.ReplaceAll(targetFile.Destination, "/", ".")
 		uniqueFileIdentifier := destination + fileBaseName + ".yaml"
 		// relative manifest path inside vault root
 		relManifest := filepath.ToSlash(filepath.Join(".sietch", "manifests", uniqueFileIdentifier))
-		if err := txn.StageDelete(relManifest); err != nil { return fmt.Errorf("stage manifest delete: %v", err) }
+		if err := txn.StageDelete(relManifest); err != nil {
+			return fmt.Errorf("stage manifest delete: %v", err)
+		}
 
 		// Step 2: Clean up orphaned chunks if --keep-chunks is not specified
 		keepChunks, _ := cmd.Flags().GetBool("keep-chunks")
@@ -105,11 +113,15 @@ Examples:
 				fmt.Printf("Warning: Failed to check for orphaned chunks: %v\n", err)
 			} else {
 				// Find and remove orphaned chunks
-				if err := stageOrphanedChunkDeletes(txn, vaultRoot, targetFile.Chunks, remainingManifest); err != nil { fmt.Printf("Warning: Failed to stage some orphaned chunks: %v\n", err) }
+				if err := stageOrphanedChunkDeletes(txn, vaultRoot, targetFile.Chunks, remainingManifest); err != nil {
+					fmt.Printf("Warning: Failed to stage some orphaned chunks: %v\n", err)
+				}
 			}
 		}
 
-		if err := txn.Commit(); err != nil { return fmt.Errorf("commit delete transaction: %v", err) }
+		if err := txn.Commit(); err != nil {
+			return fmt.Errorf("commit delete transaction: %v", err)
+		}
 		committed = true
 
 		fmt.Printf("✓ Successfully deleted '%s' from vault\n", filePath)
@@ -154,12 +166,20 @@ func cleanupOrphanedChunks(vaultRoot string, deletedChunks []config.ChunkRef, re
 // stageOrphanedChunkDeletes stages deletions for chunks no longer referenced.
 func stageOrphanedChunkDeletes(txn *atomic.Transaction, vaultRoot string, deletedChunks []config.ChunkRef, remainingManifest *config.Manifest) error {
 	chunksInUse := make(map[string]bool)
-	for _, file := range remainingManifest.Files { for _, ch := range file.Chunks { chunksInUse[ch.Hash] = true } }
+	for _, file := range remainingManifest.Files {
+		for _, ch := range file.Chunks {
+			chunksInUse[ch.Hash] = true
+		}
+	}
 	var lastErr error
 	for _, ch := range deletedChunks {
-		if chunksInUse[ch.Hash] { continue }
+		if chunksInUse[ch.Hash] {
+			continue
+		}
 		rel := filepath.ToSlash(filepath.Join(".sietch", "chunks", ch.Hash))
-		if err := txn.StageDelete(rel); err != nil { lastErr = err }
+		if err := txn.StageDelete(rel); err != nil {
+			lastErr = err
+		}
 	}
 	return lastErr
 }

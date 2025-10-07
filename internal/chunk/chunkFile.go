@@ -91,62 +91,114 @@ func ChunkFile(ctx context.Context, filePath string, chunkSize int64, vaultRoot 
 
 // ChunkFileTransactional performs the same chunking but writes new chunk content through the provided transaction.
 func ChunkFileTransactional(ctx context.Context, filePath string, chunkSize int64, vaultRoot string, passphrase string, progressMgr *progress.Manager, txn *atomic.Transaction) ([]config.ChunkRef, error) {
-	if txn == nil { return nil, fmt.Errorf("transaction required") }
-	if chunkSize <= 0 { return nil, fmt.Errorf("chunk size must be positive, got: %d", chunkSize) }
+	if txn == nil {
+		return nil, fmt.Errorf("transaction required")
+	}
+	if chunkSize <= 0 {
+		return nil, fmt.Errorf("chunk size must be positive, got: %d", chunkSize)
+	}
 	file, err := fs.VerifyFileAndReturnFile(filePath)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer file.Close()
-	fileInfo, err := file.Stat(); if err != nil { return nil, fmt.Errorf("failed to get file info: %v", err) }
+	fileInfo, err := file.Stat()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get file info: %v", err)
+	}
 	progressMgr.InitTotalProgress(fileInfo.Size(), "Chunking file (txn)")
-	vaultConfig, err := config.LoadVaultConfig(vaultRoot); if err != nil { return nil, fmt.Errorf("failed to load vault configuration: %v", err) }
-	if vaultConfig.Encryption.Type == constants.EncryptionTypeAES && vaultConfig.Encryption.PassphraseProtected && passphrase == "" { return nil, fmt.Errorf("passphrase required for encrypted vault but not provided") }
-	dedupManager, err := deduplication.NewManager(vaultRoot, vaultConfig.Deduplication); if err != nil { return nil, fmt.Errorf("failed to initialize deduplication manager: %v", err) }
+	vaultConfig, err := config.LoadVaultConfig(vaultRoot)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load vault configuration: %v", err)
+	}
+	if vaultConfig.Encryption.Type == constants.EncryptionTypeAES && vaultConfig.Encryption.PassphraseProtected && passphrase == "" {
+		return nil, fmt.Errorf("passphrase required for encrypted vault but not provided")
+	}
+	dedupManager, err := deduplication.NewManager(vaultRoot, vaultConfig.Deduplication)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize deduplication manager: %v", err)
+	}
 	dedupManager.SetProgressManager(progressMgr)
 	buffer := make([]byte, chunkSize)
 	var chunkRefs []config.ChunkRef
 	chunkCount := 0
 	totalBytes := int64(0)
 	for {
-		select { case <-ctx.Done(): return nil, fmt.Errorf("operation cancelled"); default: }
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("operation cancelled")
+		default:
+		}
 		bytesRead, err := file.Read(buffer)
-		if err != nil && err != io.EOF { return nil, fmt.Errorf("error reading file: %v", err) }
-		if bytesRead == 0 { break }
-		chunkCount++; totalBytes += int64(bytesRead); progressMgr.UpdateTotalProgress(int64(bytesRead))
-	hasher, err := CreateHasher(vaultConfig.Chunking.HashAlgorithm); if err != nil { return nil, fmt.Errorf("failed to create hasher for chunk %d: %v", chunkCount, err) }
-		hasher.Write(buffer[:bytesRead]); chunkHash := fmt.Sprintf("%x", hasher.Sum(nil))
-		compressedData, err := compression.CompressData(buffer[:bytesRead], vaultConfig.Compression); if err != nil { return nil, fmt.Errorf("failed to compress chunk %d: %v", chunkCount, err) }
-		chunkRef := config.ChunkRef{Hash: chunkHash, Size: int64(bytesRead), CompressedSize: int64(len(compressedData)), Index: chunkCount-1, Compressed: vaultConfig.Compression != "none", CompressionType: vaultConfig.Compression}
+		if err != nil && err != io.EOF {
+			return nil, fmt.Errorf("error reading file: %v", err)
+		}
+		if bytesRead == 0 {
+			break
+		}
+		chunkCount++
+		totalBytes += int64(bytesRead)
+		progressMgr.UpdateTotalProgress(int64(bytesRead))
+		hasher, err := CreateHasher(vaultConfig.Chunking.HashAlgorithm)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create hasher for chunk %d: %v", chunkCount, err)
+		}
+		hasher.Write(buffer[:bytesRead])
+		chunkHash := fmt.Sprintf("%x", hasher.Sum(nil))
+		compressedData, err := compression.CompressData(buffer[:bytesRead], vaultConfig.Compression)
+		if err != nil {
+			return nil, fmt.Errorf("failed to compress chunk %d: %v", chunkCount, err)
+		}
+		chunkRef := config.ChunkRef{Hash: chunkHash, Size: int64(bytesRead), CompressedSize: int64(len(compressedData)), Index: chunkCount - 1, Compressed: vaultConfig.Compression != "none", CompressionType: vaultConfig.Compression}
 		chunkDataToProcess := compressedData
 		if vaultConfig.Encryption.Type != "" && vaultConfig.Encryption.Type != "none" {
 			encoded := base64.StdEncoding.EncodeToString(chunkDataToProcess)
 			var encryptedData string
-			if vaultConfig.Encryption.PassphraseProtected { encryptedData, err = encryption.EncryptDataWithPassphrase(encoded, *vaultConfig, passphrase) } else { encryptedData, err = encryption.EncryptData(encoded, *vaultConfig) }
-			if err != nil { return nil, fmt.Errorf("failed to encrypt chunk %d: %v", chunkCount, err) }
-			encHasher, err := CreateHasher(vaultConfig.Chunking.HashAlgorithm); if err != nil { return nil, fmt.Errorf("failed to create encrypted hasher: %v", err) }
-			encHasher.Write([]byte(encryptedData)); encryptedHash := fmt.Sprintf("%x", encHasher.Sum(nil))
-			chunkRef.EncryptedHash = encryptedHash; chunkRef.EncryptedSize = int64(len(encryptedData))
+			if vaultConfig.Encryption.PassphraseProtected {
+				encryptedData, err = encryption.EncryptDataWithPassphrase(encoded, *vaultConfig, passphrase)
+			} else {
+				encryptedData, err = encryption.EncryptData(encoded, *vaultConfig)
+			}
+			if err != nil {
+				return nil, fmt.Errorf("failed to encrypt chunk %d: %v", chunkCount, err)
+			}
+			encHasher, err := CreateHasher(vaultConfig.Chunking.HashAlgorithm)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create encrypted hasher: %v", err)
+			}
+			encHasher.Write([]byte(encryptedData))
+			encryptedHash := fmt.Sprintf("%x", encHasher.Sum(nil))
+			chunkRef.EncryptedHash = encryptedHash
+			chunkRef.EncryptedSize = int64(len(encryptedData))
 			updated, deduped, err := dedupManager.ProcessChunkTransactional(txn, chunkRef, []byte(encryptedData), encryptedHash)
-			if err != nil { return nil, fmt.Errorf("dedup (enc) failed chunk %d: %v", chunkCount, err) }
+			if err != nil {
+				return nil, fmt.Errorf("dedup (enc) failed chunk %d: %v", chunkCount, err)
+			}
 			chunkRef = updated
 			progressMgr.PrintVerbose("%s", FormatChunkInfoString(chunkCount, bytesRead, chunkHash, *vaultConfig, chunkDataToProcess, deduped, true))
 		} else {
 			updated, deduped, err := dedupManager.ProcessChunkTransactional(txn, chunkRef, chunkDataToProcess, chunkHash)
-			if err != nil { return nil, fmt.Errorf("dedup failed chunk %d: %v", chunkCount, err) }
+			if err != nil {
+				return nil, fmt.Errorf("dedup failed chunk %d: %v", chunkCount, err)
+			}
 			chunkRef = updated
 			progressMgr.PrintVerbose("%s", FormatChunkInfoString(chunkCount, bytesRead, chunkHash, *vaultConfig, chunkDataToProcess, deduped, false))
 		}
 		chunkRefs = append(chunkRefs, chunkRef)
-		if err == io.EOF { break }
+		if err == io.EOF {
+			break
+		}
 	}
 	progressMgr.PrintInfo("Total chunks processed: %d\n", chunkCount)
 	progressMgr.PrintInfo("Total bytes processed: %s\n", util.HumanReadableSize(totalBytes))
-	if err := dedupManager.Save(); err != nil { return nil, fmt.Errorf("failed to save deduplication index: %v", err) }
+	if err := dedupManager.Save(); err != nil {
+		return nil, fmt.Errorf("failed to save deduplication index: %v", err)
+	}
 	return chunkRefs, nil
 }
 
 // Helper to avoid import cycle (re-expose functions we reused inside transactional variant)
 // Reuse existing exported helpers from this package itself (already defined above for regular flow)
-
 
 func processFileChunks(ctx context.Context, file *os.File, chunkSize int64, vaultConfig config.VaultConfig, passphrase string, dedupManager *deduplication.Manager, progressMgr *progress.Manager) ([]config.ChunkRef, error) {
 	// Create a buffer for reading chunks

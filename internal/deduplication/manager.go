@@ -116,20 +116,31 @@ func (m *Manager) storeChunk(storageHash string, chunkData []byte) error {
 func (m *Manager) storeChunkTransactional(txn *atomic.Transaction, storageHash string, chunkData []byte) error {
 	rel := filepath.ToSlash(filepath.Join(".sietch", "chunks", storageHash))
 	w, err := txn.StageCreate(rel)
-	if err != nil { return fmt.Errorf("stage chunk %s: %w", storageHash, err) }
-	if _, err := w.Write(chunkData); err != nil { _ = w.Close(); return fmt.Errorf("write staged chunk %s: %w", storageHash, err) }
-	if err := w.Close(); err != nil { return fmt.Errorf("close staged chunk %s: %w", storageHash, err) }
+	if err != nil {
+		return fmt.Errorf("stage chunk %s: %w", storageHash, err)
+	}
+	if _, err := w.Write(chunkData); err != nil {
+		_ = w.Close()
+		return fmt.Errorf("write staged chunk %s: %w", storageHash, err)
+	}
+	if err := w.Close(); err != nil {
+		return fmt.Errorf("close staged chunk %s: %w", storageHash, err)
+	}
 	return nil
 }
 
 // ProcessChunkTransactional mirrors ProcessChunk but stores new chunk content via the transaction staging area.
 func (m *Manager) ProcessChunkTransactional(txn *atomic.Transaction, chunkRef config.ChunkRef, chunkData []byte, storageHash string) (config.ChunkRef, bool, error) {
 	if !m.config.Enabled {
-		if err := m.storeChunkTransactional(txn, storageHash, chunkData); err != nil { return chunkRef, false, err }
+		if err := m.storeChunkTransactional(txn, storageHash, chunkData); err != nil {
+			return chunkRef, false, err
+		}
 		return chunkRef, false, nil
 	}
 	if !m.shouldDeduplicateChunk(chunkRef.Size) {
-		if err := m.storeChunkTransactional(txn, storageHash, chunkData); err != nil { return chunkRef, false, err }
+		if err := m.storeChunkTransactional(txn, storageHash, chunkData); err != nil {
+			return chunkRef, false, err
+		}
 		return chunkRef, false, nil
 	}
 	entry, deduplicated := m.index.AddChunk(chunkRef, storageHash)
