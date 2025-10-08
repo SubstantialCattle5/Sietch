@@ -15,9 +15,9 @@ type AddressFilter struct {
 
 // FilteredAddresses contains filtered addresses and metadata
 type FilteredAddresses struct {
-	Primary   []multiaddr.Multiaddr
-	Hidden    []multiaddr.Multiaddr
-	Total     int
+	Primary     []multiaddr.Multiaddr
+	Hidden      []multiaddr.Multiaddr
+	Total       int
 	HiddenCount int
 }
 
@@ -65,7 +65,7 @@ func (af *AddressFilter) FilterAddresses(addrs []multiaddr.Multiaddr) *FilteredA
 // IsRelevantAddress determines if an address should be shown by default
 func (af *AddressFilter) IsRelevantAddress(addr multiaddr.Multiaddr) bool {
 	addrStr := addr.String()
-	
+
 	// Extract IP address
 	ipStr := af.ExtractIPFromMultiaddr(addrStr)
 	if ipStr == "" {
@@ -219,17 +219,17 @@ func (af *AddressFilter) FormatAddresses(filtered *FilteredAddresses, nodeID str
 	for _, addr := range filtered.Primary {
 		addrStr := addr.String()
 		ipStr := af.ExtractIPFromMultiaddr(addrStr)
-		
+
 		// Format as IP:port for cleaner display
 		if port := af.ExtractPortFromMultiaddr(addrStr); port != "" {
 			formatted := fmt.Sprintf("%s:%s", ipStr, port)
-			
+
 			// Add descriptive label
 			label := af.getAddressLabel(ipStr)
 			if label != "" {
 				formatted += fmt.Sprintf(" (%s)", label)
 			}
-			
+
 			// For host addresses, add the full multiaddr
 			if nodeID != "" {
 				lines = append(lines, fmt.Sprintf("  %s/p2p/%s", addr.String(), nodeID))

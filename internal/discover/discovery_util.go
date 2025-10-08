@@ -119,7 +119,7 @@ func handleDiscoveredPeer(ctx context.Context, h host.Host, syncService *p2p.Syn
 	fmt.Printf("✅ Discovered peer #%d\n", peerCount)
 	fmt.Printf("   ID: %s\n", p.ID.String())
 	fmt.Println("   Addresses:")
-	
+
 	// Filter and display addresses
 	filter := util.NewAddressFilter(allAddresses)
 	filtered := filter.FilterAddresses(p.Addrs)

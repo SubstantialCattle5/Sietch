@@ -111,7 +111,7 @@ Example:
 func displayHostAddresses(h host.Host, showAll bool) {
 	filter := util.NewAddressFilter(showAll)
 	filtered := filter.FilterAddresses(h.Addrs())
-	
+
 	fmt.Println("Listening on:")
 	lines := filter.FormatAddresses(filtered, h.ID().String())
 	for _, line := range lines {
