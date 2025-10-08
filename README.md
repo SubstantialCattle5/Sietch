@@ -277,6 +277,13 @@ Thanks to all our amazing contributors!
 		</tr>
 		<tr>
             <td align="center">
+                <a href="https://github.com/Deepam02">
+                    <img src="https://avatars.githubusercontent.com/u/116721751?v=4" width="100;" alt="Deepam02"/>
+                    <br />
+                    <sub><b>Deepam Goyal</b></sub>
+                </a>
+            </td>
+            <td align="center">
                 <a href="https://github.com/Janmesh23">
                     <img src="https://avatars.githubusercontent.com/u/183159485?v=4" width="100;" alt="Janmesh23"/>
                     <br />

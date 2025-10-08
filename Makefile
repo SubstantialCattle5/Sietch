@@ -125,7 +125,7 @@ install-local: build
 create-test-vaults:
 	@echo "Creating test vaults..."
 	@mkdir -p test_vaults
-	@./$(BINARY_NAME) init --name test-vault-aes --path test_vaults --key-type aes --passphrase-value testpass123 --force 2>/dev/null || echo "AES test vault creation failed (binary may not be built)"
+	@SIETCH_PASSPHRASE=testpass123 ./$(BINARY_NAME) init --name test-vault-aes --path test_vaults --key-type aes --passphrase --force 2>/dev/null || echo "AES test vault creation failed (binary may not be built)"
 	@./$(BINARY_NAME) init --name test-vault-gpg --path test_vaults --key-type gpg --force 2>/dev/null || echo "GPG test vault creation failed (binary may not be built)"
 
 # Clean test vaults
