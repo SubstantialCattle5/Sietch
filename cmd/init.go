@@ -28,9 +28,10 @@ var (
 	vaultPath string
 
 	// Security key generation
-	keyType       string
-	usePassphrase bool
-	keyFile       string
+	keyType         string
+	usePassphrase   bool
+	keyFile         string
+	passphraseValue string
 
 	// aes specific keys
 	aesMode   string
@@ -77,19 +78,14 @@ func shortHelp(cmd *cobra.Command) {
 
 	# Quickstart vault with defaults and interactive mode
 	sietch init --interactive
-
+		
 	# Quickstart vault with defaults
 	sietch init --name "my-vault"
 
-	# Named vault with AES key + passphrase (interactive)
+
+	# Named vault with AES key + passphrase
 	sietch init --name "desert-cache" --key-type aes --passphrase
-
-	# Using passphrase from file (for automation)
-	sietch init --name "my-vault" --key-type aes --passphrase --passphrase-file /path/to/pass.txt
-
-	# Using passphrase from stdin (for scripting)
-	echo "mypass" | sietch init --name "my-vault" --key-type aes --passphrase --passphrase-stdin
-
+		
 	# AES with custom scrypt parameters
 	sietch init --key-type aes --passphrase --use-scrypt --scrypt-n 32768 --scrypt-r 8 --scrypt-p 1
 
@@ -107,37 +103,28 @@ This creates the necessary directory structure and configuration files for your 
 Examples:
   # Show help and available options
   sietch init --help
-
+  
   # Quickstart vault with defaults
   sietch init --name "my-vault"
-
-  # Named vault with AES key + passphrase (interactive prompt)
+  
+  # Named vault with AES key + passphrase
   sietch init --name "desert-cache" --key-type aes --passphrase
-
-  # Using passphrase from environment variable
-  SIETCH_PASSPHRASE="mypass" sietch init --name "my-vault" --key-type aes --passphrase
-
-  # Using passphrase from file (for automation)
-  sietch init --name "my-vault" --key-type aes --passphrase --passphrase-file /path/to/passphrase.txt
-
-  # Using passphrase from stdin (for scripting)
-  echo "mypass" | sietch init --name "my-vault" --key-type aes --passphrase --passphrase-stdin
-
+  
   # AES with custom scrypt parameters
   sietch init --key-type aes --passphrase --use-scrypt --scrypt-n 32768 --scrypt-r 8 --scrypt-p 1
-
+  
   # AES with key file
   sietch init --key-type aes --key-file path/to/key.bin
 
   # Custom chunking and GPG encryption
   sietch init --chunking-strategy cdc --chunk-size 2MB --key-type gpg
-
+  
   # Use config file from template or backup
   sietch init --from-config my-old-vault.yaml
-
+  
   # Use predefined template
   sietch init --template photo-vault
-
+  
   # Force re-initialization of an existing vault
   sietch init --force`,
 
@@ -157,8 +144,7 @@ func init() {
 	initCmd.Flags().StringVar(&keyType, "key-type", "aes", "Type of encryption key (aes, chacha20, gpg, none)")
 	initCmd.Flags().BoolVar(&usePassphrase, "passphrase", false, "Protect key with passphrase")
 	initCmd.Flags().StringVar(&keyFile, "key-file", "", "Path to key file (for importing an existing key)")
-	initCmd.Flags().Bool("passphrase-stdin", false, "Read passphrase from stdin (for automation)")
-	initCmd.Flags().String("passphrase-file", "", "Read passphrase from file (file should have 0600 permissions)")
+	initCmd.Flags().StringVar(&passphraseValue, "passphrase-value", "", "Passphrase for encryption (NOT RECOMMENDED: passphrase will be visible in command history)")
 
 	// AES specific parameters
 	initCmd.Flags().StringVar(&aesMode, "aes-mode", "gcm", "AES encryption mode (gcm, cbc)")

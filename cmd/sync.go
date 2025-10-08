@@ -117,10 +117,6 @@ Examples:
 			return fmt.Errorf("failed to create sync service: %v", err)
 		}
 
-		// Set verbose flag
-		verbose, _ := cmd.Flags().GetBool("verbose")
-		syncService.Verbose = verbose
-
 		// Start secure protocol handlers
 		syncService.RegisterProtocols(ctx)
 
@@ -343,5 +339,4 @@ func init() {
 	syncCmd.Flags().IntP("timeout", "t", 60, "Discovery timeout in seconds (for auto-discovery)")
 	syncCmd.Flags().BoolP("force-trust", "f", false, "Automatically trust new peers without prompting")
 	syncCmd.Flags().BoolP("read-only", "r", false, "Only receive files, don't send")
-	syncCmd.Flags().BoolP("verbose", "v", false, "Enable verbose debug output")
 }

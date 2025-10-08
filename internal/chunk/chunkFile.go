@@ -69,9 +69,6 @@ func ChunkFile(ctx context.Context, filePath string, chunkSize int64, vaultRoot 
 		return nil, fmt.Errorf("failed to initialize deduplication manager: %v", err)
 	}
 
-	// Set progress manager for coordinated output
-	dedupManager.SetProgressManager(progressMgr)
-
 	chunkRefs, err := processFileChunks(ctx, file, chunkSize, *vaultConfig, passphrase, dedupManager, progressMgr)
 	if err != nil {
 		return nil, err

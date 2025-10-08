@@ -244,22 +244,6 @@ jobs:
       with:
         go-version-input: '1.24'
         go-package: './...'
-        output-format: sarif
-        output-file: govulncheck.sarif
-    - name: Upload govulncheck SARIF results
-      uses: github/codeql-action/upload-sarif@v3
-      with:
-        sarif_file: govulncheck.sarif
-        category: govulncheck
-      if: always()
-
-    - name: Upload govulncheck results as artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: govulncheck-results
-        path: govulncheck.sarif
-        retention-days: 30
-      if: always()
 
     - name: Verify dependencies
       run: |

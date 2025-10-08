@@ -313,8 +313,6 @@ func init() {
 	// Add flags
 	getCmd.Flags().BoolP(force, "f", false, "Force overwrite if file exists at destination")
 	getCmd.Flags().Bool(skipDecryption, false, "Skip decryption and retrieve raw chunks (for recovery)")
-	getCmd.Flags().Bool("passphrase-stdin", false, "Read passphrase from stdin (for automation)")
-	getCmd.Flags().String("passphrase-file", "", "Read passphrase from file (file should have 0600 permissions)")
 }
 
 //TODO: Implement parallel chunk retrieval

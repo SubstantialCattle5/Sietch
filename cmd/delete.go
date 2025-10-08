@@ -83,9 +83,7 @@ Examples:
 		}
 
 		// Step 1: Remove the manifest file
-		destination := strings.ReplaceAll(targetFile.Destination, "/", ".")
-		uniqueFileIdentifier := destination + fileBaseName + ".yaml"
-		manifestPath := filepath.Join(vaultRoot, ".sietch", "manifests", uniqueFileIdentifier)
+		manifestPath := filepath.Join(vaultRoot, ".sietch", "manifests", fileBaseName+".yaml")
 		if err := os.Remove(manifestPath); err != nil {
 			return fmt.Errorf("failed to remove manifest file: %v", err)
 		}

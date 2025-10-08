@@ -4,11 +4,8 @@ Copyright © 2025 SubstantialCattle5, nilaysharan.com
 package ui
 
 import (
-	"bufio"
 	"fmt"
-	"io"
 	"os"
-	"strings"
 	"syscall"
 
 	"github.com/manifoldco/promptui"
@@ -16,52 +13,10 @@ import (
 	"golang.org/x/term"
 
 	"github.com/substantialcattle5/sietch/internal/config"
-	passphrasevalidation "github.com/substantialcattle5/sietch/internal/passphrase"
 )
 
-// readPassphraseFromStdin reads a passphrase from stdin (useful for piping)
-func readPassphraseFromStdin() (string, error) {
-	reader := bufio.NewReader(os.Stdin)
-	passphrase, err := reader.ReadString('\n')
-	if err != nil && err != io.EOF {
-		return "", fmt.Errorf("failed to read passphrase from stdin: %w", err)
-	}
-	// Remove trailing newline
-	passphrase = strings.TrimRight(passphrase, "\r\n")
-	return passphrase, nil
-}
-
-// readPassphraseFromFile reads a passphrase from a file
-// The file should contain only the passphrase with proper permissions (0600 recommended)
-func readPassphraseFromFile(filePath string) (string, error) {
-	// Check file permissions for security
-	fileInfo, err := os.Stat(filePath)
-	if err != nil {
-		return "", fmt.Errorf("failed to access passphrase file: %w", err)
-	}
-
-	// Warn if file permissions are too open (not strictly enforced, just a warning)
-	if fileInfo.Mode().Perm()&0o077 != 0 {
-		fmt.Fprintf(os.Stderr, "Warning: passphrase file has overly permissive permissions (%v). Recommended: 0600\n", fileInfo.Mode().Perm())
-	}
-
-	// Read the file
-	content, err := os.ReadFile(filePath)
-	if err != nil {
-		return "", fmt.Errorf("failed to read passphrase file: %w", err)
-	}
-
-	// Remove trailing whitespace/newlines
-	passphrase := strings.TrimSpace(string(content))
-	if passphrase == "" {
-		return "", fmt.Errorf("passphrase file is empty")
-	}
-
-	return passphrase, nil
-}
-
 // GetPassphraseForVault retrieves the passphrase for an encrypted vault from multiple sources
-// in order of preference: stdin, file, environment variable, or interactive prompt.
+// in order of preference: command-line flag, environment variable, or interactive prompt.
 // It handles validation and ensures the passphrase meets security requirements.
 func GetPassphraseForVault(cmd *cobra.Command, vaultConfig *config.VaultConfig) (string, error) {
 	// Check if the vault needs a passphrase
@@ -69,32 +24,30 @@ func GetPassphraseForVault(cmd *cobra.Command, vaultConfig *config.VaultConfig) 
 		return "", nil
 	}
 
+	// Try to get passphrase from command line flag - check both flags
 	passphrase := ""
 	var err error
 
-	// Priority 1: Check for --passphrase-stdin flag
-	if cmd.Flags().Lookup("passphrase-stdin") != nil {
-		useStdin, _ := cmd.Flags().GetBool("passphrase-stdin")
-		if useStdin {
-			passphrase, err = readPassphraseFromStdin()
+	// Try "passphrase" flag first
+	if cmd.Flags().Lookup("passphrase") != nil {
+		// Only try to get string value if the flag exists and is a string
+		if flag := cmd.Flags().Lookup("passphrase"); flag != nil && flag.Value.Type() == "string" {
+			passphrase, err = cmd.Flags().GetString("passphrase")
 			if err != nil {
-				return "", err
+				return "", fmt.Errorf("error parsing passphrase flag: %w", err)
 			}
 		}
 	}
 
-	// Priority 2: Check for --passphrase-file flag
-	if passphrase == "" && cmd.Flags().Lookup("passphrase-file") != nil {
-		passphraseFile, _ := cmd.Flags().GetString("passphrase-file")
-		if passphraseFile != "" {
-			passphrase, err = readPassphraseFromFile(passphraseFile)
-			if err != nil {
-				return "", err
-			}
+	// If not found, try "passphrase-value" flag
+	if passphrase == "" && cmd.Flags().Lookup("passphrase-value") != nil {
+		passphrase, err = cmd.Flags().GetString("passphrase-value")
+		if err != nil {
+			return "", fmt.Errorf("error parsing passphrase-value flag: %w", err)
 		}
 	}
 
-	// Priority 3: Check environment variable
+	// If not provided as flag, check environment variable
 	if passphrase == "" {
 		passphrase = os.Getenv("SIETCH_PASSPHRASE")
 	}
@@ -113,15 +66,14 @@ func GetPassphraseForVault(cmd *cobra.Command, vaultConfig *config.VaultConfig) 
 				Label: "Enter encryption passphrase",
 				Mask:  '*',
 				Validate: func(input string) error {
-					result := passphrasevalidation.ValidateHybrid(input)
-					if !result.Valid || len(result.Warnings) > 0 {
-						return fmt.Errorf("%s", passphrasevalidation.GetHybridErrorMessage(result))
+					//TODO: Add a common validation for passphrase length and the rest.
+					if len(input) < 8 {
+						return fmt.Errorf("passphrase must be at least 8 characters")
 					}
 					return nil
 				},
 			}
 
-			var err error
 			passphrase, err = passphrasePrompt.Run()
 			if err != nil {
 				return "", fmt.Errorf("failed to get passphrase: %w", err)
@@ -138,10 +90,9 @@ func GetPassphraseForVault(cmd *cobra.Command, vaultConfig *config.VaultConfig) 
 
 			passphrase = string(bytePassphrase)
 
-			// Validate passphrase using hybrid validation (strict rules + zxcvbn intelligence)
-			result := passphrasevalidation.ValidateHybrid(passphrase)
-			if !result.Valid || len(result.Warnings) > 0 {
-				return "", fmt.Errorf("%s", passphrasevalidation.GetHybridErrorMessage(result))
+			// Validate passphrase length
+			if len(passphrase) < 8 {
+				return "", fmt.Errorf("passphrase must be at least 8 characters")
 			}
 		}
 	}
@@ -155,7 +106,7 @@ func GetPassphraseForVault(cmd *cobra.Command, vaultConfig *config.VaultConfig) 
 }
 
 // GetPassphraseForInitialization retrieves the passphrase for vault encryption
-// from multiple sources: stdin, file, environment variable, or interactive prompt
+// from multiple sources: command line flag, environment variable, or interactive prompt
 func GetPassphraseForInitialization(cmd *cobra.Command, requireConfirmation bool) (string, error) {
 	// Check if passphrase protection is enabled (we'll derive this from cmd)
 	usePassphrase, err := cmd.Flags().GetBool("passphrase")
@@ -168,48 +119,24 @@ func GetPassphraseForInitialization(cmd *cobra.Command, requireConfirmation bool
 		return "", nil
 	}
 
-	passphrase := ""
-
-	// Priority 1: Check for --passphrase-stdin flag
-	if cmd.Flags().Lookup("passphrase-stdin") != nil {
-		useStdin, _ := cmd.Flags().GetBool("passphrase-stdin")
-		if useStdin {
-			passphrase, err = readPassphraseFromStdin()
-			if err != nil {
-				return "", err
-			}
-			// Validate the passphrase
-			result := passphrasevalidation.ValidateHybrid(passphrase)
-			if !result.Valid || len(result.Warnings) > 0 {
-				return "", fmt.Errorf("passphrase from stdin: %s", passphrasevalidation.GetHybridErrorMessage(result))
-			}
-			return passphrase, nil
-		}
+	// Try to get passphrase from command line value flag first
+	passphraseValue, err := cmd.Flags().GetString("passphrase-value")
+	if err != nil {
+		return "", fmt.Errorf("error parsing passphrase-value flag: %w", err)
 	}
 
-	// Priority 2: Check for --passphrase-file flag
-	if cmd.Flags().Lookup("passphrase-file") != nil {
-		passphraseFile, _ := cmd.Flags().GetString("passphrase-file")
-		if passphraseFile != "" {
-			passphrase, err = readPassphraseFromFile(passphraseFile)
-			if err != nil {
-				return "", err
-			}
-			// Validate the passphrase
-			result := passphrasevalidation.ValidateHybrid(passphrase)
-			if !result.Valid || len(result.Warnings) > 0 {
-				return "", fmt.Errorf("passphrase from file: %s", passphrasevalidation.GetHybridErrorMessage(result))
-			}
-			return passphrase, nil
+	if passphraseValue != "" {
+		if len(passphraseValue) < 8 {
+			return "", fmt.Errorf("passphrase must be at least 8 characters")
 		}
+		return passphraseValue, nil
 	}
 
-	// Priority 3: Check environment variable
+	// Check environment variable
 	passphraseEnv := os.Getenv("SIETCH_PASSPHRASE")
 	if passphraseEnv != "" {
-		result := passphrasevalidation.ValidateHybrid(passphraseEnv)
-		if !result.Valid || len(result.Warnings) > 0 {
-			return "", fmt.Errorf("passphrase from environment variable: %s", passphrasevalidation.GetHybridErrorMessage(result))
+		if len(passphraseEnv) < 8 {
+			return "", fmt.Errorf("passphrase from environment variable must be at least 8 characters")
 		}
 		return passphraseEnv, nil
 	}
@@ -223,9 +150,8 @@ func GetPassphraseForInitialization(cmd *cobra.Command, requireConfirmation bool
 			Label: "Enter encryption passphrase",
 			Mask:  '*',
 			Validate: func(input string) error {
-				result := passphrasevalidation.ValidateHybrid(input)
-				if !result.Valid || len(result.Warnings) > 0 {
-					return fmt.Errorf("%s", passphrasevalidation.GetHybridErrorMessage(result))
+				if len(input) < 8 {
+					return fmt.Errorf("passphrase must be at least 8 characters")
 				}
 				return nil
 			},
@@ -268,10 +194,9 @@ func GetPassphraseForInitialization(cmd *cobra.Command, requireConfirmation bool
 
 		enteredPassphrase := string(bytePassphrase)
 
-		// Validate passphrase using hybrid validation (strict rules + zxcvbn intelligence)
-		result := passphrasevalidation.ValidateHybrid(enteredPassphrase)
-		if !result.Valid || len(result.Warnings) > 0 {
-			return "", fmt.Errorf("%s", passphrasevalidation.GetHybridErrorMessage(result))
+		// Validate passphrase length
+		if len(enteredPassphrase) < 8 {
+			return "", fmt.Errorf("passphrase must be at least 8 characters")
 		}
 
 		// Add confirmation if required

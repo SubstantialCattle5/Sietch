@@ -157,11 +157,6 @@ func (pm *Manager) FinishFileProgress() {
 // PrintVerbose prints verbose information if verbose mode is enabled
 func (pm *Manager) PrintVerbose(format string, args ...interface{}) {
 	if pm.options.Verbose {
-		// Clear the progress bar before printing to avoid line breaks
-		if pm.totalBar != nil {
-			_ = pm.totalBar.Clear() // #nosec G104 - progress bar clear is not critical for functionality
-		}
-
 		// #nosec G104 - verbose output errors are not critical for functionality
 		fmt.Printf(format, args...)
 		// Ensure output ends with newline if not already present
@@ -175,11 +170,6 @@ func (pm *Manager) PrintVerbose(format string, args ...interface{}) {
 // PrintInfo prints informational messages (unless quiet mode)
 func (pm *Manager) PrintInfo(format string, args ...interface{}) {
 	if !pm.options.Quiet {
-		// Clear the progress bar before printing to avoid line breaks
-		if pm.totalBar != nil {
-			_ = pm.totalBar.Clear() // #nosec G104 - progress bar clear is not critical for functionality
-		}
-
 		// #nosec G104 - info output errors are not critical for functionality
 		fmt.Printf(format, args...)
 	}

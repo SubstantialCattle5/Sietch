@@ -10,15 +10,9 @@ import (
 
 // Manager handles deduplication operations for a vault
 type Manager struct {
-	vaultRoot   string
-	config      config.DeduplicationConfig
-	index       *DeduplicationIndex
-	progressMgr ProgressManager
-}
-
-// ProgressManager is an interface for progress reporting
-type ProgressManager interface {
-	PrintVerbose(format string, args ...interface{})
+	vaultRoot string
+	config    config.DeduplicationConfig
+	index     *DeduplicationIndex
 }
 
 // NewManager creates a new deduplication manager
@@ -29,16 +23,10 @@ func NewManager(vaultRoot string, dedupConfig config.DeduplicationConfig) (*Mana
 	}
 
 	return &Manager{
-		vaultRoot:   vaultRoot,
-		config:      dedupConfig,
-		index:       index,
-		progressMgr: nil, // Will be set later if needed
+		vaultRoot: vaultRoot,
+		config:    dedupConfig,
+		index:     index,
 	}, nil
-}
-
-// SetProgressManager sets the progress manager for verbose output
-func (m *Manager) SetProgressManager(pm ProgressManager) {
-	m.progressMgr = pm
 }
 
 // ProcessChunk processes a chunk for deduplication
@@ -67,10 +55,8 @@ func (m *Manager) ProcessChunk(chunkRef config.ChunkRef, chunkData []byte, stora
 	if deduplicated {
 		// Chunk already exists, no need to store it again
 		chunkRef.Deduplicated = true
-		if m.progressMgr != nil {
-			m.progressMgr.PrintVerbose("  └─ Deduplicated chunk %s (ref count: %d)\n",
-				chunkRef.Hash[:12], entry.RefCount)
-		}
+		fmt.Printf("  └─ Deduplicated chunk %s (ref count: %d)\n",
+			chunkRef.Hash[:12], entry.RefCount)
 	} else {
 		// New chunk, store it
 		if err := m.storeChunk(storageHash, chunkData); err != nil {
