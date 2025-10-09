@@ -92,6 +92,7 @@ Examples:
 		defer func() {
 			if !committed {
 				_ = txn.Rollback()
+				fmt.Println("txn rollback; delete operation did not complete")
 			}
 		}()
 
@@ -123,7 +124,7 @@ Examples:
 			return fmt.Errorf("commit delete transaction: %v", err)
 		}
 		committed = true
-
+		fmt.Println("txn successful; delete committed")
 		fmt.Printf("✓ Successfully deleted '%s' from vault\n", filePath)
 		return nil
 	},

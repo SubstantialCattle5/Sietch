@@ -154,6 +154,7 @@ Examples:
 		defer func() {
 			if !committed {
 				_ = txn.Rollback()
+				fmt.Println("txn rollback; add operation did not complete")
 			}
 		}()
 
@@ -364,6 +365,7 @@ Examples:
 			return fmt.Errorf("commit transaction: %w", err)
 		}
 		committed = true
+		fmt.Println("txn successful; add committed")
 		return nil
 	},
 }

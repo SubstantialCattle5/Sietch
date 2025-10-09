@@ -1,5 +1,7 @@
 ### Atomic Transactions (Experimental)
 
+[Detailed design and usage docs](internal/atomic/README.md)
+
 Add and delete operations are executed via a lightweight transactional journal to prevent partial state (half-written manifests or orphaned chunks).
 
 Workflow:
