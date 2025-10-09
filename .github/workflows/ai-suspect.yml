@@ -92,8 +92,8 @@ jobs:
             for (const f of files) {
               const patch = f.patch || "";
               
-              // Skip documentation files to avoid false positives
-              if (/\.(md|txt|rst)$/i.test(f.filename)) {
+              // Skip documentation and workflow files to avoid false positives
+              if (/\.(md|txt|rst)$/i.test(f.filename) || f.filename.startsWith('.github/')) {
                 continue;
               }
               
