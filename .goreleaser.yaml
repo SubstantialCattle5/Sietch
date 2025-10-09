@@ -1,0 +1,80 @@
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+    main: ./main.go
+    binary: sietch
+
+archives:
+  - format: tar.gz
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- .Version }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: 'checksums.txt'
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+      - 'merge conflict'
+      - Merge pull request
+      - Merge remote-tracking branch
+      - Merge branch
+
+brews:
+  - repository:
+      owner: substantialcattle5
+      name: homebrew-sietch
+      token: "{{ .Env.GH_PAT }}"
+    directory: Formula
+    homepage: "https://github.com/substantialcattle5/sietch"
+    description: "Self-contained encrypted vaults that sync over LAN, sneakernet, or weak WiFi - fully offline"
+    license: "MIT"
+
+    test: |
+      system "#{bin}/sietch --version"
+
+    install: |
+      bin.install "sietch"
+
+release:
+  github:
+    owner: substantialcattle5
+    name: sietch
+  draft: false
+  prerelease: auto
