@@ -8,6 +8,16 @@ import (
 	"github.com/substantialcattle5/sietch/internal/constants"
 )
 
+type DHTConfig struct {
+	Enabled        bool     `yaml:"enabled"`
+	BootstrapNodes []string `yaml:"bootstrap_peers,omitempty"`
+}
+
+type DiscoveryConfig struct {
+	MDNS bool      `yaml:"mdns"`
+	DHT  DHTConfig `yaml:"dht"`
+}
+
 // VaultConfig represents the structure for vault.yaml
 type VaultConfig struct {
 	Name          string    `yaml:"name"`
@@ -21,6 +31,8 @@ type VaultConfig struct {
 	Deduplication DeduplicationConfig `yaml:"deduplication"`
 	Sync          SyncConfig          `yaml:"sync"`
 	Metadata      MetadataConfig      `yaml:"metadata"`
+
+	Discovery DiscoveryConfig `yaml:"discovery"`
 }
 
 // EncryptionConfig contains encryption settings
@@ -283,6 +295,17 @@ func BuildVaultConfigWithDeduplication(
 		if keyConfig.GPGConfig != nil && keyType == constants.EncryptionTypeGPG {
 			config.Encryption.GPGConfig = keyConfig.GPGConfig
 		}
+	}
+
+	// Set default discovery settings
+	config.Discovery = DiscoveryConfig{
+		MDNS: true,
+		DHT: DHTConfig{
+			Enabled: true,
+			BootstrapNodes: []string{
+				"/ip4/104.131.131.82/tcp/4001/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ",
+			},
+		},
 	}
 
 	return config
