@@ -178,7 +178,7 @@ func (af *AddressFilter) sortByPriority(addrs []multiaddr.Multiaddr) []multiaddr
 		return addrs
 	}
 
-	// Simple priority sorting: localhost first, then LAN, then IPv6
+	// Priority sorting: primary LAN first, then localhost, then IPv6
 	localhost := []multiaddr.Multiaddr{}
 	lan := []multiaddr.Multiaddr{}
 	ipv6 := []multiaddr.Multiaddr{}
@@ -203,7 +203,8 @@ func (af *AddressFilter) sortByPriority(addrs []multiaddr.Multiaddr) []multiaddr
 		}
 	}
 
-	result := append(localhost, lan...)
+	// Show primary LAN addresses first, then localhost, then one IPv6
+	result := append(lan, localhost...)
 	// Only add first IPv6 address to avoid clutter
 	if len(ipv6) > 0 {
 		result = append(result, ipv6[0])
@@ -222,27 +223,11 @@ func (af *AddressFilter) FormatAddresses(filtered *FilteredAddresses, nodeID str
 
 		// Format as IP:port for cleaner display
 		if port := af.ExtractPortFromMultiaddr(addrStr); port != "" {
-			formatted := fmt.Sprintf("%s:%s", ipStr, port)
-
-			// Add descriptive label
-			label := af.getAddressLabel(ipStr)
-			if label != "" {
-				formatted += fmt.Sprintf(" (%s)", label)
-			}
-
-			// For host addresses, add the full multiaddr
-			if nodeID != "" {
-				lines = append(lines, fmt.Sprintf("  %s/p2p/%s", addr.String(), nodeID))
-			} else {
-				lines = append(lines, fmt.Sprintf("  - %s", formatted))
-			}
+			formatted := af.FormatAddressWithLabel(ipStr, port)
+			lines = append(lines, fmt.Sprintf("  - %s", formatted))
 		} else {
 			// Fallback to original format
-			if nodeID != "" {
-				lines = append(lines, fmt.Sprintf("  %s/p2p/%s", addr.String(), nodeID))
-			} else {
-				lines = append(lines, fmt.Sprintf("  - %s", addrStr))
-			}
+			lines = append(lines, fmt.Sprintf("  - %s", addrStr))
 		}
 	}
 
@@ -284,4 +269,29 @@ func (af *AddressFilter) getAddressLabel(ipStr string) string {
 	}
 
 	return ""
+}
+
+// FormatAddressWithLabel formats an address with a friendly display
+func (af *AddressFilter) FormatAddressWithLabel(ipStr, port string) string {
+	ip := net.ParseIP(ipStr)
+	if ip == nil {
+		return fmt.Sprintf("%s:%s", ipStr, port)
+	}
+
+	// Use "localhost" instead of 127.0.0.1 for better readability
+	if ip.IsLoopback() {
+		if ip.To4() != nil {
+			return fmt.Sprintf("localhost:%s", port)
+		} else {
+			return fmt.Sprintf("localhost:%s (ipv6)", port)
+		}
+	}
+
+	formatted := fmt.Sprintf("%s:%s", ipStr, port)
+	label := af.getAddressLabel(ipStr)
+	if label != "" && label != "localhost" {
+		formatted += fmt.Sprintf(" (%s)", label)
+	}
+
+	return formatted
 }
