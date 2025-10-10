@@ -38,9 +38,9 @@ func TestHandleDiscoveredPeerExercisesPaths(t *testing.T) {
 	p := peer.AddrInfo{ID: h.ID(), Addrs: h.Addrs()}
 
 	// Case 1: peer not present in trustedPeers -> AddTrustedPeer will fail
-	handleDiscoveredPeer(context.Background(), h, svc, p, 1)
+	handleDiscoveredPeer(context.Background(), h, svc, p, 1, false)
 
 	// We cannot access unexported fields of SyncService from here; ensure
 	// the function returns without panic when called a second time.
-	handleDiscoveredPeer(context.Background(), h, svc, p, 2)
+	handleDiscoveredPeer(context.Background(), h, svc, p, 2, false)
 }

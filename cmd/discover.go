@@ -10,7 +10,6 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/spf13/cobra"
 
 	"github.com/substantialcattle5/sietch/internal/config"
@@ -40,6 +39,7 @@ Example:
 		port, _ := cmd.Flags().GetInt("port")
 		verbose, _ := cmd.Flags().GetBool("verbose")
 		vaultPath, _ := cmd.Flags().GetString("vault-path")
+		allAddresses, _ := cmd.Flags().GetBool("all-addresses")
 
 		// If no vault path specified, use current directory
 		if vaultPath == "" {
@@ -72,7 +72,7 @@ Example:
 
 		fmt.Printf("🔍 Starting peer discovery with node ID: %s\n", host.ID().String())
 		if verbose {
-			displayHostAddresses(host)
+			discover.DisplayHostAddresses(host, allAddresses)
 		}
 
 		// Create a vault manager
@@ -101,17 +101,11 @@ Example:
 		defer func() { _ = discovery.Stop() }()
 
 		// Run the discovery loop
-		return discover.RunDiscoveryLoop(ctx, host, syncService, peerChan, timeout, continuous)
+		return discover.RunDiscoveryLoop(ctx, host, syncService, peerChan, timeout, continuous, allAddresses)
 	},
 }
 
-// displayHostAddresses prints the addresses the host is listening on
-func displayHostAddresses(h host.Host) {
-	fmt.Println("Listening on:")
-	for _, addr := range h.Addrs() {
-		fmt.Printf("  %s/p2p/%s\n", addr, h.ID().String())
-	}
-}
+
 
 func init() {
 	rootCmd.AddCommand(discoverCmd)
@@ -122,4 +116,5 @@ func init() {
 	discoverCmd.Flags().IntP("port", "p", 0, "Port to use for libp2p (0 for random port)")
 	discoverCmd.Flags().BoolP("verbose", "v", false, "Enable verbose output")
 	discoverCmd.Flags().StringP("vault-path", "V", "", "Path to the vault directory (defaults to current directory)")
+	discoverCmd.Flags().Bool("all-addresses", false, "Show all network addresses including Docker, VPN, and virtual interfaces")
 }
