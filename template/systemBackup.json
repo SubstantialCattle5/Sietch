@@ -1,0 +1,21 @@
+{
+  "name": "System Backup",
+  "description": "Optimized for system backups with large chunks, parallel sync support, and conservative deduplication",
+  "version": "1.0.0",
+  "author": "Sietch Team",
+  "tags": ["backup", "system", "recovery", "disaster-recovery"],
+  "config": {
+    "chunking_strategy": "fixed",
+    "chunk_size": "16MB",
+    "hash_algorithm": "sha256",
+    "compression": "lz4",
+    "sync_mode": "manual",
+    "enable_dedup": true,
+    "dedup_strategy": "content",
+    "dedup_min_size": "8MB",
+    "dedup_max_size": "128MB",
+    "dedup_gc_threshold": 500,
+    "dedup_index_enabled": true,
+    "dedup_cross_file": true
+  }
+}

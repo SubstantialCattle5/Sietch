@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"time"
 
 	"gopkg.in/yaml.v2"
 )
@@ -17,6 +18,12 @@ type Manager struct {
 // Manifest represents the content of a vault
 type Manifest struct {
 	Files []FileManifest `json:"files"`
+}
+
+// ManifestEntry represents a manifest file with its path
+type ManifestEntry struct {
+	Path     string
+	Manifest FileManifest
 }
 
 // NewManager creates a new vault manager
@@ -63,6 +70,44 @@ func (m *Manager) GetManifest() (*Manifest, error) {
 	return manifest, nil
 }
 
+// GetManifestEntries returns all manifest entries with their paths
+func (m *Manager) GetManifestEntries() ([]*ManifestEntry, error) {
+	manifestsDir := filepath.Join(m.vaultRoot, ".sietch", "manifests")
+	var entries []*ManifestEntry
+
+	// Ensure directory exists
+	if _, err := os.Stat(manifestsDir); os.IsNotExist(err) {
+		return entries, nil // Return empty if directory doesn't exist
+	}
+
+	// Read all manifest files
+	dirEntries, err := os.ReadDir(manifestsDir)
+	if err != nil {
+		return entries, nil // Return empty if error reading directory
+	}
+
+	for _, entry := range dirEntries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".yaml" {
+			continue
+		}
+
+		// Load the file manifest
+		filePath := filepath.Join(manifestsDir, entry.Name())
+		fileManifest, err := loadFileManifest(filePath)
+		if err != nil {
+			fmt.Printf("Warning: Failed to load manifest %s: %v\n", entry.Name(), err)
+			continue
+		}
+
+		entries = append(entries, &ManifestEntry{
+			Path:     filePath,
+			Manifest: *fileManifest,
+		})
+	}
+
+	return entries, nil
+}
+
 // GetChunk retrieves a chunk by its hash
 func (m *Manager) GetChunk(hash string) ([]byte, error) {
 	chunkPath := filepath.Join(m.vaultRoot, ".sietch", "chunks", hash)
@@ -106,12 +151,73 @@ func (m *Manager) ChunkExists(hash string) (bool, error) {
 
 // RebuildReferences rebuilds file references from manifests
 func (m *Manager) RebuildReferences() error {
-	// This is a placeholder for the actual implementation
-	// In a real implementation, this would:
-	// 1. Check all manifests for consistency
-	// 2. Verify chunks exist for all file references
-	// 3. Update any inconsistent references
+	// Get all manifest entries
+	entries, err := m.GetManifestEntries()
+	if err != nil {
+		return fmt.Errorf("failed to get manifest entries: %v", err)
+	}
+
+	// Collect all referenced chunk hashes
+	referenced := make(map[string]bool)
+	var missing []string
+	for _, entry := range entries {
+		for _, chunk := range entry.Manifest.Chunks {
+			referenced[chunk.Hash] = true
+			exists, err := m.ChunkExists(chunk.Hash)
+			if err != nil {
+				return fmt.Errorf("failed to check chunk %s: %v", chunk.Hash, err)
+			}
+			if !exists {
+				missing = append(missing, chunk.Hash)
+			}
+		}
+	}
+
+	// Check for orphaned chunks
+	chunksDir := filepath.Join(m.vaultRoot, ".sietch", "chunks")
+	var orphaned []string
+	if _, err := os.Stat(chunksDir); !os.IsNotExist(err) {
+		dirEntries, err := os.ReadDir(chunksDir)
+		if err != nil {
+			return fmt.Errorf("failed to read chunks directory: %v", err)
+		}
+		for _, entry := range dirEntries {
+			if !entry.IsDir() {
+				hash := entry.Name()
+				if !referenced[hash] {
+					orphaned = append(orphaned, hash)
+				}
+			}
+		}
+	}
+
+	// Update manifest metadata
+	now := time.Now()
+	for _, entry := range entries {
+		entry.Manifest.LastVerified = now
+		if err := saveFileManifest(entry.Path, &entry.Manifest); err != nil {
+			return fmt.Errorf("failed to save manifest %s: %v", entry.Path, err)
+		}
+	}
+
+	// Report issues
+	if len(missing) > 0 {
+		fmt.Printf("Missing chunks: %v\n", missing)
+		return fmt.Errorf("found %d missing chunks", len(missing))
+	}
+	if len(orphaned) > 0 {
+		fmt.Printf("Orphaned chunks: %v\n", orphaned)
+		// Optionally clean up orphaned chunks here
+		// For now, just log
+	}
+
+	fmt.Printf("Reference rebuild completed successfully. Referenced: %d, Orphaned: %d\n", len(referenced), len(orphaned))
 	return nil
+}
+
+// VaultRoot returns the root directory of the vault.
+func (m *Manager) VaultRoot() string {
+	return m.vaultRoot
 }
 
 // Helper function to load a file manifest
@@ -129,6 +235,18 @@ func loadFileManifest(path string) (*FileManifest, error) {
 	}
 
 	return &manifest, nil
+}
+
+// Helper function to save a file manifest
+func saveFileManifest(path string, manifest *FileManifest) error {
+	// Marshal to YAML
+	data, err := yaml.Marshal(manifest)
+	if err != nil {
+		return fmt.Errorf("failed to marshal manifest: %v", err)
+	}
+
+	// Write to file
+	return os.WriteFile(path, data, 0o644)
 }
 
 // GetConfig loads and returns the vault configuration

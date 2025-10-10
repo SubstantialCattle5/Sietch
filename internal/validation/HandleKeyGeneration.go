@@ -11,6 +11,7 @@ import (
 	"github.com/substantialcattle5/sietch/internal/constants"
 	"github.com/substantialcattle5/sietch/internal/encryption"
 	"github.com/substantialcattle5/sietch/internal/encryption/aesencryption/aeskey"
+	"github.com/substantialcattle5/sietch/internal/encryption/chachaencryption/chachakey"
 	"github.com/substantialcattle5/sietch/internal/ui"
 )
 
@@ -85,6 +86,8 @@ func generateNewKey(cmd *cobra.Command, keyPath string, params KeyGenParams) (*c
 	switch params.KeyType {
 	case constants.EncryptionTypeAES:
 		return generateAESKey(keyPath, params, userPassphrase)
+	case constants.EncryptionTypeChaCha20:
+		return generateChaCha20Key(keyPath, params, userPassphrase)
 	case constants.EncryptionTypeGPG:
 		return generateGPGKey(params, userPassphrase)
 	case constants.EncryptionTypeNone:
@@ -129,6 +132,39 @@ func generateAESKey(keyPath string, params KeyGenParams, userPassphrase string) 
 	// If we need to save the key to a file
 	if encConfig.Encryption.KeyBackupPath != "" {
 		fmt.Printf("Key backed up to: %s\n", encConfig.Encryption.KeyBackupPath)
+	}
+
+	return keyConfig, nil
+}
+
+func generateChaCha20Key(keyPath string, params KeyGenParams, userPassphrase string) (*config.KeyConfig, error) {
+	kdfValue := constants.KDFScrypt
+	if !params.UseScrypt {
+		return nil, fmt.Errorf("ChaCha20 currently only supports scrypt KDF")
+	}
+
+	// Create encryption config
+	encConfig := &config.VaultConfig{
+		Encryption: config.EncryptionConfig{
+			Type:                constants.EncryptionTypeChaCha20,
+			PassphraseProtected: params.UsePassphrase,
+			KeyFile:             params.KeyFile != "",
+			KeyFilePath:         params.KeyFile,
+			KeyPath:             keyPath,
+			ChaChaConfig: &config.ChaChaConfig{
+				Mode:    "poly1305",
+				KDF:     kdfValue,
+				ScryptN: params.ScryptN,
+				ScryptR: params.ScryptR,
+				ScryptP: params.ScryptP,
+			},
+		},
+	}
+
+	// Generate the key configuration
+	keyConfig, err := chachakey.GenerateChaCha20Key(encConfig, userPassphrase)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate ChaCha20 key: %w", err)
 	}
 
 	return keyConfig, nil

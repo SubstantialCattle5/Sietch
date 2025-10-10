@@ -185,8 +185,13 @@ func TestHandleKeyGeneration(t *testing.T) {
 			// Create a mock command for testing
 			cmd := &cobra.Command{}
 			cmd.Flags().Bool("passphrase", params.UsePassphrase, "")
-			cmd.Flags().String("passphrase-value", "testpassword123", "")
 			cmd.Flags().Bool("interactive", false, "")
+
+			// Set passphrase via environment variable for tests that need it
+			if params.UsePassphrase {
+				os.Setenv("SIETCH_PASSPHRASE", "UnpredictableT3st!@#$")
+				defer os.Unsetenv("SIETCH_PASSPHRASE")
+			}
 
 			result, err := HandleKeyGeneration(cmd, vaultPath, params)
 
@@ -337,8 +342,8 @@ func TestGenerateNewKey(t *testing.T) {
 			setupCmd: func() *cobra.Command {
 				cmd := &cobra.Command{}
 				cmd.Flags().Bool("passphrase", true, "")
-				cmd.Flags().String("passphrase-value", "testpassword123", "")
 				cmd.Flags().Bool("interactive", false, "")
+				os.Setenv("SIETCH_PASSPHRASE", "UnpredictableT3st!@#$")
 				return cmd
 			},
 			wantErr: false,
@@ -750,8 +755,9 @@ func TestHandleKeyGenerationIntegration(t *testing.T) {
 
 		cmd := &cobra.Command{}
 		cmd.Flags().Bool("passphrase", true, "")
-		cmd.Flags().String("passphrase-value", "integration-test-pass-123", "")
 		cmd.Flags().Bool("interactive", false, "")
+		os.Setenv("SIETCH_PASSPHRASE", "UnpredictableT3st!@#$")
+		defer os.Unsetenv("SIETCH_PASSPHRASE")
 
 		result, err := HandleKeyGeneration(cmd, vaultPath, params)
 		if err != nil {

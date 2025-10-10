@@ -4,7 +4,9 @@ Copyright © 2025 SubstantialCattle5, nilaysharan.com
 package cmd
 
 import (
+	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -16,9 +18,18 @@ import (
 	"github.com/substantialcattle5/sietch/internal/constants"
 	"github.com/substantialcattle5/sietch/internal/fs"
 	"github.com/substantialcattle5/sietch/internal/manifest"
+	"github.com/substantialcattle5/sietch/internal/progress"
 	"github.com/substantialcattle5/sietch/internal/ui"
 	"github.com/substantialcattle5/sietch/util"
 )
+
+// SpaceSavings represents space savings statistics for a file
+type SpaceSavings struct {
+	OriginalSize   int64
+	CompressedSize int64
+	SpaceSaved     int64
+	SpaceSavedPct  float64
+}
 
 // addCmd represents the add command
 var addCmd = &cobra.Command{
@@ -53,6 +64,16 @@ Examples:
 			return err
 		}
 
+		// Get recursive and includeHidden flags
+		recursive, _ := cmd.Flags().GetBool("recursive")
+		includeHidden, _ := cmd.Flags().GetBool("include-hidden")
+
+		// Expand directories if needed
+		filePairs, err = expandDirectories(filePairs, recursive, includeHidden)
+		if err != nil {
+			return err
+		}
+
 		// Get tags from flags
 		tagsFlag, err := cmd.Flags().GetString("tags")
 		if err != nil {
@@ -63,6 +84,10 @@ Examples:
 		if tagsFlag != "" {
 			tags = strings.Split(tagsFlag, ",")
 		}
+
+		// Get global flags
+		verbose, _ := cmd.Flags().GetBool("verbose")
+		quiet, _ := cmd.Flags().GetBool("quiet")
 
 		vaultRoot, err := fs.FindVaultRoot()
 		if err != nil {
@@ -95,9 +120,20 @@ Examples:
 			return err
 		}
 
+		// Create progress manager
+		progressMgr := progress.NewManager(progress.Options{
+			Quiet:   quiet,
+			Verbose: verbose,
+		})
+
+		// Create context with cancellation
+		ctx := context.Background()
+		ctx = progressMgr.SetupCancellation(ctx)
+
 		// Process each file pair
 		successCount := 0
 		var failedFiles []string
+		var totalSpaceSavings SpaceSavings
 
 		// Show initial progress for multiple files
 		if len(filePairs) > 1 {
@@ -113,10 +149,56 @@ Examples:
 				fmt.Printf("Processing: %s\n", pair.Source)
 			}
 
-			// Check if file exists and that it is not a directory or symlink
-			fileInfo, err := fs.VerifyFileAndReturnFileInfo(pair.Source)
+			// Determine path type and handle accordingly
+			fileInfo, pathType, err := fs.GetPathInfo(pair.Source)
 			if err != nil {
 				errorMsg := fmt.Sprintf("✗ %s: %v", filepath.Base(pair.Source), err)
+				fmt.Println(errorMsg)
+				failedFiles = append(failedFiles, errorMsg)
+				continue
+			}
+
+			// Handle different path types
+			var actualSourcePath string
+			switch pathType {
+			case fs.PathTypeFile:
+				// Regular file - use as is
+				actualSourcePath = pair.Source
+
+			case fs.PathTypeSymlink:
+				// Resolve symlink and verify target is a regular file
+				targetPath, targetInfo, targetType, err := fs.ResolveSymlink(pair.Source)
+				if err != nil {
+					errorMsg := fmt.Sprintf("✗ %s: %v", filepath.Base(pair.Source), err)
+					fmt.Println(errorMsg)
+					failedFiles = append(failedFiles, errorMsg)
+					continue
+				}
+
+				if targetType != fs.PathTypeFile {
+					errorMsg := fmt.Sprintf("✗ %s: symlink target is not a regular file", filepath.Base(pair.Source))
+					fmt.Println(errorMsg)
+					failedFiles = append(failedFiles, errorMsg)
+					continue
+				}
+
+				// Use the resolved target path for processing
+				actualSourcePath = targetPath
+				fileInfo = targetInfo
+
+				if verbose {
+					fmt.Printf("  Resolved symlink: %s → %s\n", pair.Source, targetPath)
+				}
+
+			case fs.PathTypeDir:
+				// Directories should have been expanded already
+				errorMsg := fmt.Sprintf("✗ %s: unexpected directory in processing loop", filepath.Base(pair.Source))
+				fmt.Println(errorMsg)
+				failedFiles = append(failedFiles, errorMsg)
+				continue
+
+			default:
+				errorMsg := fmt.Sprintf("✗ %s: unsupported file type", filepath.Base(pair.Source))
 				fmt.Println(errorMsg)
 				failedFiles = append(failedFiles, errorMsg)
 				continue
@@ -138,7 +220,7 @@ Examples:
 
 			// Process the file and store chunks - using the appropriate chunking function
 			var chunkRefs []config.ChunkRef
-			chunkRefs, err = chunk.ChunkFile(pair.Source, chunkSize, vaultRoot, passphrase)
+			chunkRefs, err = chunk.ChunkFile(ctx, actualSourcePath, chunkSize, vaultRoot, passphrase, progressMgr)
 
 			if err != nil {
 				errorMsg := fmt.Sprintf("✗ %s: chunking failed - %v", filepath.Base(pair.Source), err)
@@ -161,23 +243,49 @@ Examples:
 			// Save the manifest
 			err = manifest.StoreFileManifest(vaultRoot, filepath.Base(pair.Source), fileManifest)
 			if err != nil {
+				if err.Error() == "skipped" {
+					errorMsg := fmt.Sprintf("✗ '%s': skipped", fileManifest.Destination+filepath.Base(pair.Source))
+					fmt.Println(errorMsg)
+					continue
+				}
 				errorMsg := fmt.Sprintf("✗ %s: manifest storage failed - %v", filepath.Base(pair.Source), err)
 				fmt.Println(errorMsg)
 				failedFiles = append(failedFiles, errorMsg)
 				continue
 			}
 
+			// Calculate space savings for this file
+			spaceSavings := calculateSpaceSavings(chunkRefs)
+
 			// Success message
 			if len(filePairs) > 1 {
-				fmt.Printf("✓ %s (%d chunks)\n", filepath.Base(pair.Source), len(chunkRefs))
+				fmt.Printf("✓ %s (%d chunks", filepath.Base(pair.Source), len(chunkRefs))
+				if spaceSavings.SpaceSaved > 0 {
+					fmt.Printf(", %s saved", util.HumanReadableSize(spaceSavings.SpaceSaved))
+				}
+				fmt.Printf(")\n")
 			} else {
 				fmt.Printf("✓ File added to vault: %s\n", filepath.Base(pair.Source))
 				fmt.Printf("✓ %d chunks stored in vault\n", len(chunkRefs))
+				if spaceSavings.SpaceSaved > 0 {
+					fmt.Printf("✓ Space saved: %s (%.1f%%)\n",
+						util.HumanReadableSize(spaceSavings.SpaceSaved),
+						spaceSavings.SpaceSavedPct)
+				}
 				fmt.Printf("✓ Manifest written to .sietch/manifests/%s.yaml\n", filepath.Base(pair.Source))
 			}
 
 			successCount++
+
+			// Add to total space savings
+			fileSavings := calculateSpaceSavings(chunkRefs)
+			totalSpaceSavings.OriginalSize += fileSavings.OriginalSize
+			totalSpaceSavings.CompressedSize += fileSavings.CompressedSize
+			totalSpaceSavings.SpaceSaved += fileSavings.SpaceSaved
 		}
+
+		// Cleanup progress manager
+		progressMgr.Cleanup()
 
 		// Enhanced summary
 		fmt.Printf("\n=== Batch Processing Summary ===\n")
@@ -202,6 +310,32 @@ Examples:
 
 		if successCount > 0 {
 			fmt.Printf("\n✓ %d file(s) successfully added to vault\n", successCount)
+
+			// Show vault configuration details
+			fmt.Printf("\n📋 Vault Configuration:\n")
+			fmt.Printf("  • Encryption: %s", vaultConfig.Encryption.Type)
+			if vaultConfig.Encryption.PassphraseProtected {
+				fmt.Printf(" (passphrase protected)")
+			}
+			fmt.Println()
+
+			fmt.Printf("  • Compression: %s\n", vaultConfig.Compression)
+
+			fmt.Printf("  • Chunking: %s (size: %s)\n", vaultConfig.Chunking.Strategy, vaultConfig.Chunking.ChunkSize)
+
+			// Show total space savings if compression is used
+			if vaultConfig.Compression != "none" && totalSpaceSavings.SpaceSaved > 0 {
+				totalSpaceSavedPct := float64(0)
+				if totalSpaceSavings.OriginalSize > 0 {
+					totalSpaceSavedPct = float64(totalSpaceSavings.SpaceSaved) / float64(totalSpaceSavings.OriginalSize) * 100
+				}
+				fmt.Printf("\n💾 Total Space Savings:\n")
+				fmt.Printf("  • Original size: %s\n", util.HumanReadableSize(totalSpaceSavings.OriginalSize))
+				fmt.Printf("  • Compressed size: %s\n", util.HumanReadableSize(totalSpaceSavings.CompressedSize))
+				fmt.Printf("  • Space saved: %s (%.1f%%)\n",
+					util.HumanReadableSize(totalSpaceSavings.SpaceSaved),
+					totalSpaceSavedPct)
+			}
 		}
 
 		// Return error only if all files failed
@@ -217,6 +351,35 @@ Examples:
 type FilePair struct {
 	Source      string
 	Destination string
+}
+
+// calculateSpaceSavings calculates space savings for a file based on its chunks
+func calculateSpaceSavings(chunks []config.ChunkRef) SpaceSavings {
+	originalSize := int64(0)
+	compressedSize := int64(0)
+
+	for _, chunk := range chunks {
+		originalSize += chunk.Size
+		if chunk.CompressedSize > 0 {
+			compressedSize += chunk.CompressedSize
+		} else {
+			// If no compressed size is recorded, use original size
+			compressedSize += chunk.Size
+		}
+	}
+
+	spaceSaved := originalSize - compressedSize
+	var spaceSavedPct float64
+	if originalSize > 0 {
+		spaceSavedPct = float64(spaceSaved) / float64(originalSize) * 100
+	}
+
+	return SpaceSavings{
+		OriginalSize:   originalSize,
+		CompressedSize: compressedSize,
+		SpaceSaved:     spaceSaved,
+		SpaceSavedPct:  spaceSavedPct,
+	}
 }
 
 // parseFileArguments parses command line arguments into source-destination pairs
@@ -256,15 +419,91 @@ func parseFileArguments(args []string) ([]FilePair, error) {
 	return pairs, nil
 }
 
+// expandDirectories expands directories into file pairs if recursive flag is set
+func expandDirectories(pairs []FilePair, recursive bool, includeHidden bool) ([]FilePair, error) {
+	var expandedPairs []FilePair
+
+	for _, pair := range pairs {
+		// Get path info to determine type
+		fileInfo, pathType, err := fs.GetPathInfo(pair.Source)
+		if err != nil {
+			return nil, err
+		}
+
+		switch pathType {
+		case fs.PathTypeFile:
+			// Regular file - add as is
+			expandedPairs = append(expandedPairs, pair)
+
+		case fs.PathTypeSymlink:
+			// Symlink - will be handled in processing loop, add as is
+			expandedPairs = append(expandedPairs, pair)
+
+		case fs.PathTypeDir:
+			// Directory - expand if recursive, otherwise error
+			if !recursive {
+				return nil, fmt.Errorf("'%s' is a directory. Use --recursive flag to add directories", pair.Source)
+			}
+
+			// Walk the directory tree
+			err := filepath.WalkDir(pair.Source, func(path string, d os.DirEntry, err error) error {
+				if err != nil {
+					return err
+				}
+
+				// Skip hidden files/directories if includeHidden is false
+				if fs.ShouldSkipHidden(d.Name(), includeHidden) {
+					if d.IsDir() {
+						return filepath.SkipDir
+					}
+					return nil
+				}
+
+				// Only add regular files and symlinks
+				if !d.IsDir() {
+					// Compute relative path from source directory
+					relPath, err := filepath.Rel(pair.Source, path)
+					if err != nil {
+						return fmt.Errorf("failed to compute relative path: %v", err)
+					}
+
+					// Preserve directory structure in destination
+					destPath := filepath.Join(pair.Destination, relPath)
+
+					expandedPairs = append(expandedPairs, FilePair{
+						Source:      path,
+						Destination: destPath,
+					})
+				}
+
+				return nil
+			})
+
+			if err != nil {
+				return nil, fmt.Errorf("error walking directory '%s': %v", pair.Source, err)
+			}
+
+		default:
+			return nil, fmt.Errorf("'%s' is not a regular file, directory, or symlink", pair.Source)
+		}
+
+		_ = fileInfo // fileInfo might be used for verbose output later
+	}
+
+	return expandedPairs, nil
+}
+
 func init() {
 	rootCmd.AddCommand(addCmd)
 
 	// Optional flags for the add command
 	addCmd.Flags().BoolP("force", "f", false, "Force add without confirmation")
 	addCmd.Flags().StringP("tags", "t", "", "Comma-separated tags to associate with the file")
-	addCmd.Flags().StringP("passphrase-value", "p", "", "Passphrase for encrypted vault (if required)")
+	addCmd.Flags().BoolP("recursive", "r", false, "Recursively add directories")
+	addCmd.Flags().BoolP("include-hidden", "H", false, "Include hidden files and directories")
+	addCmd.Flags().Bool("passphrase-stdin", false, "Read passphrase from stdin (for automation)")
+	addCmd.Flags().String("passphrase-file", "", "Read passphrase from file (file should have 0600 permissions)")
 }
 
-//TODO: Add support for directories and symlinks
 //TODO: Need to check how symlinks will be handled
 //TODO: Interactive mode with real time progress indicators

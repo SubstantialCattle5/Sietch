@@ -34,7 +34,7 @@ Each template is defined in a JSON file with the following structure:
 
 ### Basic Information
 - **`name`**: Display name for the template (required)
-- **`description`**: Human-readable description of the template's purpose (required)
+- **`description`**: Human readable description of the template's purpose (required)
 - **`version`**: Template version (required)
 - **`author`**: Who created this template (required)
 - **`tags`**: Array of tags for categorization and filtering (optional)
@@ -53,7 +53,7 @@ Defines the default vault configuration that will be applied when using this tem
 - **`dedup_max_size`**: Maximum file size for deduplication (e.g., `"64MB"`)
 - **`dedup_gc_threshold`**: Garbage collection threshold (number)
 - **`dedup_index_enabled`**: Enable deduplication index (`true`/`false`)
-- **`dedup_cross_file`**: Allow cross-file deduplication (`true`/`false`)
+- **`dedup_cross_file`**: Allow cross file deduplication (`true`/`false`)
 
 ### Directory Structure (`directories`)
 Array of directories to create in the vault. These are created relative to the vault root:
@@ -225,10 +225,70 @@ Templates are validated when loaded. Common issues:
 6. **Version your templates**
 7. **Document any special requirements**
 
+## Available Templates
+
+### Photos and Media
+- **`photoVault`** - Photo storage with fixed chunking, strong dedup, high compression
+- **`videoVault`** - Video storage with larger chunks, lighter compression, tuned hashing
+- **`audioLibrary`** - Audio/podcast storage with balanced compression and indexing
+
+### Documents and Knowledge
+- **`documentsVault`** - Office/PDF documents with higher compression, content-dedup, index enabled
+- **`codeVault`** - Code repositories/artifacts with fingerprint dedup, fast hashing, moderate chunks
+- **`reporterVault`** - Journalism/reporting with secure defaults, manual sync, metadata emphasis
+
+### Backups and Archives
+- **`systemBackup`** - System backups with large chunks, parallel sync, conservative dedup
+- **`coldArchive`** - Long-term archival with maximum compression, minimal write amplification
+
+## Template Comparison Matrix
+
+| Template | Chunk Size | Compression | Hash | Dedup Min/Max | GC Threshold | Index | Cross File Dedup | Use Case |
+|----------|-----------|-------------|------|---------------|--------------|-------|------------------|----------|
+| **photoVault** | 8MB | gzip | sha256 | 1MB / 64MB | 500 | ✓ | ✓ | Photos, RAW images, high-res media |
+| **videoVault** | 32MB | lz4 | sha256 | 16MB / 256MB | 100 | ✓ | ✗ | Large video files, movies, recordings |
+| **audioLibrary** | 8MB | gzip | sha256 | 2MB / 128MB | 300 | ✓ | ✓ | Music, podcasts, audio collections |
+| **documentsVault** | 2MB | gzip | sha256 | 512KB / 32MB | 1500 | ✓ | ✓ | Office docs, PDFs, text files |
+| **codeVault** | 4MB | gzip | sha256 | 256KB / 16MB | 2000 | ✓ | ✓ | Source code, repos, build artifacts |
+| **reporterVault** | 4MB | gzip | sha256 | 1KB / 32MB | 1000 | ✓ | ✓ | Journalism, sensitive documents |
+| **systemBackup** | 16MB | lz4 | sha256 | 8MB / 128MB | 500 | ✓ | ✓ | Full system backups, disaster recovery |
+| **coldArchive** | 16MB | gzip | sha512 | 4MB / 256MB | 200 | ✓ | ✓ | Long term storage, archival data |
+
+### Understanding the Settings
+
+**Chunk Size:**
+- **Small (2-4MB)**: Better dedup, slower for large files → Documents, Code
+- **Medium (8MB)**: Balanced performance → Photos, Audio
+- **Large (16-32MB)**: Faster processing, less dedup overhead → Videos, Backups
+
+**Compression:**
+- **gzip**: Higher compression ratio, slower → Documents, Photos, Archives
+- **lz4**: Faster compression, lower ratio → Videos, Backups
+- **none**: No compression overhead → Already compressed formats
+
+**Hash Algorithm:**
+- **sha256**: Standard security, fast
+- **sha512**: Higher security, slightly slower → Cold Archives
+
+**Deduplication:**
+- **Min/Max Size**: Range of chunk sizes eligible for dedup
+- **GC Threshold**: Number of unreferenced chunks before cleanup suggestion
+- **Index**: Enables faster chunk lookups (recommended: enabled)
+- **Cross File**: Dedup across different files (disable for independent files like videos)
+
+**When to Choose Each Template:**
+
+| If you're storing... | Use this template | Why |
+|---------------------|-------------------|-----|
+| Family photos, vacation pictures | `photoVault` | Optimized for JPEG/PNG with good dedup for similar images |
+| Movies, screen recordings | `videoVault` | Large chunks, fast compression, minimal dedup overhead |
+| Music library, podcasts | `audioLibrary` | Balanced for MP3/FLAC with moderate dedup |
+| Word docs, PDFs, spreadsheets | `documentsVault` | Aggressive compression + dedup for text content |
+| Git repos, npm packages | `codeVault` | Fine grained dedup for similar source files |
+| Sensitive documents, sources | `reporterVault` | Security focused with manual sync control |
+| Full system snapshots | `systemBackup` | Performance optimized for large backups |
+| Old files, compliance data | `coldArchive` | Maximum compression for rarely accessed data |
+
 ## Examples
 
-See the existing templates in this directory:
-- `photoVault.json` - Photo storage template
-- `reporterVault.json` - Reporting template
-
-These serve as examples of how to structure your own templates.
+See the templates in this directory for reference implementations. Each template serves as an example of how to structure your own custom templates.

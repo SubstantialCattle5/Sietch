@@ -72,6 +72,7 @@ sietch get thumper-plans.pdf ./retrieved/
 ### Chunking & Deduplication
 * Files are split into configurable chunks (default: 4MB)
 * Identical chunks across files are deduplicated to save space
+* Please Refer [this](internal/deduplication/README.md) documentation to understand how Deduplication works.
 
 ### Encryption
 Each chunk is encrypted before storage using:
@@ -225,9 +226,81 @@ Built with ❤️ in Go by the open source community.
 
 ## Contributors
 
-Thanks to all our amazing contributors!  
+Thanks to all our amazing contributors!
 
-[![Contributors](https://contrib.rocks/image?repo=substantialcattle5/sietch)](https://github.com/substantialcattle5/sietch/graphs/contributors)
+<!-- readme: contributors -start -->
+<table>
+	<tbody>
+		<tr>
+            <td align="center">
+                <a href="https://github.com/SubstantialCattle5">
+                    <img src="https://avatars.githubusercontent.com/u/92233871?v=4" width="100;" alt="SubstantialCattle5"/>
+                    <br />
+                    <sub><b>Nilay Nath Sharan</b></sub>
+                </a>
+            </td>
+            <td align="center">
+                <a href="https://github.com/MrKeiKun">
+                    <img src="https://avatars.githubusercontent.com/u/4362134?v=4" width="100;" alt="MrKeiKun"/>
+                    <br />
+                    <sub><b>Lorenzo (Kei) Buitizon</b></sub>
+                </a>
+            </td>
+            <td align="center">
+                <a href="https://github.com/harshalranjhani">
+                    <img src="https://avatars.githubusercontent.com/u/94748669?v=4" width="100;" alt="harshalranjhani"/>
+                    <br />
+                    <sub><b>Harshal Ranjhani</b></sub>
+                </a>
+            </td>
+            <td align="center">
+                <a href="https://github.com/ABHINAVGARG05">
+                    <img src="https://avatars.githubusercontent.com/u/143117260?v=4" width="100;" alt="ABHINAVGARG05"/>
+                    <br />
+                    <sub><b>Abhinav Garg</b></sub>
+                </a>
+            </td>
+            <td align="center">
+                <a href="https://github.com/Akash29g">
+                    <img src="https://avatars.githubusercontent.com/u/77738997?v=4" width="100;" alt="Akash29g"/>
+                    <br />
+                    <sub><b>Akash Goswami</b></sub>
+                </a>
+            </td>
+            <td align="center">
+                <a href="https://github.com/anuja12mishra">
+                    <img src="https://avatars.githubusercontent.com/u/109236275?v=4" width="100;" alt="anuja12mishra"/>
+                    <br />
+                    <sub><b>Anuja Mishra</b></sub>
+                </a>
+            </td>
+		</tr>
+		<tr>
+            <td align="center">
+                <a href="https://github.com/Deepam02">
+                    <img src="https://avatars.githubusercontent.com/u/116721751?v=4" width="100;" alt="Deepam02"/>
+                    <br />
+                    <sub><b>Deepam Goyal</b></sub>
+                </a>
+            </td>
+            <td align="center">
+                <a href="https://github.com/Janmesh23">
+                    <img src="https://avatars.githubusercontent.com/u/183159485?v=4" width="100;" alt="Janmesh23"/>
+                    <br />
+                    <sub><b>Janmesh </b></sub>
+                </a>
+            </td>
+            <td align="center">
+                <a href="https://github.com/Udayan853">
+                    <img src="https://avatars.githubusercontent.com/u/76378994?v=4" width="100;" alt="Udayan853"/>
+                    <br />
+                    <sub><b>Udayan Kulkarni</b></sub>
+                </a>
+            </td>
+		</tr>
+	<tbody>
+</table>
+<!-- readme: contributors -end -->
 
 ## License
 

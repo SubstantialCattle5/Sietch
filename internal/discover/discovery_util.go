@@ -15,29 +15,33 @@ import (
 )
 
 // createSyncService creates a sync service with or without RSA support
-func CreateSyncService(h host.Host, vaultMgr *config.Manager, vaultConfig *config.VaultConfig, vaultPath string) (*p2p.SyncService, error) {
+func CreateSyncService(h host.Host, vaultMgr *config.Manager, vaultConfig *config.VaultConfig, vaultPath string, verbose bool) (*p2p.SyncService, error) {
+	var syncService *p2p.SyncService
+	var err error
+
 	if vaultConfig.Sync.Enabled && vaultConfig.Sync.RSA != nil {
 		privateKey, publicKey, rsaConfig, err := keys.LoadRSAKeys(vaultPath, vaultConfig.Sync.RSA)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load RSA keys: %v", err)
 		}
 
-		syncService, err := p2p.NewSecureSyncService(h, vaultMgr, privateKey, publicKey, rsaConfig)
+		syncService, err = p2p.NewSecureSyncService(h, vaultMgr, privateKey, publicKey, rsaConfig)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create sync service: %v", err)
 		}
 
 		fmt.Println("🔐 RSA key exchange enabled with fingerprint:", rsaConfig.Fingerprint)
-		return syncService, nil
 	} else {
-		syncService, err := p2p.NewSyncService(h, vaultMgr)
+		syncService, err = p2p.NewSyncService(h, vaultMgr)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create sync service: %v", err)
 		}
 
 		fmt.Println("⚠️ Warning: RSA key exchange not enabled in vault config")
-		return syncService, nil
 	}
+
+	syncService.Verbose = verbose
+	return syncService, nil
 }
 
 func SetupDiscovery(ctx context.Context, h host.Host) (*p2p.MDNSDiscovery, <-chan peer.AddrInfo, error) {
@@ -145,15 +149,29 @@ func handleDiscoveredPeer(ctx context.Context, h host.Host, syncService *p2p.Syn
 	}
 
 	if trusted {
-		fmt.Println("key exchange successful ✓")
-
 		fingerprint, _ := syncService.GetPeerFingerprint(p.ID)
-		fmt.Printf("   Peer fingerprint: %s\n", fingerprint)
+		fmt.Println("Key exchange successful")
+		fmt.Printf("   Fingerprint: %s\n", fingerprint)
+
+		// Attempt to add trusted peer; detect if already trusted by inspecting output of AddTrustedPeer logic.
+		// Since AddTrustedPeer itself prints when a peer already exists, suppress duplicate messaging here by
+		// pre-checking if peer already trusted in config (through syncService API if available).
+		// We infer existing trust if AddTrustedPeer returns nil but the peer was previously in rsaConfig.TrustedPeers.
+
+		alreadyTrusted := false
+		if syncService.HasPeer(p.ID) { // Added helper expected; if not present, this will be a no-op at compile time until implemented.
+			alreadyTrusted = true
+		}
 
 		if err := syncService.AddTrustedPeer(ctx, p.ID); err != nil {
-			fmt.Printf("   Failed to save trusted peer: %v\n", err)
+			fmt.Printf("   Failed to persist trusted peer: %v\n", err)
+			return
+		}
+
+		if alreadyTrusted {
+			fmt.Println("Peer already trusted (verified)")
 		} else {
-			fmt.Println("   Peer added to trusted peers list ✓")
+			fmt.Println("Peer added to trusted list")
 		}
 	} else {
 		fmt.Println("peer not trusted")

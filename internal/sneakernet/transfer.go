@@ -2,13 +2,13 @@ package sneakernet
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/substantialcattle5/sietch/internal/config"
+	"gopkg.in/yaml.v3"
 )
 
 // Analyze performs analysis of what would be transferred
@@ -185,29 +185,87 @@ func (st *SneakTransfer) Execute() (*TransferResult, error) {
 
 // transferChunkWithManagers copies a chunk from source to destination using provided managers
 func (st *SneakTransfer) transferChunkWithManagers(chunkHash string, sourceManager, destManager *config.Manager) error {
-	// Check if chunk already exists in destination
+	// For encrypted vaults, chunks are stored with encrypted_hash as filename
+	// but we receive the plain hash. We need to try both plain and encrypted hash.
+
+	// First, try to use the plain hash (works for unencrypted vaults and backwards compatibility)
 	exists, err := destManager.ChunkExists(chunkHash)
 	if err != nil {
 		return fmt.Errorf("failed to check chunk existence: %v", err)
+	}
+
+	storageHash := chunkHash
+	if exists {
+		// Chunk exists with plain hash, use it
+	} else {
+		// Chunk doesn't exist with plain hash. For encrypted vaults, try to find it with encrypted hash.
+		// We need to check if this is an encrypted vault and find the encrypted hash.
+		if encryptedHash := st.findEncryptedHashForChunk(chunkHash, sourceManager); encryptedHash != "" {
+			storageHash = encryptedHash
+
+			// Check if chunk exists with encrypted hash
+			exists, err = destManager.ChunkExists(encryptedHash)
+			if err != nil {
+				return fmt.Errorf("failed to check chunk existence with encrypted hash: %v", err)
+			}
+		}
 	}
 
 	if exists {
 		return nil // Already exists, skip
 	}
 
-	// Read chunk from source
-	sourceChunkData, err := sourceManager.GetChunk(chunkHash)
+	// Read chunk from source using the appropriate hash
+	sourceChunkData, err := sourceManager.GetChunk(storageHash)
 	if err != nil {
 		return fmt.Errorf("failed to read source chunk: %v", err)
 	}
 
-	// Store chunk in destination
-	err = destManager.StoreChunk(chunkHash, sourceChunkData)
+	// Store chunk in destination using the appropriate hash
+	err = destManager.StoreChunk(storageHash, sourceChunkData)
 	if err != nil {
 		return fmt.Errorf("failed to store chunk: %v", err)
 	}
 
 	return nil
+}
+
+// findEncryptedHashForChunk finds the encrypted hash for a chunk given its plain hash
+func (st *SneakTransfer) findEncryptedHashForChunk(plainHash string, sourceManager *config.Manager) string {
+	// Get the source vault configuration to check if it's encrypted
+	vaultConfig, err := sourceManager.GetConfig()
+	if err != nil {
+		if st.Verbose {
+			fmt.Printf("Warning: Failed to get vault config to check encryption: %v\n", err)
+		}
+		return ""
+	}
+
+	// If vault is not encrypted, chunks are stored with plain hash
+	if vaultConfig.Encryption.Type == "" || vaultConfig.Encryption.Type == "none" {
+		return ""
+	}
+
+	// For encrypted vaults, we need to find the chunk metadata
+	// Get the manifest to find chunk references
+	manifest, err := sourceManager.GetManifest()
+	if err != nil {
+		if st.Verbose {
+			fmt.Printf("Warning: Failed to get manifest to find encrypted hash: %v\n", err)
+		}
+		return ""
+	}
+
+	// Search through all files and chunks to find the matching plain hash
+	for _, file := range manifest.Files {
+		for _, chunk := range file.Chunks {
+			if chunk.Hash == plainHash && chunk.EncryptedHash != "" {
+				return chunk.EncryptedHash
+			}
+		}
+	}
+
+	return ""
 }
 
 // transferManifestsWithAnalysis handles manifest transfer for new files and conflicts
@@ -350,31 +408,21 @@ func (st *SneakTransfer) generateManifestFilename(filePath string) string {
 	return safe + ".yaml"
 }
 
-// saveFileManifest saves a file manifest (placeholder implementation)
+// saveFileManifest saves a file manifest
 func (st *SneakTransfer) saveFileManifest(manifestPath string, fileManifest config.FileManifest) error {
-	// This would need to be implemented to match the existing YAML format
-	// For now, create an empty file to satisfy the interface
+	// Create the file
 	file, err := os.Create(manifestPath)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create manifest file: %v", err)
 	}
 	defer file.Close()
 
-	// Write a placeholder YAML content
-	content := fmt.Sprintf(`file: %s
-size: %d
-mtime: %s
-chunks: []
-destination: %s
-added_at: %s
-`,
-		fileManifest.FilePath,
-		fileManifest.Size,
-		fileManifest.ModTime,
-		fileManifest.Destination,
-		fileManifest.AddedAt.Format(time.RFC3339),
-	)
+	// Encode the manifest to YAML with proper indentation
+	encoder := yaml.NewEncoder(file)
+	encoder.SetIndent(2)
+	if err := encoder.Encode(fileManifest); err != nil {
+		return fmt.Errorf("failed to encode manifest: %v", err)
+	}
 
-	_, err = io.WriteString(file, content)
-	return err
+	return nil
 }

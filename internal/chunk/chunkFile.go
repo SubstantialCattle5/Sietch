@@ -3,6 +3,7 @@ package chunk
 import (
 	// #nosec G401
 
+	"context"
 	"encoding/base64"
 	"fmt"
 	"io"
@@ -14,6 +15,7 @@ import (
 	"github.com/substantialcattle5/sietch/internal/deduplication"
 	"github.com/substantialcattle5/sietch/internal/encryption"
 	"github.com/substantialcattle5/sietch/internal/fs"
+	"github.com/substantialcattle5/sietch/internal/progress"
 	"github.com/substantialcattle5/sietch/util"
 )
 
@@ -22,7 +24,7 @@ const (
 	HashDisplayLength = 12 // Length of hash to display in logs
 )
 
-func ChunkFile(filePath string, chunkSize int64, vaultRoot string, passphrase string) ([]config.ChunkRef, error) {
+func ChunkFile(ctx context.Context, filePath string, chunkSize int64, vaultRoot string, passphrase string, progressMgr *progress.Manager) ([]config.ChunkRef, error) {
 	// Validate input parameters
 	if chunkSize <= 0 {
 		return nil, fmt.Errorf("chunk size must be positive, got: %d", chunkSize)
@@ -33,6 +35,16 @@ func ChunkFile(filePath string, chunkSize int64, vaultRoot string, passphrase st
 		return nil, err
 	}
 	defer file.Close()
+
+	// Get file info for progress bars
+	fileInfo, err := file.Stat()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get file info: %v", err)
+	}
+	fileSize := fileInfo.Size()
+
+	// Initialize progress bars
+	progressMgr.InitTotalProgress(fileSize, "Chunking file")
 
 	// Load Vault Configuration
 	vaultConfig, err := config.LoadVaultConfig(vaultRoot)
@@ -57,10 +69,16 @@ func ChunkFile(filePath string, chunkSize int64, vaultRoot string, passphrase st
 		return nil, fmt.Errorf("failed to initialize deduplication manager: %v", err)
 	}
 
-	chunkRefs, err := processFileChunks(file, chunkSize, *vaultConfig, passphrase, dedupManager)
+	// Set progress manager for coordinated output
+	dedupManager.SetProgressManager(progressMgr)
+
+	chunkRefs, err := processFileChunks(ctx, file, chunkSize, *vaultConfig, passphrase, dedupManager, progressMgr)
 	if err != nil {
 		return nil, err
 	}
+
+	// Complete progress bars
+	progressMgr.FinishTotalProgress()
 
 	// Save deduplication index after processing
 	if err := dedupManager.Save(); err != nil {
@@ -70,7 +88,7 @@ func ChunkFile(filePath string, chunkSize int64, vaultRoot string, passphrase st
 	return chunkRefs, nil
 }
 
-func processFileChunks(file *os.File, chunkSize int64, vaultConfig config.VaultConfig, passphrase string, dedupManager *deduplication.Manager) ([]config.ChunkRef, error) {
+func processFileChunks(ctx context.Context, file *os.File, chunkSize int64, vaultConfig config.VaultConfig, passphrase string, dedupManager *deduplication.Manager, progressMgr *progress.Manager) ([]config.ChunkRef, error) {
 	// Create a buffer for reading chunks
 	buffer := make([]byte, chunkSize)
 	chunkCount := 0
@@ -79,6 +97,13 @@ func processFileChunks(file *os.File, chunkSize int64, vaultConfig config.VaultC
 
 	// Read the file in chunks
 	for {
+		// Check for cancellation
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("operation cancelled")
+		default:
+		}
+
 		bytesRead, err := file.Read(buffer)
 		if err != nil && err != io.EOF {
 			return nil, fmt.Errorf("error reading file: %v", err)
@@ -91,6 +116,9 @@ func processFileChunks(file *os.File, chunkSize int64, vaultConfig config.VaultC
 
 		chunkCount++
 		totalBytes += int64(bytesRead)
+
+		// Update progress bars
+		progressMgr.UpdateTotalProgress(int64(bytesRead))
 
 		// Calculate chunk hash (pre-encryption) using configured algorithm
 		hasher, err := CreateHasher(vaultConfig.Chunking.HashAlgorithm)
@@ -113,6 +141,7 @@ func processFileChunks(file *os.File, chunkSize int64, vaultConfig config.VaultC
 		chunkRef := config.ChunkRef{
 			Hash:            chunkHash,
 			Size:            int64(bytesRead),
+			CompressedSize:  int64(len(compressedData)),
 			Index:           chunkCount - 1, // Convert 1-based chunkCount to 0-based index
 			Compressed:      vaultConfig.Compression != "none",
 			CompressionType: vaultConfig.Compression,
@@ -167,7 +196,7 @@ func processFileChunks(file *os.File, chunkSize int64, vaultConfig config.VaultC
 			chunkRef = updatedChunkRef
 
 			// Display chunk information using helper function
-			FormatChunkInfo(chunkCount, bytesRead, chunkHash, vaultConfig, chunkDataToProcess, deduplicated, true)
+			progressMgr.PrintVerbose("%s", FormatChunkInfoString(chunkCount, bytesRead, chunkHash, vaultConfig, chunkDataToProcess, deduplicated, true))
 		} else {
 			// If no encryption, process chunk with deduplication manager
 			updatedChunkRef, deduplicated, err := dedupManager.ProcessChunk(chunkRef, chunkDataToProcess, chunkHash)
@@ -177,7 +206,7 @@ func processFileChunks(file *os.File, chunkSize int64, vaultConfig config.VaultC
 			chunkRef = updatedChunkRef
 
 			// Display chunk information using helper function
-			FormatChunkInfo(chunkCount, bytesRead, chunkHash, vaultConfig, chunkDataToProcess, deduplicated, false)
+			progressMgr.PrintVerbose("%s", FormatChunkInfoString(chunkCount, bytesRead, chunkHash, vaultConfig, chunkDataToProcess, deduplicated, false))
 		}
 
 		// Add the chunk reference to our list
@@ -188,8 +217,8 @@ func processFileChunks(file *os.File, chunkSize int64, vaultConfig config.VaultC
 		}
 	}
 
-	fmt.Printf("Total chunks processed: %d\n", chunkCount)
-	fmt.Printf("Total bytes processed: %s\n", util.HumanReadableSize(totalBytes))
+	progressMgr.PrintInfo("Total chunks processed: %d\n", chunkCount)
+	progressMgr.PrintInfo("Total bytes processed: %s\n", util.HumanReadableSize(totalBytes))
 
 	return chunkRefs, nil
 }

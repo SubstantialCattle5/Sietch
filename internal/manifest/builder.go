@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 
 	"github.com/substantialcattle5/sietch/internal/config"
+	"github.com/substantialcattle5/sietch/util"
 )
 
 // WriteManifest writes the vault configuration to vault.yaml
@@ -54,9 +56,21 @@ func StoreFileManifest(vaultRoot string, fileName string, manifest *config.FileM
 	}
 
 	// Create manifest file path
-	manifestPath := filepath.Join(manifestsDir, fileName+".yaml")
+	destination := strings.ReplaceAll(manifest.Destination, "/", ".")
+	uniqueFileIdentifier := destination + fileName + ".yaml"
+	manifestPath := filepath.Join(manifestsDir, uniqueFileIdentifier)
 
-	// Create the file
+	// Check if file exists
+	_, err := os.Stat(manifestPath)
+	if err == nil {
+		message := fmt.Sprintf("'%s' exists. Overwrite? ", manifest.Destination+fileName)
+		response, err := util.ConfirmOverwrite(message, os.Stdin, os.Stdout)
+		if err != nil || !response {
+			return fmt.Errorf("skipped")
+		}
+	}
+
+	// Create/Overwrite the file
 	file, err := os.Create(manifestPath)
 	if err != nil {
 		return fmt.Errorf("failed to create manifest file: %v", err)
