@@ -132,7 +132,7 @@ func TestFormatSharedWith_LargeList(t *testing.T) {
 		list[i] = fmt.Sprintf("file%d.txt", i)
 	}
 	out := FormatSharedWith(list, 5)
-	
+
 	// Should show first 5 items
 	for i := 0; i < 5; i++ {
 		expected := fmt.Sprintf("file%d.txt", i)
@@ -140,7 +140,7 @@ func TestFormatSharedWith_LargeList(t *testing.T) {
 			t.Fatalf("expected '%s' in output, got '%s'", expected, out)
 		}
 	}
-	
+
 	// Should show (+95 more)
 	if !strings.Contains(out, "(+95 more)") {
 		t.Fatalf("expected '(+95 more)' in output, got '%s'", out)
@@ -184,11 +184,11 @@ func TestDisplayShortFormat_EmptyList(t *testing.T) {
 func TestDisplayShortFormat_SingleFile(t *testing.T) {
 	f1 := createTestManifest("file.txt", "test/", 100, nil, nil)
 	files := []config.FileManifest{f1}
-	
+
 	out := captureStdout(t, func() {
 		DisplayShortFormat(files, false, false, nil)
 	})
-	
+
 	expectedPath := "test/file.txt"
 	if !strings.Contains(out, expectedPath) {
 		t.Fatalf("expected '%s' in output, got '%s'", expectedPath, out)
@@ -200,11 +200,11 @@ func TestDisplayShortFormat_MultipleFiles(t *testing.T) {
 	f2 := createTestManifest("b.txt", "dir2/", 200, nil, nil)
 	f3 := createTestManifest("c.txt", "dir3/", 300, nil, nil)
 	files := []config.FileManifest{f1, f2, f3}
-	
+
 	out := captureStdout(t, func() {
 		DisplayShortFormat(files, false, false, nil)
 	})
-	
+
 	if !strings.Contains(out, "dir1/a.txt") {
 		t.Fatalf("expected 'dir1/a.txt' in output")
 	}
@@ -220,11 +220,11 @@ func TestDisplayShortFormat_WithTags(t *testing.T) {
 	tags := []string{"important", "review", "urgent"}
 	f1 := createTestManifest("file.txt", "test/", 100, tags, nil)
 	files := []config.FileManifest{f1}
-	
+
 	out := captureStdout(t, func() {
 		DisplayShortFormat(files, true, false, nil)
 	})
-	
+
 	// Should show file path and tags in brackets
 	if !strings.Contains(out, "test/file.txt") {
 		t.Fatalf("expected file path in output, got '%s'", out)
@@ -238,11 +238,11 @@ func TestDisplayShortFormat_WithoutTags(t *testing.T) {
 	tags := []string{"tag1", "tag2"}
 	f1 := createTestManifest("file.txt", "test/", 100, tags, nil)
 	files := []config.FileManifest{f1}
-	
+
 	out := captureStdout(t, func() {
 		DisplayShortFormat(files, false, false, nil)
 	})
-	
+
 	// Should not show tags when showTags=false
 	if strings.Contains(out, "tag1") || strings.Contains(out, "tag2") {
 		t.Fatalf("unexpected tags in output when showTags=false, got '%s'", out)
@@ -255,11 +255,11 @@ func TestDisplayShortFormat_WithoutTags(t *testing.T) {
 func TestDisplayShortFormat_EmptyTags(t *testing.T) {
 	f1 := createTestManifest("file.txt", "test/", 100, []string{}, nil)
 	files := []config.FileManifest{f1}
-	
+
 	out := captureStdout(t, func() {
 		DisplayShortFormat(files, true, false, nil)
 	})
-	
+
 	// Should show path without tags
 	if !strings.Contains(out, "test/file.txt") {
 		t.Fatalf("expected file path in output, got '%s'", out)
@@ -277,11 +277,11 @@ func TestDisplayShortFormat_EmptyTags(t *testing.T) {
 func TestDisplayShortFormat_NilTags(t *testing.T) {
 	f1 := createTestManifest("file.txt", "test/", 100, nil, nil)
 	files := []config.FileManifest{f1}
-	
+
 	out := captureStdout(t, func() {
 		DisplayShortFormat(files, true, false, nil)
 	})
-	
+
 	// Should handle nil tags gracefully
 	if !strings.Contains(out, "test/file.txt") {
 		t.Fatalf("expected file path in output, got '%s'", out)
@@ -293,11 +293,11 @@ func TestDisplayShortFormat_DedupNoSharing(t *testing.T) {
 	f1 := createTestManifest("file.txt", "test/", 100, nil, []config.ChunkRef{chunk})
 	files := []config.FileManifest{f1}
 	chunkRefs := buildTestChunkIndex(files)
-	
+
 	out := captureStdout(t, func() {
 		DisplayShortFormat(files, false, true, chunkRefs)
 	})
-	
+
 	if !strings.Contains(out, "shared_chunks: 0") {
 		t.Fatalf("expected 'shared_chunks: 0' for non-shared file, got '%s'", out)
 	}
@@ -313,11 +313,11 @@ func TestDisplayShortFormat_DedupWithSharing(t *testing.T) {
 	f2 := createTestManifest("b.txt", "test/", 100, nil, []config.ChunkRef{chunk})
 	files := []config.FileManifest{f1, f2}
 	chunkRefs := buildTestChunkIndex(files)
-	
+
 	out := captureStdout(t, func() {
 		DisplayShortFormat(files, false, true, chunkRefs)
 	})
-	
+
 	if !strings.Contains(out, "shared_chunks:") {
 		t.Fatalf("expected 'shared_chunks:' in output, got '%s'", out)
 	}
@@ -332,12 +332,12 @@ func TestDisplayShortFormat_DedupWithSharing(t *testing.T) {
 func TestDisplayShortFormat_DedupNilChunkRefs(t *testing.T) {
 	f1 := createTestManifest("file.txt", "test/", 100, nil, nil)
 	files := []config.FileManifest{f1}
-	
+
 	// Should not panic with nil chunkRefs
 	out := captureStdout(t, func() {
 		DisplayShortFormat(files, false, true, nil)
 	})
-	
+
 	if !strings.Contains(out, "test/file.txt") {
 		t.Fatalf("expected file path even with nil chunkRefs, got '%s'", out)
 	}
@@ -349,11 +349,11 @@ func TestDisplayShortFormat_DedupDisabled(t *testing.T) {
 	f2 := createTestManifest("b.txt", "test/", 100, nil, []config.ChunkRef{chunk})
 	files := []config.FileManifest{f1, f2}
 	chunkRefs := buildTestChunkIndex(files)
-	
+
 	out := captureStdout(t, func() {
 		DisplayShortFormat(files, false, false, chunkRefs)
 	})
-	
+
 	// Should not show dedup stats when showDedup=false
 	if strings.Contains(out, "shared_chunks:") {
 		t.Fatalf("unexpected dedup stats when showDedup=false, got '%s'", out)
@@ -367,11 +367,11 @@ func TestDisplayShortFormat_CombinedTagsAndDedup(t *testing.T) {
 	f2 := createTestManifest("b.txt", "test/", 100, nil, []config.ChunkRef{chunk})
 	files := []config.FileManifest{f1, f2}
 	chunkRefs := buildTestChunkIndex(files)
-	
+
 	out := captureStdout(t, func() {
 		DisplayShortFormat(files, true, true, chunkRefs)
 	})
-	
+
 	// Should show both tags and dedup stats
 	if !strings.Contains(out, "[important]") {
 		t.Fatalf("expected tags in output, got '%s'", out)
@@ -384,16 +384,16 @@ func TestDisplayShortFormat_CombinedTagsAndDedup(t *testing.T) {
 func TestDisplayShortFormat_OutputFormat(t *testing.T) {
 	f1 := createTestManifest("file.txt", "test/", 100, nil, nil)
 	files := []config.FileManifest{f1}
-	
+
 	out := captureStdout(t, func() {
 		DisplayShortFormat(files, false, false, nil)
 	})
-	
+
 	lines := strings.Split(strings.TrimSpace(out), "\n")
 	if len(lines) != 1 {
 		t.Fatalf("expected 1 line of output, got %d", len(lines))
 	}
-	
+
 	// Verify clean output with just the path
 	if lines[0] != "test/file.txt" {
 		t.Fatalf("expected 'test/file.txt', got '%s'", lines[0])
@@ -405,11 +405,11 @@ func TestDisplayShortFormat_MultipleFilesLineCount(t *testing.T) {
 	f2 := createTestManifest("b.txt", "test/", 200, nil, nil)
 	f3 := createTestManifest("c.txt", "test/", 300, nil, nil)
 	files := []config.FileManifest{f1, f2, f3}
-	
+
 	out := captureStdout(t, func() {
 		DisplayShortFormat(files, false, false, nil)
 	})
-	
+
 	lines := strings.Split(strings.TrimSpace(out), "\n")
 	if len(lines) != 3 {
 		t.Fatalf("expected 3 lines for 3 files, got %d", len(lines))
@@ -422,11 +422,11 @@ func TestDisplayShortFormat_DedupIndentation(t *testing.T) {
 	f2 := createTestManifest("b.txt", "test/", 100, nil, []config.ChunkRef{chunk})
 	files := []config.FileManifest{f1, f2}
 	chunkRefs := buildTestChunkIndex(files)
-	
+
 	out := captureStdout(t, func() {
 		DisplayShortFormat(files, false, true, chunkRefs)
 	})
-	
+
 	// Dedup stats should be indented with space
 	lines := strings.Split(out, "\n")
 	for _, line := range lines {
@@ -449,11 +449,11 @@ func TestDisplayShortFormat_LargeFileList(t *testing.T) {
 			nil,
 		)
 	}
-	
+
 	out := captureStdout(t, func() {
 		DisplayShortFormat(files, false, false, nil)
 	})
-	
+
 	lines := strings.Split(strings.TrimSpace(out), "\n")
 	if len(lines) != 100 {
 		t.Fatalf("expected 100 lines for 100 files, got %d", len(lines))
@@ -465,11 +465,11 @@ func TestDisplayShortFormat_SpecialCharactersInPath(t *testing.T) {
 	f2 := createTestManifest("file-with-dashes.txt", "test/", 100, nil, nil)
 	f3 := createTestManifest("file_with_underscores.txt", "test/", 100, nil, nil)
 	files := []config.FileManifest{f1, f2, f3}
-	
+
 	out := captureStdout(t, func() {
 		DisplayShortFormat(files, false, false, nil)
 	})
-	
+
 	if !strings.Contains(out, "file with spaces.txt") {
 		t.Fatalf("expected file with spaces in output")
 	}
