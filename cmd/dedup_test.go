@@ -146,8 +146,10 @@ func TestDedupStatsCommand(t *testing.T) {
 			t.Fatalf("Failed to change to vault directory: %v", err)
 		}
 
-		cmd := dedupStatsCmd
-		cmd.SetArgs([]string{})
+		// Use root command approach for proper command execution
+		cmd := &cobra.Command{Use: "sietch"}
+		cmd.AddCommand(dedupCmd)
+		cmd.SetArgs([]string{"dedup", "stats"})
 
 		output := captureOutput(func() {
 			err := cmd.Execute()
@@ -157,16 +159,16 @@ func TestDedupStatsCommand(t *testing.T) {
 		})
 
 		if !strings.Contains(output, "Deduplication Statistics:") {
-			t.Error("Stats output should contain statistics header")
+			t.Errorf("Stats output should contain statistics header. Got: %q", output)
 		}
 		if !strings.Contains(output, "Total chunks:") {
-			t.Error("Stats output should contain total chunks info")
+			t.Errorf("Stats output should contain total chunks info. Got: %q", output)
 		}
 		if !strings.Contains(output, "Total size:") {
-			t.Error("Stats output should contain total size info")
+			t.Errorf("Stats output should contain total size info. Got: %q", output)
 		}
 		if !strings.Contains(output, "Space saved:") {
-			t.Error("Stats output should contain space saved info")
+			t.Errorf("Stats output should contain space saved info. Got: %q", output)
 		}
 	})
 
@@ -194,8 +196,10 @@ func TestDedupStatsCommand(t *testing.T) {
 			t.Fatalf("Failed to change to vault directory: %v", err)
 		}
 
-		cmd := dedupStatsCmd
-		cmd.SetArgs([]string{})
+		// Use root command approach for proper command execution
+		cmd := &cobra.Command{Use: "sietch"}
+		cmd.AddCommand(dedupCmd)
+		cmd.SetArgs([]string{"dedup", "stats"})
 
 		output := captureOutput(func() {
 			err := cmd.Execute()
@@ -205,7 +209,7 @@ func TestDedupStatsCommand(t *testing.T) {
 		})
 
 		if !strings.Contains(output, "Deduplication enabled: false") {
-			t.Error("Stats output should show deduplication disabled")
+			t.Errorf("Stats output should show deduplication disabled. Got: %q", output)
 		}
 	})
 
@@ -222,8 +226,9 @@ func TestDedupStatsCommand(t *testing.T) {
 			t.Fatalf("Failed to change to temp directory: %v", err)
 		}
 
-		cmd := dedupStatsCmd
-		cmd.SetArgs([]string{})
+		cmd := &cobra.Command{Use: "sietch"}
+		cmd.AddCommand(dedupCmd)
+		cmd.SetArgs([]string{"dedup", "stats"})
 
 		output := captureOutput(func() {
 			err := cmd.Execute()
@@ -233,7 +238,7 @@ func TestDedupStatsCommand(t *testing.T) {
 		})
 
 		if !strings.Contains(output, "not inside a vault") {
-			t.Error("Error output should indicate not inside a vault")
+			t.Errorf("Error output should indicate not inside a vault. Got: %q", output)
 		}
 	})
 }
@@ -252,8 +257,9 @@ func TestDedupGCCommand(t *testing.T) {
 			t.Fatalf("Failed to change to vault directory: %v", err)
 		}
 
-		cmd := dedupGcCmd
-		cmd.SetArgs([]string{})
+		cmd := &cobra.Command{Use: "sietch"}
+		cmd.AddCommand(dedupCmd)
+		cmd.SetArgs([]string{"dedup", "gc"})
 
 		output := captureOutput(func() {
 			err := cmd.Execute()
@@ -263,10 +269,10 @@ func TestDedupGCCommand(t *testing.T) {
 		})
 
 		if !strings.Contains(output, "Running garbage collection...") {
-			t.Error("GC output should contain progress message")
+			t.Errorf("GC output should contain progress message. Got: %q", output)
 		}
 		if !strings.Contains(output, "Garbage collection completed") {
-			t.Error("GC output should contain completion message")
+			t.Errorf("GC output should contain completion message. Got: %q", output)
 		}
 	})
 
@@ -294,8 +300,9 @@ func TestDedupGCCommand(t *testing.T) {
 			t.Fatalf("Failed to change to vault directory: %v", err)
 		}
 
-		cmd := dedupGcCmd
-		cmd.SetArgs([]string{})
+		cmd := &cobra.Command{Use: "sietch"}
+		cmd.AddCommand(dedupCmd)
+		cmd.SetArgs([]string{"dedup", "gc"})
 
 		output := captureOutput(func() {
 			err := cmd.Execute()
@@ -305,7 +312,7 @@ func TestDedupGCCommand(t *testing.T) {
 		})
 
 		if !strings.Contains(output, "deduplication is not enabled") {
-			t.Error("Error output should indicate deduplication is not enabled")
+			t.Errorf("Error output should indicate deduplication is not enabled. Got: %q", output)
 		}
 	})
 }
@@ -324,8 +331,9 @@ func TestDedupOptimizeCommand(t *testing.T) {
 			t.Fatalf("Failed to change to vault directory: %v", err)
 		}
 
-		cmd := dedupOptimizeCmd
-		cmd.SetArgs([]string{})
+		cmd := &cobra.Command{Use: "sietch"}
+		cmd.AddCommand(dedupCmd)
+		cmd.SetArgs([]string{"dedup", "optimize"})
 
 		output := captureOutput(func() {
 			err := cmd.Execute()
@@ -335,10 +343,10 @@ func TestDedupOptimizeCommand(t *testing.T) {
 		})
 
 		if !strings.Contains(output, "Optimizing vault storage...") {
-			t.Error("Optimize output should contain progress message")
+			t.Errorf("Optimize output should contain progress message. Got: %q", output)
 		}
 		if !strings.Contains(output, "Optimization Results:") {
-			t.Error("Optimize output should contain results header")
+			t.Errorf("Optimize output should contain results header. Got: %q", output)
 		}
 	})
 
@@ -366,8 +374,9 @@ func TestDedupOptimizeCommand(t *testing.T) {
 			t.Fatalf("Failed to change to vault directory: %v", err)
 		}
 
-		cmd := dedupOptimizeCmd
-		cmd.SetArgs([]string{})
+		cmd := &cobra.Command{Use: "sietch"}
+		cmd.AddCommand(dedupCmd)
+		cmd.SetArgs([]string{"dedup", "optimize"})
 
 		output := captureOutput(func() {
 			err := cmd.Execute()
@@ -377,7 +386,7 @@ func TestDedupOptimizeCommand(t *testing.T) {
 		})
 
 		if !strings.Contains(output, "deduplication is not enabled") {
-			t.Error("Error output should indicate deduplication is not enabled")
+			t.Errorf("Error output should indicate deduplication is not enabled. Got: %q", output)
 		}
 	})
 }
@@ -413,8 +422,9 @@ func TestDedupCommandsWithData(t *testing.T) {
 		}
 
 		// Test stats command
-		statsCmd := dedupStatsCmd
-		statsCmd.SetArgs([]string{})
+		statsCmd := &cobra.Command{Use: "sietch"}
+		statsCmd.AddCommand(dedupCmd)
+		statsCmd.SetArgs([]string{"dedup", "stats"})
 
 		statsOutput := captureOutput(func() {
 			err := statsCmd.Execute()
@@ -424,12 +434,13 @@ func TestDedupCommandsWithData(t *testing.T) {
 		})
 
 		if !strings.Contains(statsOutput, "Deduplication Statistics:") {
-			t.Error("Stats output should contain statistics header")
+			t.Errorf("Stats output should contain statistics header. Got: %q", statsOutput)
 		}
 
 		// Test gc command
-		gcCmd := dedupGcCmd
-		gcCmd.SetArgs([]string{})
+		gcCmd := &cobra.Command{Use: "sietch"}
+		gcCmd.AddCommand(dedupCmd)
+		gcCmd.SetArgs([]string{"dedup", "gc"})
 
 		gcOutput := captureOutput(func() {
 			err := gcCmd.Execute()
@@ -439,12 +450,13 @@ func TestDedupCommandsWithData(t *testing.T) {
 		})
 
 		if !strings.Contains(gcOutput, "Garbage collection completed") {
-			t.Error("GC output should contain completion message")
+			t.Errorf("GC output should contain completion message. Got: %q", gcOutput)
 		}
 
 		// Test optimize command
-		optimizeCmd := dedupOptimizeCmd
-		optimizeCmd.SetArgs([]string{})
+		optimizeCmd := &cobra.Command{Use: "sietch"}
+		optimizeCmd.AddCommand(dedupCmd)
+		optimizeCmd.SetArgs([]string{"dedup", "optimize"})
 
 		optimizeOutput := captureOutput(func() {
 			err := optimizeCmd.Execute()
@@ -454,7 +466,7 @@ func TestDedupCommandsWithData(t *testing.T) {
 		})
 
 		if !strings.Contains(optimizeOutput, "Optimization Results:") {
-			t.Error("Optimize output should contain results header")
+			t.Errorf("Optimize output should contain results header. Got: %q", optimizeOutput)
 		}
 	})
 }
