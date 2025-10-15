@@ -279,18 +279,6 @@ Example:
 					return fmt.Errorf("failed to decrypt chunk %s: %v", chunkHash, err)
 				}
 
-				// Verify chunk integrity if not skipped
-				skipVerify, _ := cmd.Flags().GetBool(skipVerification)
-				if !skipEncryption && !skipVerify && chunkRef.Hash != "" {
-					if err := verifyChunkWithRetry(ctx, chunkRef, decryptedData, 3); err != nil {
-						progressMgr.PrintVerbose("Chunk %s failed integrity verification: %v\n", chunkHash, err)
-						return fmt.Errorf("chunk %s integrity verification failed after retries: %v", chunkHash, err)
-					}
-					progressMgr.PrintVerbose("Chunk %s integrity verified successfully\n", chunkHash)
-				} else if skipVerify {
-					progressMgr.PrintVerbose("Skipping integrity verification for chunk %s (--skip-verification flag used)\n", chunkHash)
-				}
-
 				// The original data was base64-encoded before encryption. Decode back to bytes.
 				decodedBytes, err := base64.StdEncoding.DecodeString(decryptedData)
 				if err != nil {
@@ -313,6 +301,17 @@ Example:
 					return fmt.Errorf("failed to decompress chunk %s: %v", chunkHash, err)
 				}
 				chunkData = decompressedData
+			}
+
+			skipVerify, _ := cmd.Flags().GetBool(skipVerification)
+			if !skipEncryption && !skipVerify && chunkRef.Hash != "" {
+				if err := verifyChunkWithRetry(ctx, chunkRef, string(chunkData), 3); err != nil {
+					progressMgr.PrintVerbose("Chunk %s failed integrity verification: %v\n", chunkHash, err)
+					return fmt.Errorf("chunk %s integrity verification failed after retries: %v", chunkHash, err)
+				}
+				progressMgr.PrintVerbose("Chunk %s integrity verified successfully\n", chunkHash)
+			} else if skipVerify {
+				progressMgr.PrintVerbose("Skipping integrity verification for chunk %s (--skip-verification flag used)\n", chunkHash)
 			}
 
 			// Write the chunk to the output file

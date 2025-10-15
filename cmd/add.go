@@ -230,12 +230,25 @@ Examples:
 			}
 
 			// Create and store the file manifest
+			// Separate directory from filename in destination
+			// If pair.Destination ends with a filename (from directory expansion),
+			// we need to extract the directory part and filename separately
+			destDir := filepath.Dir(pair.Destination)
+			destFileName := filepath.Base(pair.Destination)
+
+			// If the destination is just a filename (no directory), set destDir to empty
+			if destDir == "." {
+				destDir = ""
+			} else if destDir != "" && !strings.HasSuffix(destDir, "/") {
+				destDir = destDir + "/"
+			}
+
 			fileManifest := &config.FileManifest{
-				FilePath:    filepath.Base(pair.Source),
+				FilePath:    destFileName,
 				Size:        sizeInBytes,
 				ModTime:     fileInfo.ModTime().Format(time.RFC3339),
 				Chunks:      chunkRefs,
-				Destination: pair.Destination,
+				Destination: destDir,
 				AddedAt:     time.Now().UTC(),
 				Tags:        tags, // Include tags in the manifest
 			}
@@ -244,11 +257,11 @@ Examples:
 			err = manifest.StoreFileManifest(vaultRoot, filepath.Base(pair.Source), fileManifest)
 			if err != nil {
 				if err.Error() == "skipped" {
-					errorMsg := fmt.Sprintf("✗ '%s': skipped", fileManifest.Destination+filepath.Base(pair.Source))
+					errorMsg := fmt.Sprintf("✗ '%s': skipped", fileManifest.Destination+fileManifest.FilePath)
 					fmt.Println(errorMsg)
 					continue
 				}
-				errorMsg := fmt.Sprintf("✗ %s: manifest storage failed - %v", filepath.Base(pair.Source), err)
+				errorMsg := fmt.Sprintf("✗ %s: manifest storage failed - %v", fileManifest.FilePath, err)
 				fmt.Println(errorMsg)
 				failedFiles = append(failedFiles, errorMsg)
 				continue
