@@ -65,7 +65,7 @@ func SetupDiscovery(ctx context.Context, h host.Host) (*p2p.MDNSDiscovery, <-cha
 
 // runDiscoveryLoop processes discovered peers until timeout or interrupted
 func RunDiscoveryLoop(ctx context.Context, h host.Host, syncService *p2p.SyncService,
-	peerChan <-chan peer.AddrInfo, timeout int, continuous bool,
+	peerChan <-chan peer.AddrInfo, timeout int, continuous bool, allAddresses bool,
 ) error {
 	var timeoutChan <-chan time.Time
 	if !continuous {
@@ -93,7 +93,7 @@ func RunDiscoveryLoop(ctx context.Context, h host.Host, syncService *p2p.SyncSer
 			discoveredPeers[p.ID.String()] = true
 			peerCount++
 
-			handleDiscoveredPeer(ctx, h, syncService, p, peerCount)
+			handleDiscoveredPeer(ctx, h, syncService, p, peerCount, allAddresses)
 
 		case <-timeoutChan:
 			fmt.Printf("\n⌛ Discovery timeout reached after %d seconds.\n", timeout)
@@ -117,14 +117,11 @@ func RunDiscoveryLoop(ctx context.Context, h host.Host, syncService *p2p.SyncSer
 
 // handleDiscoveredPeer processes a newly discovered peer
 func handleDiscoveredPeer(ctx context.Context, h host.Host, syncService *p2p.SyncService,
-	p peer.AddrInfo, peerCount int,
+	p peer.AddrInfo, peerCount int, allAddresses bool,
 ) {
 	fmt.Printf("✅ Discovered peer #%d\n", peerCount)
 	fmt.Printf("   ID: %s\n", p.ID.String())
-	fmt.Println("   Addresses:")
-	for _, addr := range p.Addrs {
-		fmt.Printf("     - %s\n", addr.String())
-	}
+	DisplayPeerAddresses(p, allAddresses)
 
 	fmt.Printf("   Connecting and exchanging keys... ")
 
