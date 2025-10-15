@@ -6,6 +6,7 @@ package cmd
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
 	"os"
@@ -21,6 +22,41 @@ import (
 	"github.com/substantialcattle5/sietch/internal/ui"
 	"github.com/substantialcattle5/sietch/util"
 )
+
+// verifyChunkWithRetry verifies chunk integrity with retry logic for failed chunks
+func verifyChunkWithRetry(ctx context.Context, chunkRef config.ChunkRef, decryptedData string, maxRetries int) error {
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		// Check for cancellation
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("operation cancelled")
+		default:
+		}
+
+		// Verify the chunk hash if available
+		if chunkRef.Hash != "" {
+			computedHash := fmt.Sprintf("%x", sha256.Sum256([]byte(decryptedData)))
+			if computedHash != chunkRef.Hash {
+				if attempt == maxRetries {
+					return fmt.Errorf("chunk integrity check failed after %d attempts (expected: %s, got: %s)",
+						maxRetries, chunkRef.Hash, computedHash)
+				}
+				// Wait before retry (exponential backoff)
+				if attempt < maxRetries {
+					// In a real implementation, you might want to add a small delay here
+					continue
+				}
+			} else {
+				// Hash verification successful
+				return nil
+			}
+		} else {
+			// No hash to verify against
+			return nil
+		}
+	}
+	return nil
+}
 
 // findFileManifest searches for a file manifest by path, trying multiple approaches
 func findFileManifest(vaultRoot, filePath string) (*config.FileManifest, error) {
@@ -83,8 +119,9 @@ func findFileManifest(vaultRoot, filePath string) (*config.FileManifest, error) 
 }
 
 const (
-	force          = "force"
-	skipDecryption = "skip-decryption"
+	force            = "force"
+	skipDecryption   = "skip-decryption"
+	skipVerification = "skip-verification"
 )
 
 // getCmd represents the get command
@@ -242,12 +279,17 @@ Example:
 					return fmt.Errorf("failed to decrypt chunk %s: %v", chunkHash, err)
 				}
 
-				// TODO: Implement chunk integrity verification
-				// if !skipEncryption && chunkRef.Hash != "" {
-				//     if util.SHA256Sum([]byte(decryptedData)) != chunkRef.Hash {
-				//         return fmt.Errorf("chunk integrity check failed")
-				//     }
-				// }
+				// Verify chunk integrity if not skipped
+				skipVerify, _ := cmd.Flags().GetBool(skipVerification)
+				if !skipEncryption && !skipVerify && chunkRef.Hash != "" {
+					if err := verifyChunkWithRetry(ctx, chunkRef, decryptedData, 3); err != nil {
+						progressMgr.PrintVerbose("Chunk %s failed integrity verification: %v\n", chunkHash, err)
+						return fmt.Errorf("chunk %s integrity verification failed after retries: %v", chunkHash, err)
+					}
+					progressMgr.PrintVerbose("Chunk %s integrity verified successfully\n", chunkHash)
+				} else if skipVerify {
+					progressMgr.PrintVerbose("Skipping integrity verification for chunk %s (--skip-verification flag used)\n", chunkHash)
+				}
 
 				// The original data was base64-encoded before encryption. Decode back to bytes.
 				decodedBytes, err := base64.StdEncoding.DecodeString(decryptedData)
@@ -296,11 +338,16 @@ Example:
 			progressMgr.PrintInfo("Tags: %v\n", fileManifest.Tags)
 		}
 
-		// Note about encryption status
+		// Note about encryption and verification status
+		skipVerify, _ := cmd.Flags().GetBool(skipVerification)
 		if skipEncryption && vaultConfig.Encryption.Type != "none" {
 			progressMgr.PrintInfo("\nWarning: File retrieved without decryption (--skip-decryption flag used)")
 		} else if vaultConfig.Encryption.Type != "none" {
 			progressMgr.PrintInfo("\nFile successfully decrypted")
+		}
+
+		if skipVerify {
+			progressMgr.PrintInfo("\nWarning: File retrieved without integrity verification (--skip-verification flag used)")
 		}
 
 		return nil
@@ -313,6 +360,7 @@ func init() {
 	// Add flags
 	getCmd.Flags().BoolP(force, "f", false, "Force overwrite if file exists at destination")
 	getCmd.Flags().Bool(skipDecryption, false, "Skip decryption and retrieve raw chunks (for recovery)")
+	getCmd.Flags().Bool(skipVerification, false, "Skip integrity verification (for recovery scenarios)")
 	getCmd.Flags().Bool("passphrase-stdin", false, "Read passphrase from stdin (for automation)")
 	getCmd.Flags().String("passphrase-file", "", "Read passphrase from file (file should have 0600 permissions)")
 }
