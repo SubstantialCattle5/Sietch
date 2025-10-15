@@ -24,7 +24,7 @@ func TestDeduplicationManager(t *testing.T) {
 	dedupConfig := config.DeduplicationConfig{
 		Enabled:      true,
 		Strategy:     "content",
-		MinChunkSize: "0", // 0MB minimum = 0 bytes minimum for testing
+		MinChunkSize: "0",    // 0MB minimum = 0 bytes minimum for testing
 		MaxChunkSize: "64MB", // 64MB maximum to accommodate large chunk tests
 		GCThreshold:  100,
 		IndexEnabled: true,
