@@ -132,6 +132,8 @@ func runScaffold(templateName, name, path string, force bool) error {
 		cfg.DedupMaxSize,
 		cfg.DedupGCThreshold,
 		cfg.DedupIndexEnabled,
+		// Default automatic GC settings
+		true, "1h", 1000, true, ".sietch/logs/gc.log", 5000, "",
 	)
 
 	// Initialize RSA config if not present
