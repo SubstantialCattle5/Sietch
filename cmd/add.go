@@ -254,7 +254,7 @@ Examples:
 			}
 
 			// Save the manifest
-			err = manifest.StoreFileManifest(vaultRoot, filepath.Base(pair.Source), fileManifest)
+			err = manifest.StoreFileManifest(vaultRoot, destFileName, fileManifest)
 			if err != nil {
 				if err.Error() == "skipped" {
 					errorMsg := fmt.Sprintf("✗ '%s': skipped", fileManifest.Destination+fileManifest.FilePath)

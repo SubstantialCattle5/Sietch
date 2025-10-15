@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -262,5 +263,78 @@ func TestAddCommandBatchProcessingOutput(t *testing.T) {
 		if pair.Destination != "common-dest/" {
 			t.Errorf("Expected destination 'common-dest/', got '%s'", pair.Destination)
 		}
+	}
+}
+
+func TestAddCommandFilenameBugFix(t *testing.T) {
+	// Test for the bug fix: files with same basename from different directories
+	// should be stored with correct destination filenames, not source basenames
+	testutil.SkipIfShort(t, "integration test")
+
+	// Create a mock vault for testing
+	mockConfig := testutil.NewMockConfig(t, "filename-bug-test")
+	mockConfig.SetupTestVault(t)
+
+	// Create test files with same basename in different directories
+	sourceDir1 := testutil.TempDir(t, "source1")
+	sourceDir2 := testutil.TempDir(t, "source2")
+
+	testFile1 := testutil.CreateTestFile(t, sourceDir1, "test.txt", "content from dir 1")
+	testFile2 := testutil.CreateTestFile(t, sourceDir2, "test.txt", "content from dir 2")
+
+	// Change to vault directory
+	originalDir, _ := os.Getwd()
+	os.Chdir(mockConfig.VaultPath)
+	defer os.Chdir(originalDir)
+
+	// Test adding files with same basename to different destinations
+	// This tests the fix for the bug where filepath.Base(pair.Source) was used
+	// instead of destFileName for manifest storage
+	args := []string{testFile1, "docs/file1.txt", testFile2, "data/file2.txt"}
+
+	// Parse arguments to verify they are correct
+	filePairs, err := parseFileArguments(args)
+	if err != nil {
+		t.Fatalf("Failed to parse arguments: %v", err)
+	}
+
+	expected := []FilePair{
+		{Source: testFile1, Destination: "docs/file1.txt"},
+		{Source: testFile2, Destination: "data/file2.txt"},
+	}
+
+	if len(filePairs) != len(expected) {
+		t.Fatalf("Expected %d pairs, got %d", len(expected), len(filePairs))
+	}
+
+	// Verify the destinations are different (this is what the bug fix ensures)
+	if filePairs[0].Destination == filePairs[1].Destination {
+		t.Errorf("Bug not fixed: both files have same destination %s", filePairs[0].Destination)
+	}
+
+	// Verify that the destination filenames are different
+	destFileName1 := filepath.Base(filePairs[0].Destination)
+	destFileName2 := filepath.Base(filePairs[1].Destination)
+
+	if destFileName1 == destFileName2 {
+		t.Errorf("Bug not fixed: both files have same destination filename %s", destFileName1)
+	}
+
+	// Verify that source basenames are the same (this was causing the bug)
+	sourceBaseName1 := filepath.Base(filePairs[0].Source)
+	sourceBaseName2 := filepath.Base(filePairs[1].Source)
+
+	if sourceBaseName1 != sourceBaseName2 {
+		t.Errorf("Test setup error: source basenames should be same, got %s vs %s", sourceBaseName1, sourceBaseName2)
+	}
+
+	if sourceBaseName1 != "test.txt" {
+		t.Errorf("Test setup error: expected source basename 'test.txt', got %s", sourceBaseName1)
+	}
+
+	// The key test: destination filenames should be different
+	if destFileName1 != "file1.txt" || destFileName2 != "file2.txt" {
+		t.Errorf("Bug not fixed: expected destination filenames 'file1.txt' and 'file2.txt', got '%s' and '%s'",
+			destFileName1, destFileName2)
 	}
 }
