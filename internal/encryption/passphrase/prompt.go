@@ -17,16 +17,6 @@ func PromptForPassphrase(confirm bool) (string, error) {
 		promptLabel = "Create new passphrase"
 	}
 
-	// Show initial instructions with enhanced feedback
-	fmt.Println()
-	fmt.Println("💡 Passphrase requirements:")
-	fmt.Println("   • At least 12 characters")
-	fmt.Println("   • Uppercase letter (A-Z)")
-	fmt.Println("   • Lowercase letter (a-z)")
-	fmt.Println("   • Digit (0-9)")
-	fmt.Println("   • Special character (!@#$%^&*()_+-=[]{}|;:,.<>?)")
-	fmt.Println()
-
 	// Enhanced validation function with real-time feedback
 	validate := func(input string) error {
 		if input == "" {
@@ -60,6 +50,15 @@ func PromptForPassphrase(confirm bool) (string, error) {
 	passphrase, err := passphrasePrompt.Run()
 	if err != nil {
 		return "", fmt.Errorf("passphrase prompt failed: %w", err)
+	}
+
+	// Clear the feedback lines AND the duplicate prompt line
+	linesToClear := feedbackLineCount
+	if feedbackLineCount > 0 {
+		linesToClear++ // Also clear the duplicate prompt line printed by promptui
+	}
+	for i := 0; i < linesToClear; i++ {
+		fmt.Print("\033[F\033[K") // Move up and clear each line
 	}
 
 	// Show success message

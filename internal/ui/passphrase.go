@@ -225,7 +225,15 @@ func GetPassphraseForInitialization(cmd *cobra.Command, requireConfirmation bool
 		return getEnhancedPassphrase(requireConfirmation)
 	} else {
 		// Use simple terminal input for non-interactive mode
-		fmt.Print("Enter encryption passphrase (min 12 characters): ")
+		// Show all requirements upfront
+		fmt.Println("\nPassphrase Requirements:")
+		fmt.Println("  • At least 12 characters")
+		fmt.Println("  • Uppercase letter")
+		fmt.Println("  • Lowercase letter")
+		fmt.Println("  • Digit")
+		fmt.Println("  • Special character (!@#$%^&*()_+-=[]{}|;:,.<>?)")
+		fmt.Println()
+		fmt.Print("Enter encryption passphrase: ")
 		bytePassphrase, err := term.ReadPassword(int(syscall.Stdin))
 		if err != nil {
 			return "", fmt.Errorf("error reading passphrase: %w", err)
@@ -236,8 +244,13 @@ func GetPassphraseForInitialization(cmd *cobra.Command, requireConfirmation bool
 
 		// Validate passphrase using hybrid validation (strict rules + zxcvbn intelligence)
 		result := passphrasevalidation.ValidateHybrid(enteredPassphrase)
-		if !result.Valid || len(result.Warnings) > 0 {
-			return "", fmt.Errorf("%s", passphrasevalidation.GetHybridErrorMessage(result))
+		if !result.Valid {
+			return "", fmt.Errorf("passphrase does not meet the requirements listed above")
+		}
+
+		// Show warnings but don't fail
+		if len(result.Warnings) > 0 {
+			fmt.Printf("\033[33m⚠️  Warning: %s\033[0m\n", result.Warnings[0])
 		}
 
 		// Add confirmation if required
