@@ -38,15 +38,19 @@ const (
 
 // SyncService handles vault synchronization
 type SyncService struct {
-	host          host.Host
-	vaultMgr      *config.Manager
-	privateKey    *rsa.PrivateKey
-	publicKey     *rsa.PublicKey
-	rsaConfig     *config.RSAConfig
-	trustedPeers  map[peer.ID]*PeerInfo
-	vaultConfig   *config.VaultConfig
-	trustAllPeers bool // New flag to automatically trust all peers
-	Verbose       bool // Enable verbose debug output
+	host                   host.Host
+	vaultMgr               *config.Manager
+	privateKey             *rsa.PrivateKey
+	publicKey              *rsa.PublicKey
+	rsaConfig              *config.RSAConfig
+	trustedPeers           map[peer.ID]*PeerInfo
+	vaultConfig            *config.VaultConfig
+	trustAllPeers          bool                  // Legacy flag - use autoTrustAllPeers instead
+	autoTrustAllPeers      bool                  // New flag to automatically trust all peers
+	pendingOutgoingPeers   map[peer.ID]time.Time // Peers we want to pair with
+	pendingIncomingAllowed map[peer.ID]time.Time // Peers allowed to pair with us
+	pairingWindow          time.Duration         // TTL for pending pairs
+	Verbose                bool                  // Enable verbose debug output
 }
 
 // PeerInfo contains information about a trusted peer
@@ -99,15 +103,25 @@ func NewSecureSyncService(
 		return nil, fmt.Errorf("failed to load vault configuration: %w", err)
 	}
 
+	// Determine auto-trust behavior from config
+	autoTrustAllPeers := true // Default to true for backward compatibility
+	if rsaConfig != nil && rsaConfig.AutoTrustAllPeers != nil {
+		autoTrustAllPeers = *rsaConfig.AutoTrustAllPeers
+	}
+
 	s := &SyncService{
-		host:          h,
-		vaultMgr:      vm,
-		privateKey:    privateKey,
-		publicKey:     publicKey,
-		rsaConfig:     rsaConfig,
-		trustedPeers:  make(map[peer.ID]*PeerInfo),
-		vaultConfig:   vaultConfig,
-		trustAllPeers: true, // Trust all peers by default
+		host:                   h,
+		vaultMgr:               vm,
+		privateKey:             privateKey,
+		publicKey:              publicKey,
+		rsaConfig:              rsaConfig,
+		trustedPeers:           make(map[peer.ID]*PeerInfo),
+		vaultConfig:            vaultConfig,
+		trustAllPeers:          autoTrustAllPeers, // Legacy flag - kept for backward compatibility
+		autoTrustAllPeers:      autoTrustAllPeers, // Use config value
+		pendingOutgoingPeers:   make(map[peer.ID]time.Time),
+		pendingIncomingAllowed: make(map[peer.ID]time.Time),
+		pairingWindow:          5 * time.Minute, // Default 5 minute pairing window
 	}
 
 	// Load trusted peers from config
@@ -183,6 +197,16 @@ func (s *SyncService) handleKeyExchange(stream network.Stream) {
 
 	if s.publicKey == nil {
 		fmt.Println("Cannot perform key exchange: no public key available")
+		return
+	}
+
+	// Check if incoming pairing is allowed for this peer
+	peerID := stream.Conn().RemotePeer()
+	if !s.IsPairingAllowed(peerID) {
+		fmt.Printf("Rejecting key exchange from peer %s: pairing not allowed\n", peerID.String())
+		// Send error response
+		errorResponse := "Pairing not allowed. Peer must be explicitly allowed to pair."
+		_, _ = stream.Write([]byte(errorResponse))
 		return
 	}
 
@@ -278,13 +302,16 @@ func (s *SyncService) handleKeyExchange(stream network.Stream) {
 	}
 
 	// Store peer info automatically
-	peerID := stream.Conn().RemotePeer()
 	s.trustedPeers[peerID] = &PeerInfo{
 		ID:           peerID,
 		PublicKey:    peerPubKey,
 		Fingerprint:  fingerprint,
 		TrustedSince: time.Now(),
 	}
+
+	// Clear from pending maps since pairing is now complete
+	delete(s.pendingIncomingAllowed, peerID)
+	delete(s.pendingOutgoingPeers, peerID)
 
 	fmt.Printf("Key exchange completed with peer %s (fingerprint: %s)\n", peerID.String(), fingerprint)
 }
@@ -543,9 +570,14 @@ func (s *SyncService) decryptLargeData(data []byte) []byte {
 
 // VerifyAndExchangeKeys performs key exchange with a peer
 func (s *SyncService) VerifyAndExchangeKeys(ctx context.Context, peerID peer.ID) (bool, error) {
+	// Check if outgoing pairing is requested for this peer
+	if !s.IsOutgoingPairRequested(peerID) {
+		return false, fmt.Errorf("pairing not requested for peer %s. Use 'sietch pair' to establish trust", peerID.String())
+	}
+
 	// Don't return early with trustAllPeers, just mark for later
 	needsKeyExchange := true
-	autoTrust := s.trustAllPeers
+	autoTrust := s.autoTrustAllPeers
 
 	// Check if already trusted
 	if _, ok := s.trustedPeers[peerID]; ok {
@@ -1192,4 +1224,157 @@ func (s *SyncService) HasPeer(id peer.ID) bool {
 	}
 	_, ok := s.trustedPeers[id]
 	return ok
+}
+
+// Pairing Management Methods
+
+// AllowIncomingPair grants permission for a peer to pair with us
+func (s *SyncService) AllowIncomingPair(peerID peer.ID, until time.Time) {
+	if s == nil {
+		return
+	}
+	s.pendingIncomingAllowed[peerID] = until
+	if s.Verbose {
+		fmt.Printf("Allowed incoming pairing from peer %s until %v\n", peerID.String(), until)
+	}
+}
+
+// RequestPair requests to pair with a specific peer
+func (s *SyncService) RequestPair(peerID peer.ID, until time.Time) {
+	if s == nil {
+		return
+	}
+	s.pendingOutgoingPeers[peerID] = until
+	if s.Verbose {
+		fmt.Printf("Requested pairing with peer %s until %v\n", peerID.String(), until)
+	}
+}
+
+// ClearExpiredPairs removes expired entries from pending maps
+func (s *SyncService) ClearExpiredPairs() {
+	if s == nil {
+		return
+	}
+	now := time.Now()
+
+	// Clear expired outgoing pairs
+	for peerID, until := range s.pendingOutgoingPeers {
+		if now.After(until) {
+			delete(s.pendingOutgoingPeers, peerID)
+			if s.Verbose {
+				fmt.Printf("Cleared expired outgoing pair request for peer %s\n", peerID.String())
+			}
+		}
+	}
+
+	// Clear expired incoming pairs
+	for peerID, until := range s.pendingIncomingAllowed {
+		if now.After(until) {
+			delete(s.pendingIncomingAllowed, peerID)
+			if s.Verbose {
+				fmt.Printf("Cleared expired incoming pair permission for peer %s\n", peerID.String())
+			}
+		}
+	}
+}
+
+// IsPairingAllowed checks if a peer is allowed to pair with us
+func (s *SyncService) IsPairingAllowed(peerID peer.ID) bool {
+	if s == nil {
+		return false
+	}
+
+	// If auto-trust is enabled, allow all
+	if s.autoTrustAllPeers {
+		return true
+	}
+
+	// Check if peer is already trusted
+	if _, ok := s.trustedPeers[peerID]; ok {
+		return true
+	}
+
+	// Check if peer is in incoming allowed list and not expired
+	if until, ok := s.pendingIncomingAllowed[peerID]; ok {
+		if time.Now().Before(until) {
+			return true
+		}
+		// Clean up expired entry
+		delete(s.pendingIncomingAllowed, peerID)
+	}
+
+	return false
+}
+
+// IsOutgoingPairRequested checks if we have requested to pair with a peer
+func (s *SyncService) IsOutgoingPairRequested(peerID peer.ID) bool {
+	if s == nil {
+		return false
+	}
+
+	// If auto-trust is enabled, allow all
+	if s.autoTrustAllPeers {
+		return true
+	}
+
+	// Check if peer is already trusted
+	if _, ok := s.trustedPeers[peerID]; ok {
+		return true
+	}
+
+	// Check if peer is in outgoing request list and not expired
+	if until, ok := s.pendingOutgoingPeers[peerID]; ok {
+		if time.Now().Before(until) {
+			return true
+		}
+		// Clean up expired entry
+		delete(s.pendingOutgoingPeers, peerID)
+	}
+
+	return false
+}
+
+// SetAutoTrustAllPeers sets the auto-trust behavior
+func (s *SyncService) SetAutoTrustAllPeers(enabled bool) {
+	if s == nil {
+		return
+	}
+	s.autoTrustAllPeers = enabled
+	s.trustAllPeers = enabled // Keep legacy flag in sync
+	if s.Verbose {
+		fmt.Printf("Auto-trust all peers: %v\n", enabled)
+	}
+}
+
+// SetPairingWindow sets the pairing window duration
+func (s *SyncService) SetPairingWindow(duration time.Duration) {
+	if s == nil {
+		return
+	}
+	s.pairingWindow = duration
+	if s.Verbose {
+		fmt.Printf("Pairing window set to: %v\n", duration)
+	}
+}
+
+// TrustedPeers returns a copy of the trusted peers map
+func (s *SyncService) TrustedPeers() map[peer.ID]*PeerInfo {
+	if s == nil {
+		return make(map[peer.ID]*PeerInfo)
+	}
+
+	// Return a copy to prevent external modification
+	result := make(map[peer.ID]*PeerInfo)
+	for k, v := range s.trustedPeers {
+		result[k] = v
+	}
+	return result
+}
+
+// IsAutoTrustEnabled returns whether auto-trust is enabled
+func (s *SyncService) IsAutoTrustEnabled() bool {
+	if s == nil {
+		return false
+	}
+	return s.autoTrustAllPeers
 }

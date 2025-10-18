@@ -254,6 +254,13 @@ Thanks to all our amazing contributors!
                 </a>
             </td>
             <td align="center">
+                <a href="https://github.com/Janmesh23">
+                    <img src="https://avatars.githubusercontent.com/u/183159485?v=4" width="100;" alt="Janmesh23"/>
+                    <br />
+                    <sub><b>Janmesh </b></sub>
+                </a>
+            </td>
+            <td align="center">
                 <a href="https://github.com/ABHINAVGARG05">
                     <img src="https://avatars.githubusercontent.com/u/143117260?v=4" width="100;" alt="ABHINAVGARG05"/>
                     <br />
@@ -267,6 +274,8 @@ Thanks to all our amazing contributors!
                     <sub><b>Akash Goswami</b></sub>
                 </a>
             </td>
+		</tr>
+		<tr>
             <td align="center">
                 <a href="https://github.com/anuja12mishra">
                     <img src="https://avatars.githubusercontent.com/u/109236275?v=4" width="100;" alt="anuja12mishra"/>
@@ -274,20 +283,11 @@ Thanks to all our amazing contributors!
                     <sub><b>Anuja Mishra</b></sub>
                 </a>
             </td>
-		</tr>
-		<tr>
             <td align="center">
                 <a href="https://github.com/Deepam02">
                     <img src="https://avatars.githubusercontent.com/u/116721751?v=4" width="100;" alt="Deepam02"/>
                     <br />
                     <sub><b>Deepam Goyal</b></sub>
-                </a>
-            </td>
-            <td align="center">
-                <a href="https://github.com/Janmesh23">
-                    <img src="https://avatars.githubusercontent.com/u/183159485?v=4" width="100;" alt="Janmesh23"/>
-                    <br />
-                    <sub><b>Janmesh </b></sub>
                 </a>
             </td>
             <td align="center">
