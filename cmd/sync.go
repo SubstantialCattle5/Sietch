@@ -37,9 +37,15 @@ var syncCmd = &cobra.Command{
 This command syncs your vault with another vault, either by auto-discovering
 peers on the local network or by connecting to a specified peer address.
 
+For selective key exchange (recommended for larger networks), use 'sietch pair'
+to establish trust relationships before syncing. This provides fine-grained
+control over which peers you exchange keys with.
+
 Examples:
   sietch sync                               # Auto-discover and sync with peers
-  sietch sync /ip4/192.168.1.5/tcp/4001/p2p/QmPeerID  # Sync with a specific peer`,
+  sietch sync /ip4/192.168.1.5/tcp/4001/p2p/QmPeerID  # Sync with a specific peer
+  sietch pair --select                      # Establish selective trust relationships
+  sietch discover --select                  # Discover and select peers for pairing`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Create a context with cancellation
 		ctx, cancel := context.WithCancel(context.Background())
@@ -155,7 +161,26 @@ Examples:
 			}
 
 			if !trusted {
-				// If not automatically trusted, prompt user
+				// Check if auto-trust is disabled
+				if !syncService.IsAutoTrustEnabled() {
+					fmt.Printf("\n⚠️  Peer not trusted and auto-trust is disabled!\n")
+					fmt.Printf("Peer ID: %s\n", info.ID.String())
+
+					fingerprint, err := syncService.GetPeerFingerprint(info.ID)
+					if err == nil {
+						fmt.Printf("Fingerprint: %s\n", fingerprint)
+					}
+
+					fmt.Println("\nTo establish trust with this peer, use one of these methods:")
+					fmt.Println("1. Run 'sietch pair --select' to interactively select peers for pairing")
+					fmt.Println("2. Run 'sietch pair --allow-from <peerID>' to allow this specific peer")
+					fmt.Println("3. Run 'sietch discover --select' to discover and select peers")
+					fmt.Println("4. Enable auto-trust in vault configuration (not recommended for large networks)")
+
+					return fmt.Errorf("sync canceled - peer not trusted. Use 'sietch pair' to establish trust")
+				}
+
+				// If auto-trust is enabled, prompt user (legacy behavior)
 				fmt.Printf("\n⚠️  New peer detected!\n")
 				fmt.Printf("Peer ID: %s\n", info.ID.String())
 
@@ -243,7 +268,26 @@ Examples:
 			}
 
 			if !trusted {
-				// If not automatically trusted, prompt user
+				// Check if auto-trust is disabled
+				if !syncService.IsAutoTrustEnabled() {
+					fmt.Printf("\n⚠️  Peer not trusted and auto-trust is disabled!\n")
+					fmt.Printf("Peer ID: %s\n", peerInfo.ID.String())
+
+					fingerprint, err := syncService.GetPeerFingerprint(peerInfo.ID)
+					if err == nil {
+						fmt.Printf("Fingerprint: %s\n", fingerprint)
+					}
+
+					fmt.Println("\nTo establish trust with this peer, use one of these methods:")
+					fmt.Println("1. Run 'sietch pair --select' to interactively select peers for pairing")
+					fmt.Println("2. Run 'sietch pair --allow-from <peerID>' to allow this specific peer")
+					fmt.Println("3. Run 'sietch discover --select' to discover and select peers")
+					fmt.Println("4. Enable auto-trust in vault configuration (not recommended for large networks)")
+
+					return fmt.Errorf("sync canceled - peer not trusted. Use 'sietch pair' to establish trust")
+				}
+
+				// If auto-trust is enabled, prompt user (legacy behavior)
 				fmt.Printf("\n⚠️  New peer detected!\n")
 				fmt.Printf("Peer ID: %s\n", peerInfo.ID.String())
 

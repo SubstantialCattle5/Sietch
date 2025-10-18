@@ -106,11 +106,12 @@ type SyncConfig struct {
 
 // RSAConfig contains RSA key configuration for sync operations
 type RSAConfig struct {
-	KeySize        int           `yaml:"key_size"`
-	PublicKeyPath  string        `yaml:"public_key_path,omitempty"`
-	PrivateKeyPath string        `yaml:"private_key_path,omitempty"`
-	Fingerprint    string        `yaml:"fingerprint,omitempty"`
-	TrustedPeers   []TrustedPeer `yaml:"trusted_peers,omitempty"`
+	KeySize           int           `yaml:"key_size"`
+	PublicKeyPath     string        `yaml:"public_key_path,omitempty"`
+	PrivateKeyPath    string        `yaml:"private_key_path,omitempty"`
+	Fingerprint       string        `yaml:"fingerprint,omitempty"`
+	TrustedPeers      []TrustedPeer `yaml:"trusted_peers,omitempty"`
+	AutoTrustAllPeers *bool         `yaml:"auto_trust_all_peers,omitempty"` // nil means use default behavior
 }
 
 // TrustedPeer stores information about a trusted peer
@@ -243,11 +244,13 @@ func BuildVaultConfigWithDeduplication(
 	config.Sync.KnownPeers = []string{} // Initialize as empty array
 
 	// Initialize RSA config for sync with defaults
+	autoTrustDefault := true // Default to true for backward compatibility
 	config.Sync.RSA = &RSAConfig{
-		KeySize:        4096,
-		PublicKeyPath:  filepath.Join(".sietch", "sync", "sync_public.pem"),
-		PrivateKeyPath: filepath.Join(".sietch", "sync", "sync_private.pem"),
-		TrustedPeers:   []TrustedPeer{},
+		KeySize:           4096,
+		PublicKeyPath:     filepath.Join(".sietch", "sync", "sync_public.pem"),
+		PrivateKeyPath:    filepath.Join(".sietch", "sync", "sync_private.pem"),
+		TrustedPeers:      []TrustedPeer{},
+		AutoTrustAllPeers: &autoTrustDefault,
 	}
 
 	// Set advanced sync settings
@@ -307,11 +310,13 @@ func BuildDefaultVaultConfig(vaultID, vaultName, keyPath string) VaultConfig {
 
 	// Ensure default RSA configuration is set
 	if config.Sync.RSA == nil {
+		autoTrustDefault := true // Default to true for backward compatibility
 		config.Sync.RSA = &RSAConfig{
-			KeySize:        4096,
-			PublicKeyPath:  filepath.Join(".sietch", "sync", "sync_public.pem"),
-			PrivateKeyPath: filepath.Join(".sietch", "sync", "sync_private.pem"),
-			TrustedPeers:   []TrustedPeer{},
+			KeySize:           4096,
+			PublicKeyPath:     filepath.Join(".sietch", "sync", "sync_public.pem"),
+			PrivateKeyPath:    filepath.Join(".sietch", "sync", "sync_private.pem"),
+			TrustedPeers:      []TrustedPeer{},
+			AutoTrustAllPeers: &autoTrustDefault,
 		}
 	}
 
