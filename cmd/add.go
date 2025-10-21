@@ -6,6 +6,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,14 +14,17 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/substantialcattle5/sietch/internal/atomic"
 	"github.com/substantialcattle5/sietch/internal/chunk"
 	"github.com/substantialcattle5/sietch/internal/config"
 	"github.com/substantialcattle5/sietch/internal/constants"
 	"github.com/substantialcattle5/sietch/internal/fs"
-	"github.com/substantialcattle5/sietch/internal/manifest"
+
+	// manifest raw storage removed in favor of transactional helper
 	"github.com/substantialcattle5/sietch/internal/progress"
 	"github.com/substantialcattle5/sietch/internal/ui"
 	"github.com/substantialcattle5/sietch/util"
+	"gopkg.in/yaml.v3"
 )
 
 // SpaceSavings represents space savings statistics for a file
@@ -140,6 +144,20 @@ Examples:
 			fmt.Printf("Starting batch processing of %d files...\n\n", len(filePairs))
 		}
 
+		// Begin transaction encompassing entire add set for atomicity
+		// vaultRoot already resolved earlier; reuse variable
+		txn, err := atomic.Begin(vaultRoot, map[string]any{"command": "add", "fileCount": len(filePairs)})
+		if err != nil {
+			return fmt.Errorf("begin transaction: %w", err)
+		}
+		committed := false
+		defer func() {
+			if !committed {
+				_ = txn.Rollback()
+				fmt.Println("txn rollback; add operation did not complete")
+			}
+		}()
+
 		for i, pair := range filePairs {
 			// Enhanced progress display for multiple files
 			if len(filePairs) > 1 {
@@ -220,7 +238,8 @@ Examples:
 
 			// Process the file and store chunks - using the appropriate chunking function
 			var chunkRefs []config.ChunkRef
-			chunkRefs, err = chunk.ChunkFile(ctx, actualSourcePath, chunkSize, vaultRoot, passphrase, progressMgr)
+			// Use transactional chunking to stage new chunks
+			chunkRefs, err = chunk.ChunkFileTransactional(ctx, actualSourcePath, chunkSize, vaultRoot, passphrase, progressMgr, txn)
 
 			if err != nil {
 				errorMsg := fmt.Sprintf("✗ %s: chunking failed - %v", filepath.Base(pair.Source), err)
@@ -254,8 +273,8 @@ Examples:
 			}
 
 			// Save the manifest
-			err = manifest.StoreFileManifest(vaultRoot, filepath.Base(pair.Source), fileManifest)
-			if err != nil {
+			// Store manifest via transaction (stage create)
+			if err := storeManifestTransactional(txn, vaultRoot, filepath.Base(pair.Source), fileManifest); err != nil {
 				if err.Error() == "skipped" {
 					errorMsg := fmt.Sprintf("✗ '%s': skipped", fileManifest.Destination+fileManifest.FilePath)
 					fmt.Println(errorMsg)
@@ -351,11 +370,15 @@ Examples:
 			}
 		}
 
-		// Return error only if all files failed
+		// Commit transaction if we had any successes
 		if successCount == 0 {
 			return fmt.Errorf("all files failed to process")
 		}
-
+		if err := txn.Commit(); err != nil {
+			return fmt.Errorf("commit transaction: %w", err)
+		}
+		committed = true
+		fmt.Println("txn successful; add committed")
 		return nil
 	},
 }
@@ -516,6 +539,49 @@ func init() {
 	addCmd.Flags().BoolP("include-hidden", "H", false, "Include hidden files and directories")
 	addCmd.Flags().Bool("passphrase-stdin", false, "Read passphrase from stdin (for automation)")
 	addCmd.Flags().String("passphrase-file", "", "Read passphrase from file (file should have 0600 permissions)")
+}
+
+// storeManifestTransactional writes a manifest yaml via the transaction staging new file.
+func storeManifestTransactional(txn *atomic.Transaction, vaultRoot string, fileName string, m *config.FileManifest) error {
+	// Mirror logic from manifest.StoreFileManifest but stage instead of direct write.
+	manifestsDir := filepath.Join(vaultRoot, ".sietch", "manifests")
+	if err := os.MkdirAll(manifestsDir, 0o755); err != nil {
+		return fmt.Errorf("failed to create manifests directory: %v", err)
+	}
+	destination := strings.ReplaceAll(m.Destination, "/", ".")
+	uniqueFileIdentifier := destination + fileName + ".yaml"
+	relPath := filepath.ToSlash(filepath.Join(".sietch", "manifests", uniqueFileIdentifier))
+	// Prompt overwrite if exists in final location
+	finalPath := filepath.Join(manifestsDir, uniqueFileIdentifier)
+	if _, err := os.Stat(finalPath); err == nil {
+		message := fmt.Sprintf("'%s' exists. Overwrite? ", m.Destination+fileName)
+		response, err2 := util.ConfirmOverwrite(message, os.Stdin, os.Stdout)
+		if err2 != nil || !response {
+			return fmt.Errorf("skipped")
+		}
+		// Stage replace instead of create
+		w, err2 := txn.StageReplace(relPath)
+		if err2 != nil {
+			return err2
+		}
+		defer w.Close()
+		return writeManifestYAML(w, m)
+	}
+	w, err := txn.StageCreate(relPath)
+	if err != nil {
+		return err
+	}
+	defer w.Close()
+	return writeManifestYAML(w, m)
+}
+
+func writeManifestYAML(w io.Writer, m *config.FileManifest) error {
+	enc := yaml.NewEncoder(w)
+	enc.SetIndent(2)
+	if err := enc.Encode(m); err != nil {
+		return fmt.Errorf("encode manifest: %w", err)
+	}
+	return nil
 }
 
 //TODO: Need to check how symlinks will be handled
