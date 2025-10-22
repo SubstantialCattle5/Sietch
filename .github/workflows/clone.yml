@@ -10,9 +10,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
           token: ${{ secrets.GH_PAT }}
+          fetch-depth: 0
       
       - name: gh login
         run: echo "${{ secrets.GH_PAT }}" | gh auth login --with-token
@@ -72,6 +73,8 @@ jobs:
         run: |
           GIST_ID="${{ steps.set_id.outputs.GIST }}"
           
+          echo "GIST_ID: $GIST_ID"
+          
           # Only update if we have a valid GIST_ID
           if [ -n "$GIST_ID" ]; then
             shields="https://img.shields.io/badge/dynamic/json?color=success&label=Clone&query=count&url="
@@ -79,21 +82,33 @@ jobs:
             repo="https://github.com/${{ github.repository }}"
             badge="[![GitHub Clones](${shields}${url}&logo=github)](${repo})"
             
+            echo "Generated badge: $badge"
+            
             # Check if badge already exists in README
             if ! grep -q "GitHub Clones" README.md; then
+              echo "Badge not found in README, adding it..."
               # Replace the comment placeholder with the actual badge
               sed -i 's|<!-- Clone badge will be auto-generated in CLONE.md after first workflow run -->|'"$badge"'|g' README.md
+              
+              echo "README after replacement:"
+              head -n 10 README.md
               
               git config --global user.name "GitHub Action"
               git config --global user.email "action@github.com"
               git add README.md
-              git commit -m "Add clone count badge to README" || echo "No changes to commit"
+              
+              if git diff --staged --quiet; then
+                echo "No changes to commit"
+              else
+                echo "Committing changes..."
+                git commit -m "Add clone count badge to README"
+                git push origin main
+                echo "Changes pushed successfully"
+              fi
+            else
+              echo "Badge already exists in README, skipping update"
             fi
           else
             echo "No GIST_ID found, skipping README update"
           fi
-
-      - name: Push changes
-        run: |
-          git push origin main || echo "No changes to push"
 
