@@ -226,6 +226,15 @@ Examples:
 			sizeInBytes := fileInfo.Size()
 			sizeReadable := util.HumanReadableSize(sizeInBytes)
 
+			// Compute content hash for the entire file
+			contentHash, err := computeContentHash(actualSourcePath, vaultConfig.Chunking.HashAlgorithm)
+			if err != nil {
+				errorMsg := fmt.Sprintf("✗ %s: %v", filepath.Base(pair.Source), err)
+				fmt.Println(errorMsg)
+				failedFiles = append(failedFiles, errorMsg)
+				continue
+			}
+
 			// Display file metadata for confirmation (only for single files or when verbose)
 			verbose, _ := cmd.Flags().GetBool("verbose")
 			if len(filePairs) == 1 || verbose {
@@ -268,6 +277,7 @@ Examples:
 				ModTime:     fileInfo.ModTime().Format(time.RFC3339),
 				Chunks:      chunkRefs,
 				Destination: destDir,
+				ContentHash: contentHash,
 				AddedAt:     time.Now().UTC(),
 				Tags:        tags, // Include tags in the manifest
 			}
@@ -527,6 +537,27 @@ func expandDirectories(pairs []FilePair, recursive bool, includeHidden bool) ([]
 	}
 
 	return expandedPairs, nil
+}
+
+// computeContentHash computes the hash of the entire file content
+func computeContentHash(filePath, hashAlgorithm string) (string, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return "", fmt.Errorf("failed to open file for hashing: %v", err)
+	}
+	defer file.Close()
+
+	hasher, err := chunk.CreateHasher(hashAlgorithm)
+	if err != nil {
+		return "", fmt.Errorf("failed to create hasher: %v", err)
+	}
+
+	_, err = io.Copy(hasher, file)
+	if err != nil {
+		return "", fmt.Errorf("failed to hash file content: %v", err)
+	}
+
+	return fmt.Sprintf("%x", hasher.Sum(nil)), nil
 }
 
 func init() {
