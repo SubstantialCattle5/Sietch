@@ -89,8 +89,10 @@ jobs:
             # Check if badge already exists in README
             if ! grep -q "GitHub Clones" README.md; then
               echo "Badge not found in README, adding it..."
+              # Escape special characters for sed (especially & which means "matched pattern")
+              escaped_badge=$(echo "$badge" | sed 's/[&/\]/\\&/g')
               # Replace the comment placeholder with the actual badge
-              sed -i 's|<!-- Clone badge will be auto-generated in CLONE.md after first workflow run -->|'"$badge"'|g' README.md
+              sed -i 's|<!-- Clone badge will be auto-generated in CLONE.md after first workflow run -->|'"$escaped_badge"'|g' README.md
               
               echo "README after replacement:"
               head -n 10 README.md
