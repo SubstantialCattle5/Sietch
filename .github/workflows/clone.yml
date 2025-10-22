@@ -70,20 +70,27 @@ jobs:
 
       - name: Update README with clone badge
         run: |
-          shields="https://img.shields.io/badge/dynamic/json?color=success&label=Clone&query=count&url="
-          url="https://gist.githubusercontent.com/${{ github.actor }}/${{ steps.set_id.outputs.GIST }}/raw/clone.json"
-          repo="https://github.com/${{ github.repository }}"
-          badge="[![GitHub Clones]($shields$url&logo=github)]($repo)"
+          GIST_ID="${{ steps.set_id.outputs.GIST }}"
           
-          # Check if badge already exists in README
-          if ! grep -q "GitHub Clones" README.md; then
-            # Replace the comment placeholder with the actual badge
-            sed -i 's|<!-- Clone badge will be auto-generated in CLONE.md after first workflow run -->|'"$badge"'|g' README.md
+          # Only update if we have a valid GIST_ID
+          if [ -n "$GIST_ID" ]; then
+            shields="https://img.shields.io/badge/dynamic/json?color=success&label=Clone&query=count&url="
+            url="https://gist.githubusercontent.com/${{ github.actor }}/${GIST_ID}/raw/clone.json"
+            repo="https://github.com/${{ github.repository }}"
+            badge="[![GitHub Clones](${shields}${url}&logo=github)](${repo})"
             
-            git config --global user.name "GitHub Action"
-            git config --global user.email "action@github.com"
-            git add README.md
-            git commit -m "Add clone count badge to README" || echo "No changes to commit"
+            # Check if badge already exists in README
+            if ! grep -q "GitHub Clones" README.md; then
+              # Replace the comment placeholder with the actual badge
+              sed -i 's|<!-- Clone badge will be auto-generated in CLONE.md after first workflow run -->|'"$badge"'|g' README.md
+              
+              git config --global user.name "GitHub Action"
+              git config --global user.email "action@github.com"
+              git add README.md
+              git commit -m "Add clone count badge to README" || echo "No changes to commit"
+            fi
+          else
+            echo "No GIST_ID found, skipping README update"
           fi
 
       - name: Push changes
