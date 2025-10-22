@@ -11,6 +11,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v2
+        with:
+          token: ${{ secrets.GH_PAT }}
       
       - name: gh login
         run: echo "${{ secrets.GH_PAT }}" | gh auth login --with-token
@@ -84,8 +86,7 @@ jobs:
             git commit -m "Add clone count badge to README" || echo "No changes to commit"
           fi
 
-      - name: Push
-        uses: ad-m/github-push-action@master
-        with:
-          github_token: ${{ secrets.GH_PAT }}
+      - name: Push changes
+        run: |
+          git push origin main || echo "No changes to push"
 
