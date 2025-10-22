@@ -4,6 +4,7 @@
 [![Release](https://github.com/substantialcattle5/sietch/actions/workflows/release.yml/badge.svg)](https://github.com/substantialcattle5/sietch/actions/workflows/release.yml)
 [![codecov](https://codecov.io/gh/substantialcattle5/sietch/branch/main/graph/badge.svg)](https://codecov.io/gh/substantialcattle5/sietch)
 [![Go Report Card](https://goreportcard.com/badge/github.com/substantialcattle5/sietch)](https://goreportcard.com/report/github.com/substantialcattle5/sietch)
+<!-- Clone badge will be auto-generated in CLONE.md after first workflow run -->
 
 Sietch creates self-contained encrypted vaults that can sync over LAN, sneakernet (USB drives), or weak WiFi networks. It operates fully offline, using chunked data, encryption, and peer-to-peer protocols to ensure your files are always protected and available—even when the internet is not.
 
