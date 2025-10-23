@@ -171,7 +171,7 @@ type ChunkRef struct {
 	Index           int    `yaml:"index"`                      // Position in the file
 	Deduplicated    bool   `yaml:"deduplicated,omitempty"`     // Whether this chunk was deduplicated
 	Compressed      bool   `yaml:"compressed,omitempty"`       // Whether this chunk was compressed
-	CompressionType string `yaml:"compression_type,omitempty"` // Compression algorithm used (e.g., "gzip", "zstd", "none")
+	CompressionType string `yaml:"compression_type,omitempty"` // Compression algorithm used (e.g., "gzip", "zstd", "lz4", "none")
 	IV              string `yaml:"iv,omitempty"`               // Per-chunk IV if used
 	Integrity       string `yaml:"integrity,omitempty"`        // Integrity check value (e.g., HMAC)
 }

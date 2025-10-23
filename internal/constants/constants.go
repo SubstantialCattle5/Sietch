@@ -82,6 +82,7 @@ const (
 	//** Constants for compression
 	CompressionTypeGzip = "gzip"
 	CompressionTypeZstd = "zstd"
+	CompressionTypeLz4  = "lz4"
 	CompressionTypeNone = "none"
 
 	// Maximum decompression size to prevent decompression bombs

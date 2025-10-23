@@ -7,6 +7,7 @@ import (
 	"io"
 
 	"github.com/klauspost/compress/zstd"
+	"github.com/pierrec/lz4/v4"
 	"github.com/substantialcattle5/sietch/internal/constants"
 )
 
@@ -32,6 +33,16 @@ func CompressData(data []byte, algorithm string) ([]byte, error) {
 		}
 		defer encoder.Close()
 		return encoder.EncodeAll(data, nil), nil
+	case constants.CompressionTypeLz4:
+		var buf bytes.Buffer
+		writer := lz4.NewWriter(&buf)
+		if _, err := writer.Write(data); err != nil {
+			return nil, fmt.Errorf("failed to write lz4 data: %w", err)
+		}
+		if err := writer.Close(); err != nil {
+			return nil, fmt.Errorf("failed to close lz4 writer: %w", err)
+		}
+		return buf.Bytes(), nil
 	default:
 		return nil, fmt.Errorf("unsupported compression algorithm: %s", algorithm)
 	}
@@ -83,6 +94,19 @@ func DecompressData(data []byte, algorithm string) ([]byte, error) {
 		}
 
 		return decompressed, nil
+
+	case constants.CompressionTypeLz4:
+		reader := lz4.NewReader(bytes.NewReader(data))
+		if reader.Size() >= constants.MaxDecompressionSize {
+			return nil, fmt.Errorf("decompressed data exceeds maximum size limit (%d bytes) - potential decompression bomb", constants.MaxDecompressionSize)
+		}
+		var buf bytes.Buffer
+		_, err := io.Copy(&buf, reader)
+		if err != nil && err != io.EOF {
+			return nil, fmt.Errorf("failed to decompress lz4 data: %w", err)
+		}
+		return buf.Bytes(), nil
+
 	default:
 		return nil, fmt.Errorf("unsupported compression algorithm: %s", algorithm)
 	}

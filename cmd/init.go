@@ -173,7 +173,7 @@ func init() {
 	initCmd.Flags().StringVar(&hashAlgorithm, "hash", "sha256", "Hash algorithm (sha256, blake3)")
 
 	// Compression vars
-	initCmd.Flags().StringVar(&compressionType, "compression", "none", "Compression type (none, gzip, zstd)")
+	initCmd.Flags().StringVar(&compressionType, "compression", "none", "Compression type (none, gzip, zstd, lz4)")
 
 	// Sync vars
 	initCmd.Flags().StringVar(&syncMode, "sync-mode", "manual", "Synchronization mode (manual, auto)")
