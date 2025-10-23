@@ -92,6 +92,20 @@ type DeduplicationConfig struct {
 	GCThreshold  int    `yaml:"gc_threshold"`   // Unreferenced chunk count before GC suggestion
 	IndexEnabled bool   `yaml:"index_enabled"`  // Enable chunk index for faster lookups
 	// CrossFileDedup bool   `yaml:"cross_file_dedup"` // Enable deduplication across different files
+
+	// Automatic GC settings
+	AutoGC AutoGCConfig `yaml:"auto_gc,omitempty"` // Automatic garbage collection settings
+}
+
+// AutoGCConfig contains settings for automatic garbage collection
+type AutoGCConfig struct {
+	Enabled         bool   `yaml:"enabled"`           // Enable automatic GC
+	CheckInterval   string `yaml:"check_interval"`    // How often to check (e.g., "1h", "30m")
+	AutoGCThreshold int    `yaml:"auto_gc_threshold"` // Threshold for automatic GC (overrides vault default)
+	EnableLogging   bool   `yaml:"enable_logging"`    // Enable GC logging
+	LogFile         string `yaml:"log_file"`          // Log file path
+	AlertThreshold  int    `yaml:"alert_threshold"`   // Alert when unreferenced chunks exceed this
+	AlertWebhook    string `yaml:"alert_webhook"`     // Webhook URL for alerts
 }
 
 // SyncConfig contains synchronization settings
@@ -194,6 +208,8 @@ func BuildVaultConfig(
 		keyConfig,
 		// Default deduplication settings
 		true, "content", "1KB", "64MB", 1000, true,
+		// Default automatic GC settings
+		true, "1h", 1000, true, ".sietch/logs/gc.log", 5000, "",
 	)
 }
 
@@ -208,6 +224,8 @@ func BuildVaultConfigWithDeduplication(
 	// Deduplication parameters
 	enableDedup bool, dedupStrategy, dedupMinSize, dedupMaxSize string,
 	dedupGCThreshold int, dedupIndexEnabled bool,
+	autoGCEnabled bool, autoGCCheckInterval string, autoGCThreshold int,
+	autoGCLogging bool, autoGCLogFile string, autoGCAlertThreshold int, autoGCWebhook string,
 ) VaultConfig {
 	config := VaultConfig{
 		VaultID:       vaultID,
@@ -237,6 +255,15 @@ func BuildVaultConfigWithDeduplication(
 	config.Deduplication.MaxChunkSize = dedupMaxSize
 	config.Deduplication.GCThreshold = dedupGCThreshold
 	config.Deduplication.IndexEnabled = dedupIndexEnabled
+
+	// Set automatic GC configuration
+	config.Deduplication.AutoGC.Enabled = autoGCEnabled
+	config.Deduplication.AutoGC.CheckInterval = autoGCCheckInterval
+	config.Deduplication.AutoGC.AutoGCThreshold = autoGCThreshold
+	config.Deduplication.AutoGC.EnableLogging = autoGCLogging
+	config.Deduplication.AutoGC.LogFile = autoGCLogFile
+	config.Deduplication.AutoGC.AlertThreshold = autoGCAlertThreshold
+	config.Deduplication.AutoGC.AlertWebhook = autoGCWebhook
 
 	// Set sync configuration
 	config.Sync.Mode = syncMode
