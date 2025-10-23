@@ -99,7 +99,7 @@ func PromptCompressionConfig(configuration *config.VaultConfig) error {
 	// Compression prompt with descriptions
 	compressionPrompt := promptui.Select{
 		Label: "Compression algorithm",
-		Items: []string{"none", "gzip", "zstd"},
+		Items: []string{"none", "gzip", "zstd", "lz4"},
 		Templates: &promptui.SelectTemplates{
 			Selected: "Compression: {{ . }}",
 			Active:   "▸ {{ . }}",
@@ -108,7 +108,8 @@ func PromptCompressionConfig(configuration *config.VaultConfig) error {
 {{ "Details:" | faint }}
 {{ if eq . "none" }}No compression (faster but larger files)
 {{ else if eq . "gzip" }}Gzip compression (good balance of speed/compression)
-{{ else if eq . "zstd" }}Zstandard compression (better compression but slower){{ end }}
+{{ else if eq . "zstd" }}Zstandard compression (better compression but slower)
+{{ else if eq . "lz4" }}LZ4 compression (very fast but lower compression ratio){{ end }}
 `,
 		},
 	}
