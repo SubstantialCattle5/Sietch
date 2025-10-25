@@ -218,48 +218,22 @@ func GetPassphraseForInitialization(cmd *cobra.Command, requireConfirmation bool
 	interactiveMode, _ := cmd.Flags().GetBool("interactive")
 
 	if interactiveMode {
-		// Use promptui for better terminal UI
-		passphrasePrompt := promptui.Prompt{
-			Label: "Enter encryption passphrase",
-			Mask:  '*',
-			Validate: func(input string) error {
-				result := passphrasevalidation.ValidateHybrid(input)
-				if !result.Valid || len(result.Warnings) > 0 {
-					return fmt.Errorf("%s", passphrasevalidation.GetHybridErrorMessage(result))
-				}
-				return nil
-			},
-		}
-
-		enteredPassphrase, err := passphrasePrompt.Run()
-		if err != nil {
-			return "", fmt.Errorf("failed to get passphrase: %w", err)
-		}
-
-		// Add confirmation prompt if required
-		if requireConfirmation {
-			confirmPrompt := promptui.Prompt{
-				Label: "Confirm passphrase",
-				Mask:  '*',
-				Validate: func(input string) error {
-					if input != enteredPassphrase {
-						return fmt.Errorf("passphrases do not match")
-					}
-					return nil
-				},
-			}
-
-			_, err = confirmPrompt.Run()
-			if err != nil {
-				return "", fmt.Errorf("passphrase confirmation failed: %w", err)
-			}
-		}
-
-		// Removed dangerous passphrase exposure via printf
-		return enteredPassphrase, nil
+		// Use enhanced passphrase prompt with real-time feedback
+		fmt.Println()
+		fmt.Println("🔐 Enhanced Passphrase Entry")
+		fmt.Println("-" + strings.Repeat("=", 28))
+		return getEnhancedPassphrase(requireConfirmation)
 	} else {
 		// Use simple terminal input for non-interactive mode
-		fmt.Print("Enter encryption passphrase (min 8 characters): ")
+		// Show all requirements upfront
+		fmt.Println("\nPassphrase Requirements:")
+		fmt.Println("  • At least 12 characters")
+		fmt.Println("  • Uppercase letter")
+		fmt.Println("  • Lowercase letter")
+		fmt.Println("  • Digit")
+		fmt.Println("  • Special character (!@#$%^&*()_+-=[]{}|;:,.<>?)")
+		fmt.Println()
+		fmt.Print("Enter encryption passphrase: ")
 		bytePassphrase, err := term.ReadPassword(int(syscall.Stdin))
 		if err != nil {
 			return "", fmt.Errorf("error reading passphrase: %w", err)
@@ -270,8 +244,13 @@ func GetPassphraseForInitialization(cmd *cobra.Command, requireConfirmation bool
 
 		// Validate passphrase using hybrid validation (strict rules + zxcvbn intelligence)
 		result := passphrasevalidation.ValidateHybrid(enteredPassphrase)
-		if !result.Valid || len(result.Warnings) > 0 {
-			return "", fmt.Errorf("%s", passphrasevalidation.GetHybridErrorMessage(result))
+		if !result.Valid {
+			return "", fmt.Errorf("passphrase does not meet the requirements listed above")
+		}
+
+		// Show warnings but don't fail
+		if len(result.Warnings) > 0 {
+			fmt.Printf("\033[33m⚠️  Warning: %s\033[0m\n", result.Warnings[0])
 		}
 
 		// Add confirmation if required
@@ -292,4 +271,277 @@ func GetPassphraseForInitialization(cmd *cobra.Command, requireConfirmation bool
 
 		return enteredPassphrase, nil
 	}
+}
+
+// getEnhancedPassphrase provides an enhanced passphrase prompt with real-time feedback
+func getEnhancedPassphrase(requireConfirmation bool) (string, error) {
+	// Show initial instructions
+	fmt.Println("💡 Passphrase requirements:")
+	fmt.Println("   • At least 12 characters")
+	fmt.Println("   • Uppercase letter (A-Z)")
+	fmt.Println("   • Lowercase letter (a-z)")
+	fmt.Println("   • Digit (0-9)")
+	fmt.Println("   • Special character (!@#$%^&*()_+-=[]{}|;:,.<>?)")
+	fmt.Println()
+
+	// Use custom input with true in-place real-time feedback
+	passphrase, err := getPassphraseWithInPlaceFeedback("Enter encryption passphrase")
+	if err != nil {
+		return "", fmt.Errorf("passphrase prompt failed: %w", err)
+	}
+
+	// Show success message
+	result := passphrasevalidation.ValidateHybrid(passphrase)
+	if result.Valid {
+		fmt.Printf("✅ Passphrase meets all requirements (Strength: %s)\n", result.Strength)
+	}
+
+	// Handle confirmation if required
+	if requireConfirmation {
+		confirmPrompt := promptui.Prompt{
+			Label: "Confirm passphrase",
+			Mask:  '*',
+			Validate: func(input string) error {
+				if input != passphrase {
+					return fmt.Errorf("passphrases do not match")
+				}
+				return nil
+			},
+		}
+
+		_, err = confirmPrompt.Run()
+		if err != nil {
+			return "", fmt.Errorf("passphrase confirmation failed: %w", err)
+		}
+
+		fmt.Println("✅ Passphrase confirmed successfully")
+	}
+
+	return passphrase, nil
+}
+
+// Helper functions for character validation
+func hasUppercaseChar(s string) bool {
+	for _, r := range s {
+		if r >= 'A' && r <= 'Z' {
+			return true
+		}
+	}
+	return false
+}
+
+func hasLowercaseChar(s string) bool {
+	for _, r := range s {
+		if r >= 'a' && r <= 'z' {
+			return true
+		}
+	}
+	return false
+}
+
+func hasDigitChar(s string) bool {
+	for _, r := range s {
+		if r >= '0' && r <= '9' {
+			return true
+		}
+	}
+	return false
+}
+
+func hasSpecialCharacter(s string) bool {
+	specialChars := "!@#$%^&*()_+-=[]{}|;:,.<>?"
+	for _, r := range s {
+		for _, special := range specialChars {
+			if r == special {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func calculatePassphraseStrength(passphrase string, result passphrasevalidation.HybridValidationResult) int {
+	if len(passphrase) == 0 {
+		return 0
+	}
+
+	// Base score from zxcvbn (0-4) converted to 0-10 scale
+	score := result.Score * 2
+
+	// Bonus points for meeting basic requirements
+	if len(passphrase) >= 12 {
+		score += 1
+	}
+	if len(passphrase) >= 16 {
+		score += 1
+	}
+
+	// Penalty for common passwords
+	if result.IsCommon {
+		score -= 2
+	}
+
+	// Ensure score is within bounds
+	if score < 0 {
+		score = 0
+	}
+	if score > 10 {
+		score = 10
+	}
+
+	return score
+}
+
+func getPassphraseStrengthLabel(score int) string {
+	switch {
+	case score <= 3:
+		return "Weak"
+	case score <= 6:
+		return "Fair"
+	case score <= 8:
+		return "Good"
+	default:
+		return "Strong"
+	}
+}
+
+// getPassphraseWithInPlaceFeedback implements true in-place real-time feedback
+func getPassphraseWithInPlaceFeedback(label string) (string, error) {
+	fmt.Printf("%s: ", label)
+
+	// Initialize feedback area - show it once and then only update it
+	fmt.Print("\n\nStatus: ✗12+ ✗Upper ✗Lower ✗Digit ✗Special | Strength: Weak ░░░░░ (0/10)\n")
+	fmt.Printf("\033[1A\033[%dC", len(label)+2) // Move cursor back to input position
+
+	var passphrase []rune
+
+	// Set terminal to raw mode for character-by-character input
+	oldState, err := term.MakeRaw(int(syscall.Stdin))
+	if err != nil {
+		return "", fmt.Errorf("failed to set raw mode: %w", err)
+	}
+	defer term.Restore(int(syscall.Stdin), oldState)
+
+	for {
+		// Read single character
+		var buf [3]byte // UTF-8 can be up to 3 bytes
+		n, err := os.Stdin.Read(buf[:])
+		if err != nil {
+			return "", err
+		}
+
+		if n == 1 {
+			char := buf[0]
+
+			switch char {
+			case 13: // Enter key
+				currentPass := string(passphrase)
+				result := passphrasevalidation.ValidateHybrid(currentPass)
+				if result.Valid {
+					// Move to next line and show success
+					fmt.Print("\n\n")
+					fmt.Printf("✅ Passphrase accepted (Strength: %s)\n", result.Strength)
+					return currentPass, nil
+				} else {
+					// Beep and stay in place (password invalid)
+					fmt.Print("\a") // Bell sound
+				}
+
+			case 3: // Ctrl+C
+				fmt.Print("\n")
+				return "", fmt.Errorf("^C")
+
+			case 127, 8: // Backspace/Delete
+				if len(passphrase) > 0 {
+					passphrase = passphrase[:len(passphrase)-1]
+					fmt.Print("\b \b") // Erase character visually
+					updateStatusLine(string(passphrase))
+				}
+
+			default:
+				if char >= 32 && char <= 126 { // Printable ASCII
+					passphrase = append(passphrase, rune(char))
+					fmt.Print("*")
+					updateStatusLine(string(passphrase))
+				}
+			}
+		}
+	}
+}
+
+// updateStatusLine updates just the status line in place
+func updateStatusLine(passphrase string) {
+	if len(passphrase) == 0 {
+		// Reset to initial state
+		fmt.Print("\033[s")  // Save cursor position
+		fmt.Print("\033[1B") // Move down one line to status line
+		fmt.Print("\033[2K") // Clear entire line
+		fmt.Print("Status: ✗12+ ✗Upper ✗Lower ✗Digit ✗Special | Strength: Weak ░░░░░ (0/10)")
+		fmt.Print("\033[u") // Restore cursor position
+		return
+	}
+
+	// Save current cursor position
+	fmt.Print("\033[s")
+
+	// Move to status line (one line down)
+	fmt.Print("\033[1B")
+	fmt.Print("\033[2K") // Clear the line
+
+	// Check requirements
+	hasLength := len(passphrase) >= 12
+	hasUpper := hasUppercaseChar(passphrase)
+	hasLower := hasLowercaseChar(passphrase)
+	hasDigit := hasDigitChar(passphrase)
+	hasSpecial := hasSpecialCharacter(passphrase)
+
+	// Build status with colors
+	statusParts := []string{
+		fmt.Sprintf("%s12+", getSymbol(hasLength)),
+		fmt.Sprintf("%sUpper", getSymbol(hasUpper)),
+		fmt.Sprintf("%sLower", getSymbol(hasLower)),
+		fmt.Sprintf("%sDigit", getSymbol(hasDigit)),
+		fmt.Sprintf("%sSpecial", getSymbol(hasSpecial)),
+	}
+
+	if hasLength {
+		statusParts[0] = fmt.Sprintf("%s12+(%d)", getSymbol(hasLength), len(passphrase))
+	}
+
+	// Calculate strength
+	result := passphrasevalidation.ValidateHybrid(passphrase)
+	score := calculatePassphraseStrength(passphrase, result)
+	strengthLabel := getPassphraseStrengthLabel(score)
+
+	// Create compact strength meter (5 bars)
+	filledBars := (score + 1) / 2 // 0-10 -> 0-5
+	if filledBars > 5 {
+		filledBars = 5
+	}
+	emptyBars := 5 - filledBars
+
+	meter := strings.Repeat("█", filledBars) + strings.Repeat("░", emptyBars)
+
+	// Write the complete status line
+	fmt.Printf("Status: %s | Strength: %s %s (%d/10)",
+		strings.Join(statusParts, " "),
+		strengthLabel,
+		meter,
+		score)
+
+	// Add warning if common password
+	if result.IsCommon {
+		fmt.Print(" | ⚠️ Common")
+	}
+
+	// Restore cursor position
+	fmt.Print("\033[u")
+}
+
+// getSymbol returns colored checkmark or X
+func getSymbol(met bool) string {
+	if met {
+		return "\033[32m✓\033[0m" // Green checkmark
+	}
+	return "\033[31m✗\033[0m" // Red X
 }
