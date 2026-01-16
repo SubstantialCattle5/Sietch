@@ -30,7 +30,7 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
 
     - name: Set up Go
       uses: actions/setup-go@v5
@@ -78,7 +78,7 @@ jobs:
     if: github.event_name == 'push' || github.event_name == 'pull_request'
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
 
     - name: Set up Go
       uses: actions/setup-go@v5
@@ -104,7 +104,7 @@ jobs:
       contents: read
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
 
     - name: Set up Go
       uses: actions/setup-go@v5
@@ -150,7 +150,7 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
 
     - name: Set up Go
       uses: actions/setup-go@v5
@@ -184,7 +184,7 @@ jobs:
     needs: [test]
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
 
     - name: Set up Go
       uses: actions/setup-go@v5
@@ -209,7 +209,7 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
 
     - name: Set up Go
       uses: actions/setup-go@v5
@@ -232,7 +232,7 @@ jobs:
     if: github.event_name == 'push' || github.event_name == 'pull_request'
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
 
     - name: Set up Go
       uses: actions/setup-go@v5
